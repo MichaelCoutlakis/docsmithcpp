@@ -19,19 +19,22 @@
 
 #include <libzippp/libzippp.h>
 
-#include "docsmithcpp/TextDoc.h"
+#include "docsmithcpp/text_doc.h"
 
 namespace docsmith
 {
-class ODT_File
+
+class odt_file
 {
 public:
-    explicit ODT_File(const std::string& filename);
+    explicit odt_file(const std::string &filename);
 
-    TextDoc parse_text_doc();
+    text_doc parse_text_doc();
+
 private:
     std::string m_filename;
 
     libzippp::ZipArchive m_zip;
 };
+
 }

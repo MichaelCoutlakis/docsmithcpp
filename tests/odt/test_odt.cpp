@@ -15,15 +15,36 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *****************************************************************************/
+#include "docsmithcpp/iostream_writer.h"
+#include "docsmithcpp/odt/file.h"
 #include <gtest/gtest.h>
-#include "docsmithcpp/odt/ODT_File.h"
 
 using namespace docsmith;
 
 TEST(ODT, ParseBasicFile)
 {
-    auto odt_file = docsmith::ODT_File("odt/basic.odt");
-    auto actual = odt_file.parse_text_doc();
-    const TextDoc expected{ Heading{1, "Heading 1" }, Paragraph{ "This is the first paragraph." } };
+    auto f = odt_file("odt/basic.odt");
+    const text_doc actual = f.parse_text_doc();
+    const text_doc expected{
+        Heading{1, "Heading 1"}, Paragraph{"This is the first paragraph."}};
+    EXPECT_EQ(expected, actual);
+}
+
+TEST(ODT, ParseModerateFile)
+{
+    auto f = odt_file("odt/moderate.odt");
+    const text_doc actual = f.parse_text_doc();
+    const text_doc expected{Heading{1, "Heading 1"},
+        Paragraph{"First Paragraph"}, Heading{2, "Second Heading"},
+        Paragraph{"Second paragraph."}
+       /* List{List::Marker::DecimalNum, 1, ListItem{"Numbered list item one."},
+            ListItem{"Item two."}}*/
+    };
+
+    std::cout << "===============\n";
+    io_writer w(std::cout);
+    w.write(expected);
+    std::cout << "===============\n";
+    w.write(actual);
     EXPECT_EQ(expected, actual);
 }

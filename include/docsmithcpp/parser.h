@@ -18,12 +18,12 @@
 #include <iostream>
 #include <variant>
 
-#include "TextDoc.h"
+#include "text_doc.h"
 
 namespace docsmith
 {
 
-using BlockType = std::variant<TextDoc , Heading, Paragraph/*, List, ListItem, Figure*/, Span, std::string>;
+using BlockType = std::variant<text_doc , Heading, Paragraph, List, ListItem, Figure, Span, std::string>;
 //using SpanType = std::variant<Figure, HyperLink, Span>;
 
 template<class, class, class = void>

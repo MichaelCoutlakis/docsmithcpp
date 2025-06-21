@@ -1,7 +1,7 @@
 file(GLOB_RECURSE DOCSMITHCPP_SRC CONFIGURE_DEPENDS *.cpp)
 file(GLOB_RECURSE DOCSMITHCPP_HEADERS CONFIGURE_DEPENDS ../include/*.hpp)
 
-add_library(docsmithcpp ${DOCSMITHCPP_SRC} ${DOCSMITHCPP_HEADERS} "odt/ODT_File.cpp")
+add_library(docsmithcpp ${DOCSMITHCPP_SRC} ${DOCSMITHCPP_HEADERS} "odt/file.cpp")
 target_include_directories(docsmithcpp PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../include>
     $<INSTALL_INTERFACE:include>
