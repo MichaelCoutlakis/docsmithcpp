@@ -23,29 +23,28 @@
 
 namespace docsmith
 {
-
-using BlockType = std::variant<text_doc , Heading, Paragraph, List, ListItem, Figure, Span, std::string>;
-//using SpanType = std::variant<Figure, hyperlink, span>;
-
+// clang-format off
 template<class, class, class = void>
 struct has_add_member : std::false_type{};
 
 template<class Parent, class TypeToAdd>
 struct has_add_member<Parent, TypeToAdd, std::void_t<decltype(std::declval<Parent>().add(std::declval<TypeToAdd>()))>> : public std::true_type{};
+// clang-format on
 
-template<typename ThisItemType, typename TypeToAdd>
-void add_item(ThisItemType& this_item, TypeToAdd item_to_add)
+template <typename ThisItemType, typename TypeToAdd>
+void add_item(ThisItemType &this_item, TypeToAdd item_to_add)
 {
-    if constexpr(has_add_member<ThisItemType, TypeToAdd>::value)
+    if constexpr (has_add_member<ThisItemType, TypeToAdd>::value)
         this_item.add(item_to_add);
     else
-        std::cout << "Item " << typeid(this_item).name() << " has no add function for " << typeid(item_to_add).name() << ", skipping\n";
+        std::cout << "Item " << typeid(this_item).name() << " has no add function for "
+                  << typeid(item_to_add).name() << ", skipping\n";
 }
 
 struct AddItemVisitor
 {
-    template<typename ThisItemType, typename TypeToAdd>
-    void operator()(ThisItemType& this_item, TypeToAdd item_to_add)
+    template <typename ThisItemType, typename TypeToAdd>
+    void operator()(ThisItemType &this_item, TypeToAdd item_to_add)
     {
         add_item(this_item, item_to_add);
     }

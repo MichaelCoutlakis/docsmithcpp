@@ -18,6 +18,7 @@
 #pragma once
 #include <list>
 #include <memory>
+#include <stdexcept>
 #include <type_traits>
 
 namespace docsmith
@@ -30,6 +31,12 @@ public:
     virtual ~element() = default;
     virtual void accept(class element_visitor &) const = 0;
     virtual std::unique_ptr<element> clone() const = 0;
+    virtual bool is_equal(const element &other) const { return false; }
+
+    virtual void add_child(std::unique_ptr<element> child)
+    {
+        throw std::logic_error("This element does not accept children");
+    }
 };
 
 // clang-format off
@@ -55,19 +62,10 @@ struct element_visitor
     virtual void visit(const class heading &) = 0;
     virtual void visit(const class paragraph &) = 0;
     virtual void visit(const class text_doc &) = 0;
-
-    template <typename UnhandledType>
-    void visit(const UnhandledType &value)
-    {
-        static_assert(false,
-            "element_visitor: visit overload not provided for type: See name "
-            "in reveal below:");
-        RevealType<UnhandledType> reveal;
-    }
 };
 
 template <typename Derived>
-struct element_children
+struct element_children : virtual element
 {
     element_children() = default;
 
@@ -111,6 +109,13 @@ struct element_children
         m_children.push_back(std::make_unique<Child>(child));
     }
 
+    void add_child(std::unique_ptr<element> child) override
+    {
+        using U = std::remove_reference_t<decltype(*child)>;
+        // static_assert(is_valid_child_v<Derived, U>, "Invalid child type");
+        m_children.push_back(std::move(child));
+    }
+
     auto begin() const { return m_children.begin(); }
     auto end() const { return m_children.end(); }
 
@@ -118,7 +123,7 @@ struct element_children
 };
 
 template <typename Derived>
-struct element_base : public element
+struct element_base : virtual element
 {
     void accept(element_visitor &visitor) const override
     {
@@ -129,11 +134,31 @@ struct element_base : public element
     {
         return std::make_unique<Derived>(static_cast<const Derived &>(*this));
     }
+
+    bool is_equal(const element &other) const override
+    {
+        if (auto p = dynamic_cast<const Derived *>(&other))
+        {
+            return static_cast<const Derived &>(*this) == *p;
+        }
+
+        return false;
+    }
 };
 
-// template<typename Derived>
-// struct element_base : public element_children<Derived>, public element_visitor_mixin<Derived>
-//{
-// };
+inline bool compare_equality(
+    const std::list<std::unique_ptr<element>> &lhs, const std::list<std::unique_ptr<element>> &rhs)
+{
+    if (lhs.size() != rhs.size())
+        return false;
+
+    for (auto it_lhs = std::cbegin(lhs), it_rhs = std::cbegin(rhs); it_lhs != std::cend(lhs);
+         std::advance(it_lhs, 1), std::advance(it_rhs, 1))
+    {
+        if (!(*it_lhs)->is_equal(*it_rhs->get()))
+            return false;
+    }
+    return true;
+}
 
 }

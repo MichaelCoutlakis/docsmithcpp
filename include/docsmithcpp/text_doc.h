@@ -126,6 +126,11 @@ public:
     {
     }
 
+    explicit span(const char *text) :
+        m_text(text)
+    {
+    }
+
     span &set(const style_name &name)
     {
         m_style_name = name;
@@ -133,7 +138,12 @@ public:
     }
     std::string get_text() const { return m_text; }
 
-    bool operator==(const span &rhs) const = default;
+    bool operator==(const span &rhs) const
+    {
+        bool b1 = m_style_name == rhs.m_style_name;
+        bool b2 = m_text == rhs.m_text;
+        return b1 && b2;
+    }
 
 private:
     style_name m_style_name;
@@ -224,6 +234,11 @@ public:
     {
     }
 
+    bool operator==(const paragraph &other) const
+    {
+        return compare_equality(m_children, other.m_children);
+    }
+
 private:
 };
 
@@ -242,6 +257,11 @@ public:
 
     int level() const { return m_level; }
 
+    bool operator==(const heading &other) const
+    {
+        return m_level == other.m_level && compare_equality(this->m_children, other.m_children);
+    }
+
 private:
     int m_level{1};
 };
@@ -257,9 +277,14 @@ public:
     text_doc() = default;
 
     template <typename... Args>
-    text_doc(Args &&... args) :
+    text_doc(Args &&...args) :
         element_children<text_doc>(std::forward<Args>(args)...)
     {
+    }
+
+    bool operator==(const text_doc &other) const
+    {
+        return compare_equality(m_children, other.m_children);
     }
 };
 

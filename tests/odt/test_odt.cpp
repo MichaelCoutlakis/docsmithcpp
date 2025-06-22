@@ -30,21 +30,28 @@ TEST(DOCSMITH, BasicUsage)
     heading h{1, span{"This is the heading"}};
     paragraph p{span{"Some Paragraph"}, span{"some other span"}};
 
-
     auto h_copy = h;
     text_doc d{h_copy, p};
+
     return;
 }
 
-// TEST(ODT, ParseBasicFile)
-//{
-//     auto f = odt_file("odt/basic.odt");
-//     const text_doc actual = f.parse_text_doc();
-//     const text_doc expected{
-//         heading{1, "heading 1"}, paragraph{"This is the first paragraph."}};
-//     EXPECT_EQ(expected, actual);
-// }
-//
+TEST(ODT, ParseBasicFile)
+{
+    auto f = odt_file("odt/basic.odt");
+    const text_doc actual = f.parse_text_doc();
+    const text_doc expected{
+        heading{1, span{"Heading 1"}}, paragraph{span{"This is the first paragraph."}}};
+
+    std::cout << "===============\n";
+    io_writer w(std::cout);
+    w.visit(expected);
+    std::cout << "===============\n";
+    w.visit(actual);
+    EXPECT_EQ(expected, actual);
+    EXPECT_EQ(expected, actual);
+}
+
 // TEST(ODT, ParseModerateFile)
 //{
 //     auto f = odt_file("odt/moderate.odt");

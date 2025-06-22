@@ -18,6 +18,16 @@ BreakBeforeBraces:                          Allman
 IndentCaseLabels:                           false
 
 Cpp11BracedListStyle:                       true
+#PenaltyBreakContainer: 0
+BinPackArguments: false
+
+# AfterAssignment: Puts the { on a new line after =
+BraceWrapping:
+  #AfterInitializerList: false
+  SplitEmptyRecord: false
+  SplitEmptyFunction: false
+  SplitEmptyNamespace: false
+
 SpaceBeforeCpp11BracedList:                 false
 
 AlwaysBreakTemplateDeclarations:            Yes
