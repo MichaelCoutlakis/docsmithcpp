@@ -15,6 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *****************************************************************************/
+#pragma once
 #include <iostream>
 #include <variant>
 
@@ -25,14 +26,14 @@ namespace docsmith
 class writer
 {
 public:
-    virtual void write(const HyperLink &link) { }
-    virtual void write(const Span &s) { }
+    virtual void write(const hyperlink &link) { }
+    virtual void write(const span &s) { }
     virtual void write(const TextDoc &doc) { }
-    virtual void write(const ListItem &item) { }
-    virtual void write(const List &list) { }
-    virtual void write(const Paragraph &p) { }
+    virtual void write(const list_item &item) { }
+    virtual void write(const list &list) { }
+    virtual void write(const paragraph &p) { }
     virtual void write(const Figure &figure) { }
-    virtual void write(const Heading &h) { }
+    virtual void write(const heading &h) { }
     virtual void write(const Table &t) { }
     virtual void write(const Cell &c) { }
 

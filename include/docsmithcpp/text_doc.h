@@ -25,29 +25,31 @@
 #include <variant>
 #include <vector>
 
+#include "docsmithcpp/element.h"
+
 namespace docsmith
 {
 
-class StyleName
+class style_name
 {
 public:
-    StyleName(const std::string &name = {})
-        : m_name{name}
+    style_name(const std::string &name = {}) :
+        m_name{name}
     {
     }
     const std::string &GetName() const { return m_name; }
 
-    bool operator==(const StyleName &rhs) const = default;
+    bool operator==(const style_name &rhs) const = default;
 
 private:
     std::string m_name;
 };
 
-struct FontName
+struct font_name
 {
 public:
-    explicit FontName(const std::string &font_name)
-        : m_font_name{font_name}
+    explicit font_name(const std::string &font_name) :
+        m_font_name{font_name}
     {
     }
 
@@ -55,7 +57,7 @@ private:
     std::string m_font_name;
 };
 
-enum class FontStyle
+enum class font_style
 {
     Normal,
     Italic,
@@ -67,10 +69,10 @@ enum class FontWeight
     Bold
 };
 
-struct FontSize
+struct font_size
 {
-    explicit FontSize(float points)
-        : m_points{points}
+    explicit font_size(float points) :
+        m_points{points}
     {
     }
     float m_points;
@@ -80,23 +82,23 @@ class Style
 {
 public:
     template <typename... Args>
-    Style(const StyleName &style_name, Args... args)
-        : m_name{style_name}
+    Style(const style_name &name, Args... args) :
+        m_style_name{name}
     {
         (Set(std::move(args)), ...);
     }
 
-    Style &Set(const StyleName &style_name)
+    Style &Set(const style_name &name)
     {
-        m_name = style_name;
+        m_style_name = name;
         return *this;
     }
-    Style &Set(const FontName &font_name)
+    Style &Set(const font_name &font_name)
     {
         m_font_name = font_name;
         return *this;
     }
-    Style &Set(const FontSize &font_size)
+    Style &Set(const font_size &font_size)
     {
         m_font_size = font_size;
         return *this;
@@ -107,66 +109,44 @@ public:
         return *this;
     }
 
-    StyleName
-        m_name; //!< The style name for the purpose of identification and lookup
-    StyleName m_display_name{""}; //!< Human friendly display name
+    style_name m_style_name;        //!< The style name for the purpose of identification and lookup
+    std::string m_display_name{""}; //!< Human friendly display name
 
-    FontName m_font_name{"Arial"};
-    FontSize m_font_size{12.f};
-    FontStyle m_font_style{FontStyle::Normal};
+    font_name m_font_name{"Arial"};
+    font_size m_font_size{12.f};
+    font_style m_font_style{font_style::Normal};
     FontWeight m_font_weight{FontWeight::Normal};
 };
 
-class Span
+class span : public element_base<span>
 {
 public:
-    explicit Span(
-        const std::string &text, const StyleName &style_name = StyleName{})
-        : m_text{text}
-        , m_style_name{style_name}
+    explicit span(const std::string &text, const style_name &name = style_name{}) :
+        m_text{text}, m_style_name{name}
     {
     }
 
-    Span &Set(const StyleName &style_name)
+    span &set(const style_name &name)
     {
-        m_style_name = style_name;
+        m_style_name = name;
         return *this;
     }
-    std::string GetText() const { return m_text; }
+    std::string get_text() const { return m_text; }
 
-    bool operator==(const Span &rhs) const = default;
+    bool operator==(const span &rhs) const = default;
 
 private:
-    StyleName m_style_name;
+    style_name m_style_name;
     std::string m_text;
 };
 
-class ListItem
+class list_item
 {
 public:
-    using Elem = std::variant<
-        /* this won't work due to the recursive child relationship Paragraph, */
-        std::string, Span>;
-    ListItem() = default;
-    explicit ListItem(const Span &span)
-        : m_items{span}
-    {
-    }
-    explicit ListItem(const std::string &item)
-        : m_items{Span(item)}
-    {
-    }
-    bool operator==(const ListItem &rhs) const = default;
-
-    void add(const Elem &elem) { m_items.push_back(elem); }
-    void add(const std::string &item) { m_items.push_back(Span(item)); }
-    const std::list<Elem> &items() const { return m_items; }
-
-private:
-    std::list<Elem> m_items;
+    bool operator==(const list_item &rhs) const = default;
 };
 
-class List
+class list
 {
 public:
     enum class Marker
@@ -180,57 +160,45 @@ public:
     };
 
     template <typename... Args>
-    List(Marker marker, int start, Args &&...args)
-        : m_marker(marker)
-        , m_start(start)
+    list(Marker marker, int start, Args &&...args) :
+        m_marker(marker), m_start(start)
     {
         (add(std::move(args)), ...);
     }
 
-    void add(std::string &&item) { m_items.emplace_back(item); }
-    void add(const std::string &item) { m_items.push_back(ListItem(item)); }
-    void add(const ListItem &item) { m_items.push_back(item); }
-    void add(ListItem &&item) { m_items.emplace_back(std::move(item)); }
-
-    const std::list<ListItem> &Items() const { return m_items; }
     bool IsOrdered() const { return m_marker < Marker::Bullet; }
 
     int GetStart() const { return m_start; }
 
-    bool operator==(const List &rhs) const = default;
+    bool operator==(const list &rhs) const = default;
 
 private:
     Marker m_marker{Marker::Bullet};
     int m_start{1};
-    std::list<ListItem> m_items;
 };
 
-class HyperLink
+class hyperlink
 {
 public:
-    using Elem = std::variant<std::string, Span>;
-
     template <typename... Args>
-    HyperLink(std::string URL, Args... args)
-        : m_URL(URL)
+    hyperlink(std::string URL, Args... args) :
+        m_URL(URL)
     {
-        (add(args), ...);
     }
 
     std::string GetURL() const { return m_URL; }
-    void add(Elem elem) { m_content.push_back(elem); }
-    bool operator==(const HyperLink &rhs) const = default;
+
+    bool operator==(const hyperlink &rhs) const = default;
 
 private:
     std::string m_URL;
-    std::list<Elem> m_content;
 };
 
 class Figure
 {
 public:
-    explicit Figure(std::string filename)
-        : m_filename(filename)
+    explicit Figure(std::string filename) :
+        m_filename(filename)
     {
     }
 
@@ -245,96 +213,58 @@ private:
     std::string m_filename;
 };
 
-class Paragraph
+class paragraph : public element_base<paragraph>, public element_children<paragraph>
 {
 public:
-    /// The elements that can occur in a paragraph.
-    using Elem = std::variant<std::string, Span, HyperLink, Figure, List>;
-
-    Paragraph() = default;
+    paragraph() = default;
 
     template <typename... Args>
-    explicit Paragraph(Args... args)
-    {
-        (add(args), ...);
-    }
-
-    explicit Paragraph(Elem item)
-        : m_items{item}
+    paragraph(Args &&...args) :
+        element_children<paragraph>(std::forward<Args>(args)...)
     {
     }
-    explicit Paragraph(std::initializer_list<Elem> items)
-        : m_items{items.begin(), items.end()}
-    {
-    }
-
-    void add(const Elem &elem) { m_items.push_back(elem); }
-
-    // Content<Elem> m_content;
-    bool operator==(const Paragraph &rhs) const
-    {
-        bool b1 = m_style_name == rhs.m_style_name;
-        bool b2 = m_items == rhs.m_items;
-        return b1 && b2;
-    }
-    const std::list<Elem> &Items() const { return m_items; }
 
 private:
-    std::string m_style_name;
-    std::list<Elem> m_items;
 };
 
-class Heading
+// clang-format off
+template <> struct is_valid_child<paragraph, span> : std::true_type {};
+// clang-format on
+
+class heading : public element_base<heading>, public element_children<heading>
 {
 public:
-    /// The elements that can occur in a paragraph.
-    using Elem = std::variant<std::string, Span, HyperLink>;
-    // Heading(int level) : m_level(level)
-
     template <typename... Args>
-    Heading(int level, Args... args)
-        : m_level(level) /*,
-           m_content(content)*/
+    heading(int level, Args... args) :
+        element_children<heading>(std::forward<Args>(args)...), m_level(level)
     {
-        (add(args), ...);
     }
 
-    void add(Elem content) { m_content.push_back(content); }
-
-    int Level() const { return m_level; }
-
-    bool operator==(const Heading &rhs) const = default;
-
-    const std::list<Elem> &Items() const { return m_content; }
+    int level() const { return m_level; }
 
 private:
     int m_level{1};
-    // Span m_content; //!< The content of the heading
-    std::list<Elem> m_content;
 };
 
-class text_doc
+// clang-format off
+template <> struct is_valid_child<heading, paragraph> : std::true_type {};
+template <> struct is_valid_child<heading, span> : std::true_type {};
+// clang-format on
+
+class text_doc : public element_base<text_doc>, public element_children<text_doc>
 {
 public:
-    using Elem = std::variant<Heading, Paragraph, Span, std::string>;
-
     text_doc() = default;
 
     template <typename... Args>
-    explicit text_doc(Args &&...args)
+    text_doc(Args &&... args) :
+        element_children<text_doc>(std::forward<Args>(args)...)
     {
-        (add(std::move(args)), ...);
     }
-    void add(const Elem &item) { m_items.push_back(item); }
-    void add(Elem &&item) { m_items.emplace_back(std::move(item)); }
-
-    bool operator==(const text_doc &rhs) const
-    {
-        return m_items == rhs.m_items;
-    }
-    const std::list<Elem> &items() const { return m_items; }
-
-private:
-    std::list<Elem> m_items;
 };
+
+// clang-format off
+template <> struct is_valid_child<text_doc, heading> : std::true_type {};
+template <> struct is_valid_child<text_doc, paragraph> : std::true_type {};
+// clang-format on
 }

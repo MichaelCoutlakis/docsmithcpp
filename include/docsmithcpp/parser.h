@@ -15,6 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *****************************************************************************/
+#pragma once
 #include <iostream>
 #include <variant>
 
@@ -24,7 +25,7 @@ namespace docsmith
 {
 
 using BlockType = std::variant<text_doc , Heading, Paragraph, List, ListItem, Figure, Span, std::string>;
-//using SpanType = std::variant<Figure, HyperLink, Span>;
+//using SpanType = std::variant<Figure, hyperlink, span>;
 
 template<class, class, class = void>
 struct has_add_member : std::false_type{};

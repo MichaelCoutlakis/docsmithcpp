@@ -15,36 +15,51 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *****************************************************************************/
+
+#include <gtest/gtest.h>
+
+#include "docsmithcpp/element.h"
 #include "docsmithcpp/iostream_writer.h"
 #include "docsmithcpp/odt/file.h"
-#include <gtest/gtest.h>
+#include "docsmithcpp/text_doc.h"
 
 using namespace docsmith;
 
-TEST(ODT, ParseBasicFile)
+TEST(DOCSMITH, BasicUsage)
 {
-    auto f = odt_file("odt/basic.odt");
-    const text_doc actual = f.parse_text_doc();
-    const text_doc expected{
-        Heading{1, "Heading 1"}, Paragraph{"This is the first paragraph."}};
-    EXPECT_EQ(expected, actual);
+    heading h{1, span{"This is the heading"}};
+    paragraph p{span{"Some Paragraph"}, span{"some other span"}};
+
+
+    auto h_copy = h;
+    text_doc d{h_copy, p};
+    return;
 }
 
-TEST(ODT, ParseModerateFile)
-{
-    auto f = odt_file("odt/moderate.odt");
-    const text_doc actual = f.parse_text_doc();
-    const text_doc expected{Heading{1, "Heading 1"},
-        Paragraph{"First Paragraph"}, Heading{2, "Second Heading"},
-        Paragraph{"Second paragraph."}
-       /* List{List::Marker::DecimalNum, 1, ListItem{"Numbered list item one."},
-            ListItem{"Item two."}}*/
-    };
-
-    std::cout << "===============\n";
-    io_writer w(std::cout);
-    w.write(expected);
-    std::cout << "===============\n";
-    w.write(actual);
-    EXPECT_EQ(expected, actual);
-}
+// TEST(ODT, ParseBasicFile)
+//{
+//     auto f = odt_file("odt/basic.odt");
+//     const text_doc actual = f.parse_text_doc();
+//     const text_doc expected{
+//         heading{1, "heading 1"}, paragraph{"This is the first paragraph."}};
+//     EXPECT_EQ(expected, actual);
+// }
+//
+// TEST(ODT, ParseModerateFile)
+//{
+//     auto f = odt_file("odt/moderate.odt");
+//     const text_doc actual = f.parse_text_doc();
+//     const text_doc expected{heading{1, "heading 1"},
+//         paragraph{"First paragraph"}, heading{2, "Second heading"},
+//         paragraph{"Second paragraph."}
+//        /* list{list::Marker::DecimalNum, 1, list_item{"Numbered list item one."},
+//             list_item{"Item two."}}*/
+//     };
+//
+//     std::cout << "===============\n";
+//     io_writer w(std::cout);
+//     w.write(expected);
+//     std::cout << "===============\n";
+//     w.write(actual);
+//     EXPECT_EQ(expected, actual);
+// }

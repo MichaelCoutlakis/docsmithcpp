@@ -1,14 +1,27 @@
 AlignTrailingComments:                      true
 BasedOnStyle:                               WebKit
-BreakConstructorInitializersBeforeComma:    true
-ColumnLimit:                                80
-Cpp11BracedListStyle:                       true
+
+# Constructor() : newline (set false to get this)
+#BreakConstructorInitializersBeforeComma:    false
+BreakConstructorInitializers: AfterColon
+PackConstructorInitializers: NextLineOnly
+ColumnLimit:                                100
+
 NamespaceIndentation:                       None
 PointerBindsToType:                         false
 Standard:                                   Cpp11
 BreakBeforeBinaryOperators:                 false
+
+
 BreakBeforeBraces:                          Allman
+
 IndentCaseLabels:                           false
+
+Cpp11BracedListStyle:                       true
 SpaceBeforeCpp11BracedList:                 false
-AllowShortLambdasOnASingleLine:             All
+
 AlwaysBreakTemplateDeclarations:            Yes
+
+# Allow short stuff on single lines:
+AllowShortBlocksOnASingleLine:               true
+AllowShortLambdasOnASingleLine:             All
