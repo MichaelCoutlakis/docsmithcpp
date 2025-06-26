@@ -1,4 +1,4 @@
-/******************************************************************************
+﻿/******************************************************************************
  * Copyright 2025 Michael Coutlakis
  *
  * SPDX-License-Identifier: Apache-2.0
@@ -33,33 +33,67 @@ public:
     void visit(const text_doc &d) override
     {
         print_line("Text Doc:\n");
-        m_indent += 2;
-        for (auto &item : d.m_children)
-            item->accept(*this);
-        m_indent -= 2;
+        indent_and_print(d);
     }
     void visit(const heading &h) override
     {
         print_line("Heading: level {}\n", h.level());
-        m_indent += 2;
-        for (auto &item : h.m_children)
-            item->accept(*this);
-        m_indent -= 2;
+        indent_and_print(h);
     }
     void visit(const paragraph &p) override
     {
         print_line("paragraph\n");
-        m_indent += 2;
-        for (auto &item : p.m_children)
-            item->accept(*this);
-        m_indent -= 2;
+        indent_and_print(p);
     }
-    void visit(const span &s) override { print_line("span: {}\n", s.get_text()); }
+    void visit(const span &s) override
+    {
+        print_line("Span:\n");
+        indent_and_print(s);
+    }
+    void visit(const hyperlink &href)
+    {
+        print_line("Hyperlink: {}\n", href.get_url());
+        indent_and_print(href);
+    }
+
+    void visit(const text &t) override { print_line("Text: {}\n", t.m_text); }
+
+    void visit(const class list &l) override
+    {
+        print_line("List: Style {}\n", l.m_style_name.get_name());
+        indent_and_print(l);
+    }
+
+    void visit(const class list_item &li) override
+    {
+        print_line("List Item: \n");
+        indent_and_print(li);
+    }
+    void visit(const class list_style_num &s) override
+    {
+        print_line("List Style Numbered: format: {} suffix: {} start from: {}\n",
+            static_cast<char>(s.m_format),
+            s.m_num_suffix,
+            s.m_start_from);
+    }
+    void visit(const class list_style_bullet &s) override
+    {
+        print_line("List Style Bullet: bullet {}\n", s.m_bullet_char);
+    }
 
     template <typename Unhandled>
     void operator()(const Unhandled &unhandled)
     {
         m_os << "Unhandled: " << typeid(unhandled).name() << "\n";
+    }
+
+    template <typename ElementWithChildren>
+    void indent_and_print(const ElementWithChildren &e)
+    {
+        m_indent += 2;
+        for (auto &item : e.m_children)
+            item->accept(*this);
+        m_indent -= 2;
     }
 
 private:

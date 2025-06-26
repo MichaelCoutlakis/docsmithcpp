@@ -1,4 +1,4 @@
-/******************************************************************************
+﻿/******************************************************************************
  * Copyright 2025 Michael Coutlakis
  *
  * SPDX-License-Identifier: Apache-2.0
@@ -58,22 +58,42 @@ struct element_visitor
 {
     virtual ~element_visitor() = default;
 
+    virtual void visit(const class text &) { }
     virtual void visit(const class span &) = 0;
     virtual void visit(const class heading &) = 0;
     virtual void visit(const class paragraph &) = 0;
+
+    virtual void visit(const class hyperlink &) { }
     virtual void visit(const class text_doc &) = 0;
+
+    virtual void visit(const class list &) { }
+    virtual void visit(const class list_item &) { }
+    virtual void visit(const class list_style_num &) { }
+    virtual void visit(const class list_style_bullet &) { }
+
+    template <typename Unhandled>
+    void visit(const Unhandled &value)
+    {
+    }
 };
 
 template <typename Derived>
 struct element_children : virtual element
 {
-    element_children() = default;
+    // element_children() = default;
+    element_children() { }
 
     template <typename... Args,
         typename = std::enable_if_t<(is_valid_child_v<Derived, std::decay_t<Args>> && ...)>>
     explicit element_children(Args &&...args)
     {
         (add(std::forward<Args>(args)), ...);
+    }
+
+    explicit element_children(const char *t)
+    {
+        add_child(std::make_unique<text>(t));
+        // add(t);
     }
 
     // Deep copy constructor:
@@ -94,6 +114,7 @@ struct element_children : virtual element
     }
     element_children(element_children &&) = default;
     element_children &operator=(element_children &&) = default;
+
     template <typename Child>
     void add(Child &&child)
     {
@@ -108,6 +129,14 @@ struct element_children : virtual element
         static_assert(is_valid_child_v<Derived, Child>, "Invalid child type");
         m_children.push_back(std::make_unique<Child>(child));
     }
+
+    // template<typename StringLike>
+    // std::enable_if_t<std::is_convertible_v<StringLike, std::string>> add(StringLike
+    // &&string_like)
+    //{
+    //     static_assert(is_valid_child_v<Derived, text>, "Invalid child type");
+    //     add_child(std::make_unique<text>(std::forward<StringLike>(string_like)));
+    // }
 
     void add_child(std::unique_ptr<element> child) override
     {

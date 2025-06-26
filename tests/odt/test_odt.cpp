@@ -1,4 +1,4 @@
-/******************************************************************************
+﻿/******************************************************************************
  * Copyright 2025 Michael Coutlakis
  *
  * SPDX-License-Identifier: Apache-2.0
@@ -27,8 +27,8 @@ using namespace docsmith;
 
 TEST(DOCSMITH, BasicUsage)
 {
-    heading h{1, span{"This is the heading"}};
-    paragraph p{span{"Some Paragraph"}, span{"some other span"}};
+    heading h{1, text{"This is the heading"}};
+    paragraph p{text{"Some Paragraph"}, text{"some other span"}};
 
     auto h_copy = h;
     text_doc d{h_copy, p};
@@ -41,7 +41,7 @@ TEST(ODT, ParseBasicFile)
     auto f = odt_file("odt/basic.odt");
     const text_doc actual = f.parse_text_doc();
     const text_doc expected{
-        heading{1, span{"Heading 1"}}, paragraph{span{"This is the first paragraph."}}};
+        heading{1, text{"Heading 1"}}, paragraph{text{"This is the first paragraph."}}};
 
     std::cout << "===============\n";
     io_writer w(std::cout);
@@ -52,21 +52,23 @@ TEST(ODT, ParseBasicFile)
     EXPECT_EQ(expected, actual);
 }
 
-// TEST(ODT, ParseModerateFile)
-//{
-//     auto f = odt_file("odt/moderate.odt");
-//     const text_doc actual = f.parse_text_doc();
-//     const text_doc expected{heading{1, "heading 1"},
-//         paragraph{"First paragraph"}, heading{2, "Second heading"},
-//         paragraph{"Second paragraph."}
-//        /* list{list::Marker::DecimalNum, 1, list_item{"Numbered list item one."},
-//             list_item{"Item two."}}*/
-//     };
-//
-//     std::cout << "===============\n";
-//     io_writer w(std::cout);
-//     w.write(expected);
-//     std::cout << "===============\n";
-//     w.write(actual);
-//     EXPECT_EQ(expected, actual);
-// }
+TEST(ODT, ParseModerateFile)
+{
+    auto f = odt_file("odt/moderate.odt");
+    const text_doc actual = f.parse_text_doc();
+    const text_doc expected{
+        heading{1, "heading 1"},
+        paragraph{"First paragraph"},
+        heading{2, "Second heading"},
+        paragraph{"Second paragraph."}
+        /* list{list::Marker::DecimalNum, 1, list_item{"Numbered list item one."},
+             list_item{"Item two."}}*/
+    };
+
+    std::cout << "===============\n";
+    io_writer w(std::cout);
+    w.visit(expected);
+    std::cout << "===============\n";
+    w.visit(actual);
+    EXPECT_EQ(expected, actual);
+}

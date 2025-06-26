@@ -1,4 +1,4 @@
-/******************************************************************************
+﻿/******************************************************************************
  * Copyright 2025 Michael Coutlakis
  *
  * SPDX-License-Identifier: Apache-2.0
@@ -33,22 +33,40 @@ using block_factory =
 
 namespace odt
 {
-paragraph make_paragraph(pugi::xml_node &node) { return paragraph{}; }
+
+hyperlink make_hyperlink(pugi::xml_node &node)
+{
+    style_name sn(node.attribute("text:style-name").as_string());
+    std::string url(node.attribute("xlink:href").as_string());
+    return hyperlink(url);
+}
+
+span make_span(pugi::xml_node &node)
+{
+    style_name sn(node.attribute("text:style-name").as_string());
+    return span{sn};
+}
+
+paragraph make_paragraph(pugi::xml_node &node)
+{
+    style_name sn(node.attribute("text:style-name").as_string());
+    return paragraph{};
+}
 
 heading make_heading(pugi::xml_node &node)
 {
     int level = node.attribute("text:outline-level").as_int();
+    style_name sn(node.attribute("text:style-name").as_string());
     return heading(level);
 }
 
-list make_list(pugi::xml_node &node) { return list{list::Marker::Bullet, 0}; }
-
-list_item make_list_item(pugi::xml_node &node)
+list make_list(pugi::xml_node &node)
 {
-    // std::string s(node.text());
-
-    return list_item();
+    style_name sn(node.attribute("text:style-name").as_string());
+    return list(sn);
 }
+
+list_item make_list_item(pugi::xml_node &node) { return list_item(); }
 
 template <typename T>
 std::function<std::unique_ptr<element>(pugi::xml_node &)> wrap_factory(
@@ -60,8 +78,10 @@ std::function<std::unique_ptr<element>(pugi::xml_node &)> wrap_factory(
 block_factory factory = { //
     {"text:p", wrap_factory<paragraph>(make_paragraph)},
     {"text:h", wrap_factory<heading>(make_heading)},
-    /*{"text:list", wrap_factory<list>(make_list)},*/
-    /*{"text:list-item", wrap_factory<list_item>(make_list_item)}*/};
+    {"text:span", wrap_factory<span>(make_span)},
+    {"text:a", wrap_factory<hyperlink>(make_hyperlink)},
+    {"text:list", wrap_factory<list>(make_list)},
+    {"text:list-item", wrap_factory<list_item>(make_list_item)}};
 }
 
 odt_file::odt_file(const std::string &filename) :
@@ -100,7 +120,7 @@ private:
             {
                 if (child.type() == pugi::node_pcdata)
                 {
-                    m_blocks.top()->add_child(std::make_unique<span>(std::string(child.value())));
+                    m_blocks.top()->add_child(std::make_unique<text>(std::string(child.value())));
                 }
                 else
                 {

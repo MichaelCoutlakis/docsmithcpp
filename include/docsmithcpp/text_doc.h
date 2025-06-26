@@ -1,4 +1,4 @@
-/******************************************************************************
+﻿/******************************************************************************
  * Copyright 2025 Michael Coutlakis
  *
  * SPDX-License-Identifier: Apache-2.0
@@ -30,14 +30,16 @@
 namespace docsmith
 {
 
+class list;
+
 class style_name
 {
 public:
-    style_name(const std::string &name = {}) :
+    explicit style_name(const std::string &name = {}) :
         m_name{name}
     {
     }
-    const std::string &GetName() const { return m_name; }
+    const std::string &get_name() const { return m_name; }
 
     bool operator==(const style_name &rhs) const = default;
 
@@ -118,16 +120,38 @@ public:
     FontWeight m_font_weight{FontWeight::Normal};
 };
 
-class span : public element_base<span>
+class text : public element_base<text>
 {
 public:
-    explicit span(const std::string &text, const style_name &name = style_name{}) :
-        m_text{text}, m_style_name{name}
+    explicit text(const char *s) :
+        m_text(s)
     {
     }
 
-    explicit span(const char *text) :
-        m_text(text)
+    explicit text(const std::string &s) :
+        m_text(s)
+    {
+    }
+
+    bool operator==(const text &other) const { return m_text == other.m_text; }
+
+    std::string m_text;
+};
+
+class span : public element_base<span>, public element_children<span>
+{
+public:
+    template <typename... Args,
+        typename = std::enable_if_t<(is_valid_child_v<span, std::decay_t<Args>> && ...)>>
+    explicit span(Args &&...args) :
+        element_children<span>(std::forward<Args>(args)...)
+    {
+    }
+
+    template <typename... Args,
+        typename = std::enable_if_t<(is_valid_child_v<span, std::decay_t<Args>> && ...)>>
+    explicit span(const style_name &sn, Args &&...args) :
+        element_children<span>(std::forward<Args>(args)...), m_style_name(sn)
     {
     }
 
@@ -136,73 +160,135 @@ public:
         m_style_name = name;
         return *this;
     }
-    std::string get_text() const { return m_text; }
 
     bool operator==(const span &rhs) const
     {
-        bool b1 = m_style_name == rhs.m_style_name;
-        bool b2 = m_text == rhs.m_text;
-        return b1 && b2;
+        return m_style_name == rhs.m_style_name && compare_equality(m_children, rhs.m_children);
     }
 
 private:
     style_name m_style_name;
-    std::string m_text;
 };
 
-class list_item
-{
-public:
-    bool operator==(const list_item &rhs) const = default;
-};
+// clang-format off
+template <> struct is_valid_child<span, span> : std::true_type {};
+template <> struct is_valid_child<span, text> : std::true_type {};
+// clang-format on
 
-class list
+class list_style_num
 {
 public:
-    enum class Marker
+    enum class num_format : char
     {
-        DecimalNum,
-        LowerAlpha,
-        UpperAlpha,
-        LowerRoman,
-        UpperRoman,
-        Bullet
+        arabic = '1',
+        lower_alpha = 'a',
+        upper_alpha = 'A',
+        lower_roman = 'i',
+        upper_roman = 'I',
     };
 
-    template <typename... Args>
-    list(Marker marker, int start, Args &&...args) :
-        m_marker(marker), m_start(start)
+    list_style_num(
+        num_format format, std::string suffix = ".", int start_from = 1, std::string prefix = {}) :
+        m_format(format), m_num_prefix(prefix), m_num_suffix(suffix), m_start_from(start_from)
     {
-        (add(std::move(args)), ...);
     }
-
-    bool IsOrdered() const { return m_marker < Marker::Bullet; }
-
-    int GetStart() const { return m_start; }
-
-    bool operator==(const list &rhs) const = default;
-
-private:
-    Marker m_marker{Marker::Bullet};
-    int m_start{1};
+    num_format m_format;           //!< Numbering format
+    std::string m_num_prefix;      //!< Place before the number
+    std::string m_num_suffix{"."}; //!< Place after the number
+    int m_start_from{1};           //!< Start numbering from here
 };
 
-class hyperlink
+class list_style_bullet
+{
+public:
+    struct bullets
+    {
+        constexpr static inline std::string bullet() { return "•"; }
+        constexpr static inline std::string black_circ() { return "●"; }
+        constexpr static inline std::string heavy_check_mark() { return "✔"; }
+        constexpr static inline std::string ballot_x() { return "✗"; }
+        constexpr static inline std::string right_arrow() { return "➔"; }
+        constexpr static inline std::string three_d_right_arrow() { return "➢"; }
+    };
+    list_style_bullet(std::string bullet_char) :
+        m_bullet_char(bullet_char)
+    {
+    }
+    std::string m_bullet_char;
+};
+
+class list_style
+{
+public:
+    // list_style(
+
+    style_name m_style_name;
+
+private:
+};
+
+class list_item : public element_base<list_item>, public element_children<list_item>
 {
 public:
     template <typename... Args>
-    hyperlink(std::string URL, Args... args) :
-        m_URL(URL)
+    list_item(Args &&...args) :
+        element_children<list_item>(std::forward<Args>(args)...)
+    {
+    }
+    bool operator==(const list_item &other) const
+    {
+        return compare_equality(m_children, other.m_children);
+    }
+};
+
+// clang-format off
+template <> struct is_valid_child<list_item, paragraph> : std::true_type {};
+template <> struct is_valid_child<list_item, heading> : std::true_type {};
+template <> struct is_valid_child<list_item, list> : std::true_type {};
+// clang-format on
+
+class list : public element_base<list>, public element_children<list>
+{
+public:
+    template <typename... Args>
+    list(style_name style_name_, Args &&...args) :
+        element_children<list>(std::forward<Args>(args)...), m_style_name(style_name_)
+    {
+    }
+    style_name m_style_name;
+
+    bool operator==(const list &other) const { return m_style_name == other.m_style_name; }
+};
+
+// clang-format off
+template <> struct is_valid_child<list, list_item> : std::true_type {};
+
+// clang-format on
+
+class hyperlink : public element_base<hyperlink>, public element_children<hyperlink>
+{
+public:
+    template <typename... Args>
+    hyperlink(std::string url, Args &&...args) :
+        element_children<hyperlink>(std::forward<Args>(args)...), m_url(url)
     {
     }
 
-    std::string GetURL() const { return m_URL; }
+    std::string get_url() const { return m_url; }
 
-    bool operator==(const hyperlink &rhs) const = default;
+    bool operator==(const hyperlink &rhs) const
+    {
+        return m_url == rhs.m_url && compare_equality(m_children, rhs.m_children);
+    }
 
 private:
-    std::string m_URL;
+    std::string m_url;
 };
+
+// clang-format off
+template <> struct is_valid_child<hyperlink, span> : std::true_type {};
+
+// clang-format on
 
 class Figure
 {
@@ -212,7 +298,7 @@ public:
     {
     }
 
-    std::string GetFileName() const { return m_filename; }
+    std::string get_filename() const { return m_filename; }
     bool operator==(const Figure &rhs) const
     {
         bool b = m_filename == rhs.m_filename;
@@ -244,6 +330,7 @@ private:
 
 // clang-format off
 template <> struct is_valid_child<paragraph, span> : std::true_type {};
+template <> struct is_valid_child<paragraph, text> : std::true_type {};
 // clang-format on
 
 class heading : public element_base<heading>, public element_children<heading>
@@ -269,6 +356,7 @@ private:
 // clang-format off
 template <> struct is_valid_child<heading, paragraph> : std::true_type {};
 template <> struct is_valid_child<heading, span> : std::true_type {};
+template <> struct is_valid_child<heading, text> : std::true_type {};
 // clang-format on
 
 class text_doc : public element_base<text_doc>, public element_children<text_doc>
