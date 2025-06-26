@@ -56,14 +56,32 @@ TEST(ODT, ParseModerateFile)
 {
     auto f = odt_file("odt/moderate.odt");
     const text_doc actual = f.parse_text_doc();
-    const text_doc expected{
-        heading{1, "heading 1"},
+
+    list_style_num arabic_list_from7(style_name("L1"), list_style_num::format::arabic, ")", 7);
+    list_style_bullet bullets(style_name("L2"), list_style_bullet::bullets::bullet());
+    list_style_num alpha(style_name("L3"), list_style_num::format::lower_alpha, ")", 3);
+    list_style_bullet bullets2(style_name("L4"), list_style_bullet::bullets::bullet());
+
+    const text_doc expected{heading{1, "Heading 1"},
         paragraph{"First paragraph"},
-        heading{2, "Second heading"},
-        paragraph{"Second paragraph."}
-        /* list{list::Marker::DecimalNum, 1, list_item{"Numbered list item one."},
-             list_item{"Item two."}}*/
-    };
+        heading{2, "Second Heading"},
+        paragraph{"Second paragraph."},
+        list{arabic_list_from7.m_style_name,
+            list_item{paragraph{"First numbered list item, numbering starts at 7."}},
+            list_item{paragraph{"Item two."}}},
+        paragraph{"Bullet points:"},
+        list{bullets.m_style_name, list_item{paragraph{"First; and"}}, list_item{"Second."}},
+        paragraph{"Alpha list:"},
+        list{alpha.m_style_name, list_item{paragraph{"Item a"}}},
+        list{bullets2.m_style_name,
+            list_item{
+                list{style_name{}, list_item{paragraph{"Sub items of alpha list are bullets"}}}}},
+        list{alpha.m_style_name, list_item{paragraph{"Item b"}}},
+        paragraph{text{"Here is a url to "},
+            hyperlink{"https://github.com/MichaelCoutlakis/docsmithcpp", "docsmith"},
+            text{" on "},
+            span{style_name{"Source_20_Text"}, span{style_name{"T1"}, text{"GitHub"}}},
+            text{"."}}};
 
     std::cout << "===============\n";
     io_writer w(std::cout);

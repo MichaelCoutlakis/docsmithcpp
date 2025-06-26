@@ -39,8 +39,9 @@ public:
         m_name{name}
     {
     }
-    const std::string &get_name() const { return m_name; }
 
+    const std::string &get_name() const { return m_name; }
+    bool is_empty() const { return m_name.empty(); }
     bool operator==(const style_name &rhs) const = default;
 
 private:
@@ -178,7 +179,7 @@ template <> struct is_valid_child<span, text> : std::true_type {};
 class list_style_num
 {
 public:
-    enum class num_format : char
+    enum class format : char
     {
         arabic = '1',
         lower_alpha = 'a',
@@ -187,12 +188,17 @@ public:
         upper_roman = 'I',
     };
 
-    list_style_num(
-        num_format format, std::string suffix = ".", int start_from = 1, std::string prefix = {}) :
-        m_format(format), m_num_prefix(prefix), m_num_suffix(suffix), m_start_from(start_from)
+    list_style_num(style_name sn, format format_, std::string suffix = ".", int start_from = 1,
+        std::string prefix = {}) :
+        m_style_name(sn),
+        m_format(format_),
+        m_num_prefix(prefix),
+        m_num_suffix(suffix),
+        m_start_from(start_from)
     {
     }
-    num_format m_format;           //!< Numbering format
+    style_name m_style_name;       //!< Style name
+    format m_format;               //!< Numbering format
     std::string m_num_prefix;      //!< Place before the number
     std::string m_num_suffix{"."}; //!< Place after the number
     int m_start_from{1};           //!< Start numbering from here
@@ -210,10 +216,11 @@ public:
         constexpr static inline std::string right_arrow() { return "➔"; }
         constexpr static inline std::string three_d_right_arrow() { return "➢"; }
     };
-    list_style_bullet(std::string bullet_char) :
-        m_bullet_char(bullet_char)
+    list_style_bullet(style_name sn, std::string bullet_char) :
+        m_style_name(sn), m_bullet_char(bullet_char)
     {
     }
+    style_name m_style_name;
     std::string m_bullet_char;
 };
 
@@ -255,7 +262,7 @@ public:
         element_children<list>(std::forward<Args>(args)...), m_style_name(style_name_)
     {
     }
-    style_name m_style_name;
+    style_name m_style_name; //!< Note the style name is optional, if so it will be empty
 
     bool operator==(const list &other) const { return m_style_name == other.m_style_name; }
 };
@@ -331,6 +338,7 @@ private:
 // clang-format off
 template <> struct is_valid_child<paragraph, span> : std::true_type {};
 template <> struct is_valid_child<paragraph, text> : std::true_type {};
+template <> struct is_valid_child<paragraph, hyperlink> : std::true_type {};
 // clang-format on
 
 class heading : public element_base<heading>, public element_children<heading>
@@ -379,5 +387,6 @@ public:
 // clang-format off
 template <> struct is_valid_child<text_doc, heading> : std::true_type {};
 template <> struct is_valid_child<text_doc, paragraph> : std::true_type {};
+template <> struct is_valid_child<text_doc, list> : std::true_type {};
 // clang-format on
 }
