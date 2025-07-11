@@ -21,7 +21,7 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 # Example external deps
 find_package(pugixml CONFIG REQUIRED)
 find_package(libzippp CONFIG REQUIRED)
-#find_package(fmt CONFIG REQUIRED)
+find_package(fmt CONFIG REQUIRED)
 
 # Add subdirectories
 add_subdirectory(src)

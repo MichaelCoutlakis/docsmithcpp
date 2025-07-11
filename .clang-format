@@ -2,7 +2,7 @@ AlignTrailingComments:                      true
 BasedOnStyle:                               WebKit
 
 # Constructor() : newline (set false to get this)
-#BreakConstructorInitializersBeforeComma:    false
+
 BreakConstructorInitializers: AfterColon
 PackConstructorInitializers: NextLineOnly
 ColumnLimit:                                100
@@ -11,10 +11,7 @@ NamespaceIndentation:                       None
 PointerBindsToType:                         false
 Standard:                                   Cpp11
 BreakBeforeBinaryOperators:                 false
-
-
 BreakBeforeBraces:                          Allman
-
 IndentCaseLabels:                           false
 
 Cpp11BracedListStyle:                       true
@@ -29,6 +26,7 @@ BraceWrapping:
   SplitEmptyNamespace: false
 
 SpaceBeforeCpp11BracedList:                 false
+SpaceBeforeParens : Never
 
 AlwaysBreakTemplateDeclarations:            Yes
 

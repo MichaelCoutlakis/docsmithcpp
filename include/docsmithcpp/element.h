@@ -21,6 +21,8 @@
 #include <stdexcept>
 #include <type_traits>
 
+#include <iostream>
+
 namespace docsmith
 {
 
@@ -71,6 +73,12 @@ struct element_visitor
     virtual void visit(const class list_style_num &) { }
     virtual void visit(const class list_style_bullet &) { }
 
+    virtual void visit(const class frame &) { }
+    virtual void visit(const class image &) { }
+
+    virtual void push() { }
+    virtual void pop() { }
+
     template <typename Unhandled>
     void visit(const Unhandled &value)
     {
@@ -80,8 +88,7 @@ struct element_visitor
 template <typename Derived>
 struct element_children : virtual element
 {
-    // element_children() = default;
-    element_children() { }
+    element_children() = default;
 
     template <typename... Args,
         typename = std::enable_if_t<(is_valid_child_v<Derived, std::decay_t<Args>> && ...)>>
@@ -90,44 +97,56 @@ struct element_children : virtual element
         (add(std::forward<Args>(args)), ...);
     }
 
-    explicit element_children(const char *t)
-    {
-        add_child(std::make_unique<text>(t));
-        // add(t);
-    }
+    explicit element_children(const char *t) { add_child(std::make_unique<text>(t)); }
 
     // Deep copy constructor:
     element_children(const element_children &other)
     {
-        for (const auto &child : other.m_children)
+        for(const auto &child : other.m_children)
             m_children.push_back(child->clone());
     }
     element_children &operator=(const element_children &other)
     {
-        if (this != &other)
+        if(this != &other)
         {
             m_children.clear();
-            for (const auto &child : other.m_children)
+            for(const auto &child : other.m_children)
                 m_children.push_back(child->clone());
         }
         return *this;
     }
-    element_children(element_children &&) = default;
-    element_children &operator=(element_children &&) = default;
+
+    element_children(element_children &&other) { m_children = std::move(other.m_children); }
+    element_children &operator=(element_children &&other)
+    {
+        if(this != &other)
+        {
+            m_children = std::move(other.m_children);
+        }
+        return *this;
+    }
 
     template <typename Child>
     void add(Child &&child)
     {
         using DecayChild = std::decay_t<Child>;
         static_assert(is_valid_child_v<Derived, DecayChild>, "Invalid child type");
-        m_children.emplace_back(std::make_unique<DecayChild>(std::forward<Child>(child)));
-    }
+        using ChildType = decltype(child);
 
-    template <typename Child>
-    void add(const Child &child)
-    {
-        static_assert(is_valid_child_v<Derived, Child>, "Invalid child type");
-        m_children.push_back(std::make_unique<Child>(child));
+        if constexpr(std::is_lvalue_reference_v<ChildType>)
+        {
+            // Have to copy then use the move constructor, if we use the constructor it will call
+            // add which will be recursive...
+            auto child_copy = child;
+            m_children.emplace_back(std::make_unique<DecayChild>(std::move(child_copy)));
+        }
+        else if constexpr(std::is_rvalue_reference_v<ChildType>)
+        {
+            auto p = std::make_unique<DecayChild>(std::forward<Child>(child));
+            m_children.emplace_back(std::move(p));
+        }
+        else
+            static_assert(false, "Unhandled reference type");
     }
 
     // template<typename StringLike>
@@ -151,12 +170,30 @@ struct element_children : virtual element
     std::list<std::unique_ptr<element>> m_children;
 };
 
+// clang-format off
+// Helpers to determine if the class heirarchy has element_children mixed in:
+template<typename NodeType>
+struct is_element_children : std::is_base_of<element_children<NodeType>, NodeType> {};
+
+template<typename NodeType>
+inline constexpr bool has_children_v = is_element_children<NodeType>::value;
+// clang-format on
+
 template <typename Derived>
 struct element_base : virtual element
 {
     void accept(element_visitor &visitor) const override
     {
         visitor.visit(static_cast<const Derived &>(*this));
+
+        if constexpr(has_children_v<Derived>)
+        {
+            visitor.push();
+            const auto &self = static_cast<const Derived &>(*this);
+            for(const auto &child : self)
+                child->accept(visitor);
+            visitor.pop();
+        }
     }
 
     std::unique_ptr<element> clone() const override
@@ -166,7 +203,7 @@ struct element_base : virtual element
 
     bool is_equal(const element &other) const override
     {
-        if (auto p = dynamic_cast<const Derived *>(&other))
+        if(auto p = dynamic_cast<const Derived *>(&other))
         {
             return static_cast<const Derived &>(*this) == *p;
         }
@@ -178,16 +215,15 @@ struct element_base : virtual element
 inline bool compare_equality(
     const std::list<std::unique_ptr<element>> &lhs, const std::list<std::unique_ptr<element>> &rhs)
 {
-    if (lhs.size() != rhs.size())
+    if(lhs.size() != rhs.size())
         return false;
 
-    for (auto it_lhs = std::cbegin(lhs), it_rhs = std::cbegin(rhs); it_lhs != std::cend(lhs);
-         std::advance(it_lhs, 1), std::advance(it_rhs, 1))
+    for(auto it_lhs = std::cbegin(lhs), it_rhs = std::cbegin(rhs); it_lhs != std::cend(lhs);
+        std::advance(it_lhs, 1), std::advance(it_rhs, 1))
     {
-        if (!(*it_lhs)->is_equal(*it_rhs->get()))
+        if(!(*it_lhs)->is_equal(*it_rhs->get()))
             return false;
     }
     return true;
 }
-
 }

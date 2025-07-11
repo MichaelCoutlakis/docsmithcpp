@@ -31,6 +31,8 @@ public:
 
     text_doc parse_text_doc();
 
+    void save(const text_doc &doc);
+
 private:
     std::string m_filename;
 

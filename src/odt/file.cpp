@@ -20,12 +20,13 @@
 #include <optional>
 #include <stack>
 
+#include <fmt/format.h>
 #include <libzippp/libzippp.h>
 #include <pugixml.hpp>
 
 #include "docsmithcpp/odt/file.h"
+#include "docsmithcpp/odt/xml_writer.h"
 #include "docsmithcpp/parser.h"
-
 namespace docsmith
 {
 using block_factory =
@@ -68,6 +69,19 @@ list make_list(pugi::xml_node &node)
 
 list_item make_list_item(pugi::xml_node &node) { return list_item(); }
 
+frame make_frame(pugi::xml_node &node)
+{
+    style_name sn(node.attribute("draw:style-name").as_string());
+    return frame(sn);
+}
+
+image make_image(pugi::xml_node &node)
+{
+
+    image i(node.attribute("xlink:href").as_string());
+    return i;
+}
+
 template <typename T>
 std::function<std::unique_ptr<element>(pugi::xml_node &)> wrap_factory(
     std::function<T(pugi::xml_node &)> make_object)
@@ -75,13 +89,16 @@ std::function<std::unique_ptr<element>(pugi::xml_node &)> wrap_factory(
     return [make_object](pugi::xml_node &node) { return std::make_unique<T>(make_object(node)); };
 }
 
-block_factory factory = { //
+block_factory factory = {
     {"text:p", wrap_factory<paragraph>(make_paragraph)},
     {"text:h", wrap_factory<heading>(make_heading)},
     {"text:span", wrap_factory<span>(make_span)},
     {"text:a", wrap_factory<hyperlink>(make_hyperlink)},
     {"text:list", wrap_factory<list>(make_list)},
-    {"text:list-item", wrap_factory<list_item>(make_list_item)}};
+    {"text:list-item", wrap_factory<list_item>(make_list_item)},
+    {"draw:frame", wrap_factory<frame>(make_frame)},
+    {"draw:image", wrap_factory<image>(make_image)},
+};
 }
 
 odt_file::odt_file(const std::string &filename) :
@@ -99,7 +116,7 @@ struct parser
     }
     void traverse(pugi::xml_node &node)
     {
-        for (auto &child : node.children())
+        for(auto &child : node.children())
         {
             handle_node(child);
         }
@@ -112,13 +129,13 @@ private:
         auto tag = std::string(node.name());
         std::cout << "Processing tag " << tag << "\n";
 
-        if (auto it = m_factory.find(tag); it != m_factory.end())
+        if(auto it = m_factory.find(tag); it != m_factory.end())
         {
             m_blocks.push(it->second(node));
 
-            for (auto child : node.children())
+            for(auto child : node.children())
             {
-                if (child.type() == pugi::node_pcdata)
+                if(child.type() == pugi::node_pcdata)
                 {
                     m_blocks.top()->add_child(std::make_unique<text>(std::string(child.value())));
                 }
@@ -132,7 +149,7 @@ private:
             // This level is now complete:
             auto completed_element = std::move(m_blocks.top());
             m_blocks.pop();
-            if (!m_blocks.empty())
+            if(!m_blocks.empty())
             {
                 m_blocks.top()->add_child(std::move(completed_element));
             }
@@ -153,18 +170,18 @@ private:
 
 text_doc odt_file::parse_text_doc()
 {
-    if (!m_zip.open(libzippp::ZipArchive::ReadOnly))
+    if(!m_zip.open(libzippp::ZipArchive::ReadOnly))
         throw std::runtime_error("Could not open archive");
 
     auto content = m_zip.getEntry("content.xml");
 
-    if (content.isNull())
+    if(content.isNull())
         throw std::runtime_error("Could not open content.xml");
 
     auto content_xml = content.readAsText();
 
     pugi::xml_document xml;
-    if (!xml.load_string(content_xml.c_str()))
+    if(!xml.load_string(content_xml.c_str()))
         throw std::runtime_error("Failed to parse the content.xml");
 
     auto doc_node = xml.child("office:document-content").child("office:body").child("office:text");
@@ -175,5 +192,18 @@ text_doc odt_file::parse_text_doc()
     p.traverse(doc_node);
 
     return p.get();
+}
+
+void odt_file::save(const text_doc &doc)
+{
+    // TODO: close zip archive if necessary?
+
+    odt::xml_writer w;
+
+    doc.accept(w);
+
+    auto xml = w.get_xml();
+
+    xml.print(std::cout, " ");
 }
 }

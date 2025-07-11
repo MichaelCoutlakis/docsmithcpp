@@ -30,70 +30,49 @@ public:
         m_os(os)
     {
     }
-    void visit(const text_doc &d) override
-    {
-        print_line("Text Doc:\n");
-        indent_and_print(d);
-    }
-    void visit(const heading &h) override
-    {
-        print_line("Heading: level {}\n", h.level());
-        indent_and_print(h);
-    }
-    void visit(const paragraph &p) override
-    {
-        print_line("paragraph\n");
-        indent_and_print(p);
-    }
-    void visit(const span &s) override
-    {
-        print_line("Span:\n");
-        indent_and_print(s);
-    }
-    void visit(const hyperlink &href)
-    {
-        print_line("Hyperlink: {}\n", href.get_url());
-        indent_and_print(href);
-    }
+    void visit(const text_doc &d) override { print_line("Text Doc:"); }
 
-    void visit(const text &t) override { print_line("Text: {}\n", t.m_text); }
+    void visit(const heading &h) override { print_line("Heading: level {}", h.level()); }
+
+    void visit(const paragraph &p) override { print_line("Paragraph"); }
+
+    void visit(const span &s) override { print_line("Span:"); }
+
+    void visit(const hyperlink &href) { print_line("Hyperlink: {}", href.get_url()); }
+
+    void visit(const text &t) override { print_line("Text: {}", t.m_text); }
 
     void visit(const class list &l) override
     {
-        print_line("List: Style {}\n", l.m_style_name.get_name());
-        indent_and_print(l);
+        print_line("List: Style {}", l.m_style_name.get_name());
     }
 
-    void visit(const class list_item &li) override
-    {
-        print_line("List Item: \n");
-        indent_and_print(li);
-    }
+    void visit(const class list_item &li) override { print_line("List Item:"); }
+
     void visit(const class list_style_num &s) override
     {
-        print_line("List Style Numbered: format: {} suffix: {} start from: {}\n",
+        print_line("List Style Numbered: format: {} suffix: {} start from: {}",
             static_cast<char>(s.m_format),
             s.m_num_suffix,
             s.m_start_from);
     }
     void visit(const class list_style_bullet &s) override
     {
-        print_line("List Style Bullet: bullet {}\n", s.m_bullet_char);
+        print_line("List Style Bullet: bullet {}", s.m_bullet_char);
     }
+
+    void visit(const class frame &f) override { print_line("Frame"); }
+
+    void visit(const class image &i) override { print_line("Image: uri={}", i.get_uri()); }
+
+    void push() override { m_indent += 2; }
+
+    void pop() override { m_indent -= 2; }
 
     template <typename Unhandled>
     void operator()(const Unhandled &unhandled)
     {
         m_os << "Unhandled: " << typeid(unhandled).name() << "\n";
-    }
-
-    template <typename ElementWithChildren>
-    void indent_and_print(const ElementWithChildren &e)
-    {
-        m_indent += 2;
-        for (auto &item : e.m_children)
-            item->accept(*this);
-        m_indent -= 2;
     }
 
 private:
@@ -103,7 +82,7 @@ private:
     template <typename... Args>
     void print_line(std::format_string<Args...> fmt, Args &&...args)
     {
-        m_os << get_indent() << std::format(fmt, std::forward<Args>(args)...);
+        m_os << get_indent() << std::format(fmt, std::forward<Args>(args)...) << "\n";
     }
     std::string get_indent() const { return std::string(m_indent, ' '); }
 };

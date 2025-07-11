@@ -30,12 +30,32 @@
 namespace docsmith
 {
 
+enum class align_horiz
+{
+    left,
+    centre,
+    right,
+};
+
+enum class align_vert
+{
+    top,
+    centre,
+    bottom,
+};
+
 class list;
 
 class style_name
 {
 public:
-    explicit style_name(const std::string &name = {}) :
+    style_name() = default;
+
+    /*explicit*/ style_name(const char *name) :
+        style_name(std::string(name))
+    {
+    }
+    /*explicit*/ style_name(const std::string &name) :
         m_name{name}
     {
     }
@@ -81,50 +101,92 @@ struct font_size
     float m_points;
 };
 
-class Style
+class style_graphics
+{
+public:
+    template<typename... Args>
+    explicit style_graphics(Args &&...args)
+    {
+        (set(args),...);
+    }
+
+    style_graphics &set(align_horiz h)
+    {
+        m_horiz_pos = h;
+        return *this;
+    }
+    style_graphics &set(align_vert v)
+    {
+        m_vert_pos = v;
+        return *this;
+    }
+    std::optional<align_horiz> m_horiz_pos;
+    std::optional<align_vert> m_vert_pos;
+};
+
+class style
 {
 public:
     template <typename... Args>
-    Style(const style_name &name, Args... args) :
-        m_style_name{name}
+    explicit style(const style_name &name, const Args &...args) :
+        m_name{name}
     {
-        (Set(std::move(args)), ...);
+        (set(args), ...);
     }
 
-    Style &Set(const style_name &name)
+    style &set(const style_graphics &g)
     {
-        m_style_name = name;
+        m_graphics_props = g;
         return *this;
     }
-    Style &Set(const font_name &font_name)
-    {
-        m_font_name = font_name;
-        return *this;
-    }
-    Style &Set(const font_size &font_size)
-    {
-        m_font_size = font_size;
-        return *this;
-    }
-    Style &Set(const FontWeight &font_weight)
-    {
-        m_font_weight = font_weight;
-        return *this;
-    }
-
-    style_name m_style_name;        //!< The style name for the purpose of identification and lookup
-    std::string m_display_name{""}; //!< Human friendly display name
-
-    font_name m_font_name{"Arial"};
-    font_size m_font_size{12.f};
-    font_style m_font_style{font_style::Normal};
-    FontWeight m_font_weight{FontWeight::Normal};
+    style_name m_name;
+    std::optional<style_graphics> m_graphics_props;
 };
+//
+// class Style
+//{
+// public:
+//    template <typename... Args>
+//    Style(const style_name &name, Args... args) :
+//        m_style_name{name}
+//    {
+//        (Set(std::move(args)), ...);
+//    }
+//
+//    Style &Set(const style_name &name)
+//    {
+//        m_style_name = name;
+//        return *this;
+//    }
+//    Style &Set(const font_name &font_name)
+//    {
+//        m_font_name = font_name;
+//        return *this;
+//    }
+//    Style &Set(const font_size &font_size)
+//    {
+//        m_font_size = font_size;
+//        return *this;
+//    }
+//    Style &Set(const FontWeight &font_weight)
+//    {
+//        m_font_weight = font_weight;
+//        return *this;
+//    }
+//
+//    style_name m_style_name;        //!< The style name for the purpose of identification and
+//    lookup std::string m_display_name{""}; //!< Human friendly display name
+//
+//    font_name m_font_name{"Arial"};
+//    font_size m_font_size{12.f};
+//    font_style m_font_style{font_style::Normal};
+//    FontWeight m_font_weight{FontWeight::Normal};
+//};
 
 class text : public element_base<text>
 {
 public:
-    explicit text(const char *s) :
+    /*explicit*/ text(const char *s) :
         m_text(s)
     {
     }
@@ -204,18 +266,19 @@ public:
     int m_start_from{1};           //!< Start numbering from here
 };
 
+struct bullet_type
+{
+    constexpr static inline std::string bullet() { return "•"; }
+    constexpr static inline std::string black_circ() { return "●"; }
+    constexpr static inline std::string heavy_check_mark() { return "✔"; }
+    constexpr static inline std::string ballot_x() { return "✗"; }
+    constexpr static inline std::string right_arrow() { return "➔"; }
+    constexpr static inline std::string three_d_right_arrow() { return "➢"; }
+};
+
 class list_style_bullet
 {
 public:
-    struct bullets
-    {
-        constexpr static inline std::string bullet() { return "•"; }
-        constexpr static inline std::string black_circ() { return "●"; }
-        constexpr static inline std::string heavy_check_mark() { return "✔"; }
-        constexpr static inline std::string ballot_x() { return "✗"; }
-        constexpr static inline std::string right_arrow() { return "➔"; }
-        constexpr static inline std::string three_d_right_arrow() { return "➢"; }
-    };
     list_style_bullet(style_name sn, std::string bullet_char) :
         m_style_name(sn), m_bullet_char(bullet_char)
     {
@@ -297,24 +360,47 @@ template <> struct is_valid_child<hyperlink, span> : std::true_type {};
 
 // clang-format on
 
-class Figure
+class image : public element_base<image>
 {
 public:
-    explicit Figure(std::string filename) :
-        m_filename(filename)
+    explicit image(std::string uri) :
+        m_uri(uri)
     {
     }
 
-    std::string get_filename() const { return m_filename; }
-    bool operator==(const Figure &rhs) const
+    std::string get_uri() const { return m_uri; }
+
+    bool operator==(const image &rhs) const
     {
-        bool b = m_filename == rhs.m_filename;
+        bool b = m_uri == rhs.m_uri;
         return b;
     }
 
 private:
-    std::string m_filename;
+    std::string m_uri;
 };
+
+class frame : public element_base<frame>, public element_children<frame>
+{
+public:
+    template <typename... Args>
+    explicit frame(const style_name &sn, Args &&...args) :
+        element_children<frame>(std::forward<Args>(args)...), m_style_name(sn)
+    {
+    }
+
+    bool operator==(const frame &other) const
+    {
+        return m_style_name == other.m_style_name && compare_equality(m_children, other.m_children);
+    }
+
+    style_name m_style_name;
+};
+
+// clang-format off
+template <> struct is_valid_child<frame, image> : std::true_type {};
+
+// clang-format on
 
 class paragraph : public element_base<paragraph>, public element_children<paragraph>
 {
@@ -339,6 +425,7 @@ private:
 template <> struct is_valid_child<paragraph, span> : std::true_type {};
 template <> struct is_valid_child<paragraph, text> : std::true_type {};
 template <> struct is_valid_child<paragraph, hyperlink> : std::true_type {};
+template <> struct is_valid_child<paragraph, frame> : std::true_type {};
 // clang-format on
 
 class heading : public element_base<heading>, public element_children<heading>
@@ -388,5 +475,6 @@ public:
 template <> struct is_valid_child<text_doc, heading> : std::true_type {};
 template <> struct is_valid_child<text_doc, paragraph> : std::true_type {};
 template <> struct is_valid_child<text_doc, list> : std::true_type {};
+template <> struct is_valid_child<text_doc, frame> : std::true_type {};
 // clang-format on
 }
