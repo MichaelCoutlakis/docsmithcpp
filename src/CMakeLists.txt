@@ -1,7 +1,13 @@
-file(GLOB_RECURSE DOCSMITHCPP_SRC CONFIGURE_DEPENDS *.cpp)
-file(GLOB_RECURSE DOCSMITHCPP_HEADERS CONFIGURE_DEPENDS ../include/*.hpp)
+add_library(docsmithcpp 
+    "../include/docsmithcpp/element.h"
+    "../include/docsmithcpp/iostream_writer.h"
+    "../include/docsmithcpp/text_doc.h"
+    "../include/docsmithcpp/odt/file.h"
+    "../include/docsmithcpp/odt/writer.h"
 
-add_library(docsmithcpp ${DOCSMITHCPP_SRC} ${DOCSMITHCPP_HEADERS} "odt/file.cpp" "odt/xml_writer.cpp")
+    "odt/file.cpp" 
+    "odt/writer.cpp")
+
 target_include_directories(docsmithcpp PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../include>
     $<INSTALL_INTERFACE:include>

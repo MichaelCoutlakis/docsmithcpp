@@ -19,13 +19,14 @@
 #include <map>
 #include <optional>
 #include <stack>
+#include <sstream>
 
 #include <fmt/format.h>
 #include <libzippp/libzippp.h>
 #include <pugixml.hpp>
 
 #include "docsmithcpp/odt/file.h"
-#include "docsmithcpp/odt/xml_writer.h"
+#include "docsmithcpp/odt/writer.h"
 #include "docsmithcpp/parser.h"
 namespace docsmith
 {
@@ -102,7 +103,7 @@ block_factory factory = {
 }
 
 odt_file::odt_file(const std::string &filename) :
-    m_zip(filename)
+    m_filename(filename)
 {
 }
 const char *node_types[] = {
@@ -170,10 +171,11 @@ private:
 
 text_doc odt_file::parse_text_doc()
 {
-    if(!m_zip.open(libzippp::ZipArchive::ReadOnly))
+    libzippp::ZipArchive zip(m_filename);
+    if(!zip.open(libzippp::ZipArchive::ReadOnly))
         throw std::runtime_error("Could not open archive");
 
-    auto content = m_zip.getEntry("content.xml");
+    auto content = zip.getEntry("content.xml");
 
     if(content.isNull())
         throw std::runtime_error("Could not open content.xml");
@@ -196,14 +198,6 @@ text_doc odt_file::parse_text_doc()
 
 void odt_file::save(const text_doc &doc)
 {
-    // TODO: close zip archive if necessary?
-
-    odt::xml_writer w;
-
-    doc.accept(w);
-
-    auto xml = w.get_xml();
-
-    xml.print(std::cout, " ");
+    odt::writer::write(doc, m_filename);
 }
 }

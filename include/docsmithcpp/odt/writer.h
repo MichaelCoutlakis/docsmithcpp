@@ -16,20 +16,22 @@
  * limitations under the License.
  *****************************************************************************/
 #pragma once
+#include <set>
 #include <stack>
 
-#include "docsmithcpp/element.h"
+#include <libzippp/libzippp.h>
 #include <pugixml.hpp>
+
+#include "docsmithcpp/text_doc.h"
 
 namespace docsmith::odt
 {
-class xml_writer : public element_visitor
+class writer : private element_visitor
 {
 public:
-    xml_writer();
+    static void write(const text_doc &doc, const std::string &filename);
 
-    pugi::xml_node get_xml() { return m_node_stack.top(); }
-
+private:
     void visit(const class text &) override;
     void visit(const class span &) override;
 
@@ -51,10 +53,26 @@ public:
     void pop() override;
 
 private:
-    pugi::xml_document m_doc; //!< This object owns all node memory
+    std::string m_filename;
+
+    struct archive_item
+    {
+        std::string m_source; //!< Source on the filesystem
+        std::string m_dest;   //!< Destination within the archive
+        std::string m_type;   //!< Type, e.g. "image/png"
+        constexpr bool operator<(const archive_item &rhs) const { return m_source < rhs.m_source; }
+    };
+
+    pugi::xml_document m_content;         //!< Content for content.xml. Owns underlying node memory
+    pugi::xml_document m_manifest;        //!< Content for manifest.xml
+    pugi::xml_node m_manifest_files_node; //!< Node containing mainifest file list
+    std::set<archive_item> m_pictures;    //!< Pictures to add to the archive
+
     std::stack<pugi::xml_node> m_node_stack;
 
     pugi::xml_node m_current;
     pugi::xml_node get_current();
+
+    writer(std::string filename);
 };
 }

@@ -17,8 +17,6 @@
  *****************************************************************************/
 #include <string>
 
-#include <libzippp/libzippp.h>
-
 #include "docsmithcpp/text_doc.h"
 
 namespace docsmith
@@ -35,8 +33,6 @@ public:
 
 private:
     std::string m_filename;
-
-    libzippp::ZipArchive m_zip;
 };
 
 }
