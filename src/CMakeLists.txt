@@ -1,3 +1,14 @@
+
+if(DOCSMITHCPP_BUILD_MINIMAL_USAGE)
+
+    add_executable(docsmithcpp
+        "../include/docsmithcpp/text_doc.h"
+        "../include/docsmithcpp/element.h"
+        "odt/basic_main.cpp"
+        "has_children.cpp"
+    )
+else()
+
 add_library(docsmithcpp 
     "../include/docsmithcpp/element.h"
     "../include/docsmithcpp/iostream_writer.h"
@@ -6,7 +17,8 @@ add_library(docsmithcpp
     "../include/docsmithcpp/odt/writer.h"
 
     "odt/file.cpp" 
-    "odt/writer.cpp")
+    "odt/writer.cpp" "has_children.cpp")
+endif()
 
 target_include_directories(docsmithcpp PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../include>

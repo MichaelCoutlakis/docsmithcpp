@@ -44,7 +44,7 @@ public:
 
     void visit(const class list &l) override
     {
-        print_line("List: Style {}", l.m_style_name.get_name());
+        print_line("List: Style {}", l.get_style().get_name());
     }
 
     void visit(const class list_item &li) override { print_line("List Item:"); }

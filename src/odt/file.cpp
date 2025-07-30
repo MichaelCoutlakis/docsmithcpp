@@ -46,7 +46,7 @@ hyperlink make_hyperlink(pugi::xml_node &node)
 span make_span(pugi::xml_node &node)
 {
     style_name sn(node.attribute("text:style-name").as_string());
-    return span{sn};
+    return span{}.set_style(sn);
 }
 
 paragraph make_paragraph(pugi::xml_node &node)
@@ -65,7 +65,7 @@ heading make_heading(pugi::xml_node &node)
 list make_list(pugi::xml_node &node)
 {
     style_name sn(node.attribute("text:style-name").as_string());
-    return list(sn);
+    return list().set_style(sn);
 }
 
 list_item make_list_item(pugi::xml_node &node) { return list_item(); }
@@ -73,7 +73,7 @@ list_item make_list_item(pugi::xml_node &node) { return list_item(); }
 frame make_frame(pugi::xml_node &node)
 {
     style_name sn(node.attribute("draw:style-name").as_string());
-    return frame(sn);
+    return frame().set_style(sn);
 }
 
 image make_image(pugi::xml_node &node)

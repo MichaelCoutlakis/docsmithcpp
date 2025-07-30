@@ -26,88 +26,31 @@
 #include <vector>
 
 #include "docsmithcpp/element.h"
+#include "docsmithcpp/has_children.h"
+#include "docsmithcpp/style.h"
+#include "docsmithcpp/text.h"
 
 namespace docsmith
 {
 
-enum class align_horiz
-{
-    left,
-    centre,
-    right,
-};
-
-enum class align_vert
-{
-    top,
-    centre,
-    bottom,
-};
-
+class text;
+class span;
+class heading;
+class paragraph;
+class hyperlink;
+class text_doc;
 class list;
-
-class style_name
-{
-public:
-    style_name() = default;
-
-    /*explicit*/ style_name(const char *name) :
-        style_name(std::string(name))
-    {
-    }
-    /*explicit*/ style_name(const std::string &name) :
-        m_name{name}
-    {
-    }
-
-    const std::string &get_name() const { return m_name; }
-    bool is_empty() const { return m_name.empty(); }
-    bool operator==(const style_name &rhs) const = default;
-
-private:
-    std::string m_name;
-};
-
-struct font_name
-{
-public:
-    explicit font_name(const std::string &font_name) :
-        m_font_name{font_name}
-    {
-    }
-
-private:
-    std::string m_font_name;
-};
-
-enum class font_style
-{
-    Normal,
-    Italic,
-    Oblique
-};
-enum class FontWeight
-{
-    Normal,
-    Bold
-};
-
-struct font_size
-{
-    explicit font_size(float points) :
-        m_points{points}
-    {
-    }
-    float m_points;
-};
+class list_item;
+class frame;
+class image;
 
 class style_graphics
 {
 public:
-    template<typename... Args>
+    template <typename... Args>
     explicit style_graphics(Args &&...args)
     {
-        (set(args),...);
+        (set(args), ...);
     }
 
     style_graphics &set(align_horiz h)
@@ -139,90 +82,15 @@ public:
         m_graphics_props = g;
         return *this;
     }
+    operator style_name() const { return m_name; }
     style_name m_name;
     std::optional<style_graphics> m_graphics_props;
 };
-//
-// class Style
-//{
-// public:
-//    template <typename... Args>
-//    Style(const style_name &name, Args... args) :
-//        m_style_name{name}
-//    {
-//        (Set(std::move(args)), ...);
-//    }
-//
-//    Style &Set(const style_name &name)
-//    {
-//        m_style_name = name;
-//        return *this;
-//    }
-//    Style &Set(const font_name &font_name)
-//    {
-//        m_font_name = font_name;
-//        return *this;
-//    }
-//    Style &Set(const font_size &font_size)
-//    {
-//        m_font_size = font_size;
-//        return *this;
-//    }
-//    Style &Set(const FontWeight &font_weight)
-//    {
-//        m_font_weight = font_weight;
-//        return *this;
-//    }
-//
-//    style_name m_style_name;        //!< The style name for the purpose of identification and
-//    lookup std::string m_display_name{""}; //!< Human friendly display name
-//
-//    font_name m_font_name{"Arial"};
-//    font_size m_font_size{12.f};
-//    font_style m_font_style{font_style::Normal};
-//    FontWeight m_font_weight{FontWeight::Normal};
-//};
 
-class text : public element_base<text>
+class span : public element_base<span>, public element_children<span>, public styled<span>
 {
 public:
-    /*explicit*/ text(const char *s) :
-        m_text(s)
-    {
-    }
-
-    explicit text(const std::string &s) :
-        m_text(s)
-    {
-    }
-
-    bool operator==(const text &other) const { return m_text == other.m_text; }
-
-    std::string m_text;
-};
-
-class span : public element_base<span>, public element_children<span>
-{
-public:
-    template <typename... Args,
-        typename = std::enable_if_t<(is_valid_child_v<span, std::decay_t<Args>> && ...)>>
-    explicit span(Args &&...args) :
-        element_children<span>(std::forward<Args>(args)...)
-    {
-    }
-
-    template <typename... Args,
-        typename = std::enable_if_t<(is_valid_child_v<span, std::decay_t<Args>> && ...)>>
-    explicit span(const style_name &sn, Args &&...args) :
-        element_children<span>(std::forward<Args>(args)...), m_style_name(sn)
-    {
-    }
-
-    span &set(const style_name &name)
-    {
-        m_style_name = name;
-        return *this;
-    }
+    using element_children::element_children;
 
     bool operator==(const span &rhs) const
     {
@@ -300,11 +168,7 @@ private:
 class list_item : public element_base<list_item>, public element_children<list_item>
 {
 public:
-    template <typename... Args>
-    list_item(Args &&...args) :
-        element_children<list_item>(std::forward<Args>(args)...)
-    {
-    }
+    using element_children::element_children;
     bool operator==(const list_item &other) const
     {
         return compare_equality(m_children, other.m_children);
@@ -315,19 +179,18 @@ public:
 template <> struct is_valid_child<list_item, paragraph> : std::true_type {};
 template <> struct is_valid_child<list_item, heading> : std::true_type {};
 template <> struct is_valid_child<list_item, list> : std::true_type {};
+template <> struct is_valid_child<list_item, text> : std::true_type {};
 // clang-format on
 
-class list : public element_base<list>, public element_children<list>
+class list : public element_base<list>, public element_children<list>, public styled<list>
 {
 public:
-    template <typename... Args>
-    list(style_name style_name_, Args &&...args) :
-        element_children<list>(std::forward<Args>(args)...), m_style_name(style_name_)
-    {
-    }
-    style_name m_style_name; //!< Note the style name is optional, if so it will be empty
+    using element_children::element_children;
 
-    bool operator==(const list &other) const { return m_style_name == other.m_style_name; }
+    bool operator==(const list &other) const
+    {
+        return compare_equality(m_children, other.m_children);
+    }
 };
 
 // clang-format off
@@ -357,6 +220,7 @@ private:
 
 // clang-format off
 template <> struct is_valid_child<hyperlink, span> : std::true_type {};
+template <> struct is_valid_child<hyperlink, text> : std::true_type {};
 
 // clang-format on
 
@@ -380,21 +244,15 @@ private:
     std::string m_uri;
 };
 
-class frame : public element_base<frame>, public element_children<frame>
+class frame : public element_base<frame>, public element_children<frame>, public styled<frame>
 {
 public:
-    template <typename... Args>
-    explicit frame(const style_name &sn, Args &&...args) :
-        element_children<frame>(std::forward<Args>(args)...), m_style_name(sn)
-    {
-    }
+    using element_children::element_children;
 
     bool operator==(const frame &other) const
     {
-        return m_style_name == other.m_style_name && compare_equality(m_children, other.m_children);
+        return get_style() == other.get_style() && compare_equality(m_children, other.m_children);
     }
-
-    style_name m_style_name;
 };
 
 // clang-format off
@@ -402,20 +260,16 @@ template <> struct is_valid_child<frame, image> : std::true_type {};
 
 // clang-format on
 
-class paragraph : public element_base<paragraph>, public element_children<paragraph>
+class paragraph : public element_base<paragraph>,
+                  public element_children<paragraph>,
+                  public styled<paragraph>
 {
 public:
-    paragraph() = default;
-
-    template <typename... Args>
-    paragraph(Args &&...args) :
-        element_children<paragraph>(std::forward<Args>(args)...)
-    {
-    }
+    using element_children::element_children;
 
     bool operator==(const paragraph &other) const
     {
-        return compare_equality(m_children, other.m_children);
+        return get_style() == other.get_style() && compare_equality(m_children, other.m_children);
     }
 
 private:
@@ -428,11 +282,13 @@ template <> struct is_valid_child<paragraph, hyperlink> : std::true_type {};
 template <> struct is_valid_child<paragraph, frame> : std::true_type {};
 // clang-format on
 
-class heading : public element_base<heading>, public element_children<heading>
+class heading : public element_base<heading>,
+                public element_children<heading>,
+                public styled<heading>
 {
 public:
     template <typename... Args>
-    heading(int level, Args... args) :
+    heading(int level, Args &&...args) :
         element_children<heading>(std::forward<Args>(args)...), m_level(level)
     {
     }
@@ -477,4 +333,4 @@ template <> struct is_valid_child<text_doc, paragraph> : std::true_type {};
 template <> struct is_valid_child<text_doc, list> : std::true_type {};
 template <> struct is_valid_child<text_doc, frame> : std::true_type {};
 // clang-format on
-}
+} // namespace docsmith

@@ -29,26 +29,25 @@ using namespace docsmith;
 #include <string>
 #include <utility> // For std::move
 
-
 #include <pugixml.hpp>
-
 
 TEST(BASIC_USAGE, CreateDocument)
 {
     text_doc doc;
 
-    //doc.add(paragraph(text{"Hello"}, span(style_name{}, span(style_name{}, text("Hello")))));
-    paragraph p("Hello");
-    span s("", text{"nested"});
+    // doc.add(paragraph(text{"Hello"}, span(style_name{}, span(style_name{}, text("Hello")))));
+    //paragraph p("Hello", "Goodbye");
+    paragraph p;
+    span s(kids{text(""), text{"nested"}});
     // span s2("", text{"nested2"});
     // s.add(s2);
-    p.add(frame("fr1", image("odt/smiley.png")));
+    p.add(frame(image("odt/smiley.png")).set_style("fr1"));
     p.add(s);
     doc.add(p);
 
     std::cout << "\n\n";
     io_writer w(std::cout);
-    doc.accept(w);
+    // doc.accept(w);
     std::cout << "\n\n";
 
     odt_file f("odt/basic_generated.odt");

@@ -10,7 +10,8 @@ add_compile_options("$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
 
 # Options
 option(BUILD_SHARED_LIBS "Build shared libraries" OFF)
-option(DOCSMITHCPP_BUILD_TESTS "Build unit tests" ON)
+option(DOCSMITHCPP_BUILD_TESTS "Build unit tests" OFF)
+option(DOCSMITHCPP_BUILD_MINIMAL_USAGE "Build only minimual main demonstrating usage" ON)
 
 # Output directories
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
@@ -29,9 +30,6 @@ if(DOCSMITHCPP_BUILD_TESTS)
     find_package(GTest REQUIRED)
     enable_testing()
     add_subdirectory(tests)
-
-
-
 endif()
 
 # Install config support

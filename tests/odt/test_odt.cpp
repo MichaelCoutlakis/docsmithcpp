@@ -25,7 +25,17 @@
 
 using namespace docsmith;
 
- TEST(DOCSMITH, BasicUsage)
+template <typename Elem1, typename Elem2>
+void print_compare(const element_base<Elem1> &expected, const element_base<Elem2> &actual)
+{
+    io_writer w(std::cout);
+    std::cout << "===============\nExpected:\n===============\n";
+    expected.accept(w);
+    std::cout << "===============\nActual:  \n===============\n";
+    actual.accept(w);
+}
+
+TEST(DOCSMITH, BasicUsage)
 {
     heading h{1, text{"This is the heading"}};
     paragraph p{text{"Some Paragraph"}, text{"some other span"}};
@@ -36,23 +46,18 @@ using namespace docsmith;
     return;
 }
 
- TEST(ODT, ParseBasicFile)
+TEST(ODT, ParseBasicFile)
 {
     auto f = odt_file("odt/basic.odt");
     const text_doc actual = f.parse_text_doc();
-    const text_doc expected{
-        heading{1, text{"Heading 1"}}, paragraph{text{"This is the first paragraph."}}};
+    const text_doc expected{heading{1, "Heading 1"}, paragraph{"This is the first paragraph."}};
 
-    std::cout << "===============\n";
-    io_writer w(std::cout);
-    w.visit(expected);
-    std::cout << "===============\n";
-    w.visit(actual);
+    print_compare(expected, actual);
     EXPECT_EQ(expected, actual);
     EXPECT_EQ(expected, actual);
 }
 
- TEST(ODT, ParseModerateFile)
+TEST(ODT, ParseModerateFile)
 {
     auto f = odt_file("odt/moderate.odt");
     const text_doc actual = f.parse_text_doc();
@@ -66,28 +71,24 @@ using namespace docsmith;
         paragraph{"First paragraph"},
         heading{2, "Second Heading"},
         paragraph{"Second paragraph."},
-        list{arabic_list_from7.m_style_name,
-            list_item{paragraph{"First numbered list item, numbering starts at 7."}},
-            list_item{paragraph{"Item two."}}},
+        list{list_item{paragraph{"First numbered list item, numbering starts at 7."}},
+            list_item{paragraph{"Item two."}}}
+            .set_style(arabic_list_from7.m_style_name),
         paragraph{"Bullet points:"},
-        list{bullets.m_style_name, list_item{paragraph{"First; and"}}, list_item{"Second."}},
+        list{list_item{paragraph{"First; and"}}, list_item{paragraph{"Second."}}}.set_style(
+            bullets.m_style_name),
         paragraph{"Alpha list:"},
-        list{alpha.m_style_name, list_item{paragraph{"Item a"}}},
-        list{bullets2.m_style_name,
-            list_item{
-                list{style_name{}, list_item{paragraph{"Sub items of alpha list are bullets"}}}}},
-        list{alpha.m_style_name, list_item{paragraph{"Item b"}}},
+        list{list_item{paragraph{"Item a"}}}.set_style(alpha.m_style_name),
+        list{list_item{list{list_item{paragraph{"Sub items of alpha list are bullets"}}}}}
+            .set_style(bullets2.m_style_name),
+        list{list_item{paragraph{"Item b"}}}.set_style(alpha.m_style_name),
         paragraph{text{"Here is a url to "},
             hyperlink{"https://github.com/MichaelCoutlakis/docsmithcpp", "docsmith"},
             text{" on "},
-            span{style_name{"Source_20_Text"}, span{style_name{"T1"}, text{"GitHub"}}},
+            span{kids_tag{}, span{text{"GitHub"}}.set_style("T1")}.set_style("Source_20_Text"),
             text{"."}}};
 
-    std::cout << "===============\n";
-    io_writer w(std::cout);
-    w.visit(expected);
-    std::cout << "===============\n";
-    w.visit(actual);
+    print_compare(expected, actual);
     EXPECT_EQ(expected, actual);
 }
 
@@ -97,18 +98,39 @@ TEST(ODT, ParseImage)
     const text_doc actual = f.parse_text_doc();
     style im_style("fr1", style_graphics{});
     text_doc expected{paragraph{
-        frame{im_style.m_name, image{"Pictures/100000000000002A0000002A13903900F3783A21.png"}}}};
+        frame{image{"Pictures/100000000000002A0000002A13903900F3783A21.png"}}.set_style(im_style)}};
 
-    std::cout << "===============\n";
-    io_writer w(std::cout);
-     w.visit(expected);
-     std::cout << "===============\n";
-    w.visit(actual);
-
+    print_compare(expected, actual);
     EXPECT_EQ(expected, actual);
 }
 
- TEST(ODT, ParseComplexFile)
+// constexpr bool b1 = std::is_convertible_v<decltype(std::decay_t<"Hello">), std::string>;
+
+template <typename Arg>
+constexpr bool is_stringable(Arg &&arg)
+{
+    return std::is_convertible_v<std::decay_t<Arg>, std::string>;
+}
+
+constexpr bool b = is_stringable("hello");
+
+TEST(ODT, ParseParagraphStyle)
+{
+    paragraph p1("hello");
+    p1.set_style("asf");
+    paragraph p2;
+    p2 = p1;
+    auto p3 = p1.clone();
+
+    std::cout << "p1 style name is " << p1.get_style().get_name() << "\n";
+    std::cout << "p2 style name is " << p2.get_style().get_name() << "\n";
+    auto f = odt_file("odt/paragraph_with_style.odt");
+    const text_doc actual = f.parse_text_doc();
+    text_doc expected{paragraph{text{"Paragraph with style."}}.set_style("sdf")};
+    EXPECT_EQ(expected, actual);
+}
+
+TEST(ODT, ParseComplexFile)
 {
     auto f = odt_file("odt/complex.odt");
     const text_doc actual = f.parse_text_doc();
@@ -122,27 +144,22 @@ TEST(ODT, ParseImage)
         paragraph{"First paragraph"},
         heading{2, "Second Heading"},
         paragraph{"Second paragraph."},
-        list{arabic_list_from7.m_style_name,
-            list_item{paragraph{"First numbered list item, numbering starts at 7."}},
-            list_item{paragraph{"Item two."}}},
+        list{list_item{paragraph{"First numbered list item, numbering starts at 7."}},
+            list_item{paragraph{"Item two."}}}
+            .set_style(arabic_list_from7.m_style_name),
         paragraph{"Bullet points:"},
-        list{bullets.m_style_name, list_item{paragraph{"First; and"}}, list_item{"Second."}},
+        list{list_item{paragraph{"First; and"}}, list_item{"Second."}}.set_style(
+            bullets.m_style_name),
         paragraph{"Alpha list:"},
-        list{alpha.m_style_name, list_item{paragraph{"Item a"}}},
-        list{bullets2.m_style_name,
-            list_item{
-                list{style_name{}, list_item{paragraph{"Sub items of alpha list are bullets"}}}}},
-        list{alpha.m_style_name, list_item{paragraph{"Item b"}}},
+        list{list_item{paragraph{"Item a"}}}.set_style(alpha.m_style_name),
+        list{list_item{list{list_item{paragraph{"Sub items of alpha list are bullets "}}}}},
+        list{list_item{paragraph{"Item b"}}}.set_style(alpha.m_style_name),
         paragraph{text{"Here is a url to "},
             hyperlink{"https://github.com/MichaelCoutlakis/docsmithcpp", "docsmith"},
             text{" on "},
-            span{style_name{"Source_20_Text"}, span{style_name{"T1"}, text{"GitHub"}}},
+            span{span{text{"GitHub"}}.set_style("T1")}.set_style("Source_20_Text"),
             text{"."}}};
 
-    std::cout << "===============\n";
-    io_writer w(std::cout);
-    //w.visit(expected);
-    //std::cout << "===============\n";
-    w.visit(actual);
-    //EXPECT_EQ(expected, actual);
+    print_compare(expected, actual);
+    EXPECT_EQ(expected, actual);
 }

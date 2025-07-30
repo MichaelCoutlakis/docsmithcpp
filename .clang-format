@@ -1,5 +1,8 @@
-AlignTrailingComments:                      true
 BasedOnStyle:                               WebKit
+
+AlignTrailingComments:                      true
+AlignAfterOpenBracket: DontAlign
+
 
 # Constructor() : newline (set false to get this)
 
@@ -13,7 +16,7 @@ Standard:                                   Cpp11
 BreakBeforeBinaryOperators:                 false
 BreakBeforeBraces:                          Allman
 IndentCaseLabels:                           false
-
+IndentWidth: 4
 Cpp11BracedListStyle:                       true
 #PenaltyBreakContainer: 0
 BinPackArguments: false
