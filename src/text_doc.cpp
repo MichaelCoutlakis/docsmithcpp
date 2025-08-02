@@ -16,3 +16,8 @@
  * limitations under the License.
  *****************************************************************************/
 #include "docsmithcpp/text_doc.h"
+
+docsmith::list_item::list_item(std::string t) :
+    element_children<list_item>(paragraph(text(t)))
+{
+}

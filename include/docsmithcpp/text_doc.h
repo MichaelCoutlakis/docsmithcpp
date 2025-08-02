@@ -106,29 +106,28 @@ template <> struct is_valid_child<span, span> : std::true_type {};
 template <> struct is_valid_child<span, text> : std::true_type {};
 // clang-format on
 
-class list_style_num
+enum class list_enum : char
+{
+    arabic = '1',
+    lower_alpha = 'a',
+    upper_alpha = 'A',
+    lower_roman = 'i',
+    upper_roman = 'I',
+};
+
+class list_style_num : public styled<list_style_num>
 {
 public:
-    enum class format : char
-    {
-        arabic = '1',
-        lower_alpha = 'a',
-        upper_alpha = 'A',
-        lower_roman = 'i',
-        upper_roman = 'I',
-    };
-
-    list_style_num(style_name sn, format format_, std::string suffix = ".", int start_from = 1,
+    list_style_num(style_name sn, list_enum format_, std::string suffix = ".", int start_from = 1,
         std::string prefix = {}) :
-        m_style_name(sn),
+        styled<list_style_num>(sn),
         m_format(format_),
         m_num_prefix(prefix),
         m_num_suffix(suffix),
         m_start_from(start_from)
     {
     }
-    style_name m_style_name;       //!< Style name
-    format m_format;               //!< Numbering format
+    list_enum m_format;            //!< Numbering format
     std::string m_num_prefix;      //!< Place before the number
     std::string m_num_suffix{"."}; //!< Place after the number
     int m_start_from{1};           //!< Start numbering from here
@@ -144,14 +143,13 @@ struct bullet_type
     constexpr static inline std::string three_d_right_arrow() { return "➢"; }
 };
 
-class list_style_bullet
+class list_style_bullet : public styled<list_style_bullet>
 {
 public:
     list_style_bullet(style_name sn, std::string bullet_char) :
-        m_style_name(sn), m_bullet_char(bullet_char)
+        styled<list_style_bullet>(sn), m_bullet_char(bullet_char)
     {
     }
-    style_name m_style_name;
     std::string m_bullet_char;
 };
 
@@ -169,6 +167,11 @@ class list_item : public element_base<list_item>, public element_children<list_i
 {
 public:
     using element_children::element_children;
+
+    /// List items don't contain raw text - must always be wrapped in a paragraph. This wrapping is
+    /// provided here for convenience.
+    list_item(std::string t);
+
     bool operator==(const list_item &other) const
     {
         return compare_equality(m_children, other.m_children);
@@ -179,7 +182,6 @@ public:
 template <> struct is_valid_child<list_item, paragraph> : std::true_type {};
 template <> struct is_valid_child<list_item, heading> : std::true_type {};
 template <> struct is_valid_child<list_item, list> : std::true_type {};
-template <> struct is_valid_child<list_item, text> : std::true_type {};
 // clang-format on
 
 class list : public element_base<list>, public element_children<list>, public styled<list>
@@ -333,4 +335,5 @@ template <> struct is_valid_child<text_doc, paragraph> : std::true_type {};
 template <> struct is_valid_child<text_doc, list> : std::true_type {};
 template <> struct is_valid_child<text_doc, frame> : std::true_type {};
 // clang-format on
+
 } // namespace docsmith

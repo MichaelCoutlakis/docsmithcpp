@@ -105,6 +105,12 @@ public:
         m_style_name = std::move(sn);
         return static_cast<Derived &>(*this);
     }
+
+    template<typename HasStyle>
+    Derived &set_style(const styled<HasStyle> &has_style)
+    {
+        return set_style(style_name(has_style.get_style()));
+    }
     const style_name &get_style() const { return m_style_name; }
 
 private:

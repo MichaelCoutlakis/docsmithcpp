@@ -52,7 +52,7 @@ span make_span(pugi::xml_node &node)
 paragraph make_paragraph(pugi::xml_node &node)
 {
     style_name sn(node.attribute("text:style-name").as_string());
-    return paragraph{};
+    return paragraph{}.set_style(sn);
 }
 
 heading make_heading(pugi::xml_node &node)

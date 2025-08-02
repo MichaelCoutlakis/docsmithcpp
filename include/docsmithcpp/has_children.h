@@ -48,6 +48,7 @@ struct kids_tag
 template <typename... ChildTypes>
 kids(ChildTypes &&...) -> kids<ChildTypes...>;
 
+class text;
 void add_text(std::list<std::unique_ptr<element>> &dest, std::string t);
 
 template <typename Derived>
@@ -56,10 +57,10 @@ struct element_children : virtual element
     element_children() { std::cout << "default constructor\n"; }
 
     template <typename... Args, // clang-format off
-         typename = std::enable_if_t<(
-             (is_valid_child_v<Derived, std::decay_t<Args>> ||
-              std::is_convertible_v<std::decay_t<Args>, std::string>)
-             && ...)>> // clang-format on
+          typename = std::enable_if_t<(
+              (is_valid_child_v<Derived, std::decay_t<Args>> ||
+               (std::is_convertible_v<std::decay_t<Args>, std::string> && is_valid_child_v<Derived, text>))
+              && ...)>> // clang-format on
     explicit element_children(Args &&...args)
     {
         std::cout << "constructor\n";
@@ -67,10 +68,10 @@ struct element_children : virtual element
     }
 
     template <typename... Args, // clang-format off
-         typename = std::enable_if_t<(
-             (is_valid_child_v<Derived, std::decay_t<Args>> ||
-              std::is_convertible_v<std::decay_t<Args>, std::string>)
-             && ...)>> // clang-format on
+          typename = std::enable_if_t<(
+              (is_valid_child_v<Derived, std::decay_t<Args>> ||
+               (std::is_convertible_v<std::decay_t<Args>, std::string> && is_valid_child_v<Derived, text>))
+              && ...)>> // clang-format on
     explicit element_children(kids_tag tg, Args &&...args)
     {
         std::cout << "tag constructor\n";
@@ -123,7 +124,8 @@ struct element_children : virtual element
         (add(std::forward<Args>(args)), ...);
     }
 
-    template <typename Child>
+    template <typename Child,
+        typename = std::enable_if_t<is_valid_child_v<Derived, std::decay_t<Child>>>>
     Derived &add(Child &&child)
     {
         using DecayChild = std::decay_t<Child>;
@@ -147,7 +149,7 @@ struct element_children : virtual element
 
         return *static_cast<Derived *>(this);
     }
-
+    template <typename = Derived, typename = std::enable_if_t<is_valid_child_v<Derived, text>>>
     Derived &add(const char *t)
     {
         static_assert(
@@ -157,6 +159,8 @@ struct element_children : virtual element
         add_text(m_children, t);
         return *static_cast<Derived *>(this);
     }
+
+    template <typename = Derived, typename = std::enable_if_t<is_valid_child_v<Derived, text>>>
     Derived &add(const std::string &t)
     {
         static_assert(
@@ -170,7 +174,6 @@ struct element_children : virtual element
     void add_child(std::unique_ptr<element> child) override
     {
         using U = std::remove_reference_t<decltype(*child)>;
-        // static_assert(is_valid_child_v<Derived, U>, "Invalid child type");
         m_children.push_back(std::move(child));
     }
 

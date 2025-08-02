@@ -16,6 +16,7 @@ add_library(docsmithcpp
     "../include/docsmithcpp/odt/file.h"
     "../include/docsmithcpp/odt/writer.h"
 
+    "text_doc.cpp"
     "odt/file.cpp" 
     "odt/writer.cpp" "has_children.cpp")
 endif()

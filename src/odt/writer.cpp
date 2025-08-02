@@ -1,4 +1,4 @@
-/******************************************************************************
+﻿/******************************************************************************
  * Copyright 2025 Michael Coutlakis
  *
  * SPDX-License-Identifier: Apache-2.0
@@ -37,7 +37,7 @@ std::string get_media_type(const fs::path &p)
 
 writer::writer(std::string filename)
 {
-    std::string odt_base_content{R"(
+    std::string odt_base_content{R"~~(
 <?xml version="1.0" encoding="UTF-8"?>
 <office:document-content
     xmlns:draw="urn:oasis:names:tc:opendocument:xmlns:drawing:1.0"
@@ -50,14 +50,36 @@ writer::writer(std::string filename)
     xmlns:dc="http://purl.org/dc/elements/1.1/"
     xmlns:xlink="http://www.w3.org/1999/xlink"
     office:version="1.2">
-    
+    <office:automatic-styles>
+        <text:list-style style:name="L2">
+            <text:list-level-style-bullet text:level="1" text:style-name="Bullet_20_Symbols" loext:num-list-format="%1%." style:num-suffix="." text:bullet-char="•">
+                <style:list-level-properties text:list-level-position-and-space-mode="label-alignment">
+                    <style:list-level-label-alignment text:label-followed-by="listtab" text:list-tab-stop-position="1.27cm" fo:text-indent="-0.635cm" fo:margin-left="1.27cm"/>
+                </style:list-level-properties>
+            </text:list-level-style-bullet>
+            <text:list-level-style-bullet text:level="2" text:style-name="Bullet_20_Symbols" loext:num-list-format="%2%." style:num-suffix="." text:bullet-char="◦">
+                <style:list-level-properties text:list-level-position-and-space-mode="label-alignment">
+                    <style:list-level-label-alignment text:label-followed-by="listtab" text:list-tab-stop-position="1.905cm" fo:text-indent="-0.635cm" fo:margin-left="1.905cm"/>
+                </style:list-level-properties>
+            </text:list-level-style-bullet>
+        </text:list-style>
+        <text:list-style style:name="L3">
+            <text:list-level-style-number text:level="1" text:style-name="Numbering_20_Symbols" loext:num-list-format="%1%)" style:num-suffix=")" style:num-format="a" text:start-value="1">
+                <style:list-level-properties text:list-level-position-and-space-mode="label-alignment">
+                    <style:list-level-label-alignment text:label-followed-by="listtab" text:list-tab-stop-position="1.27cm" fo:text-indent="-0.635cm" fo:margin-left="1.27cm"/>
+                </style:list-level-properties>
+            </text:list-level-style-number>
+            <text:list-level-style-number text:level="2" text:style-name="Numbering_20_Symbols" loext:num-list-format="%2%)" style:num-suffix=")" style:num-format="a">
+                <style:list-level-properties text:list-level-position-and-space-mode="label-alignment">
+                    <style:list-level-label-alignment text:label-followed-by="listtab" text:list-tab-stop-position="1.905cm" fo:text-indent="-0.635cm" fo:margin-left="1.905cm"/>
+                </style:list-level-properties>
+            </text:list-level-style-number>
+        </text:list-style>
+    </office:automatic-styles>
     <office:body>
-        <office:text>
-            <text:p>Hello, ODT!</text:p>
-        </office:text>
     </office:body>
 </office:document-content>
-)"};
+)~~"};
 
     m_content.load_string(odt_base_content.c_str());
 
@@ -80,6 +102,10 @@ writer::writer(std::string filename)
 void writer::write(const text_doc &doc, const std::string &filename)
 {
     writer w(filename);
+
+    fs::path parent_path = fs::path(filename).parent_path();
+    if(!parent_path.empty() && !fs::exists(parent_path))
+        fs::create_directories(parent_path);
 
     doc.accept(w);
     std::string content_xml, manifest_xml;
@@ -138,13 +164,17 @@ void writer::visit(const hyperlink &v)
 
 void writer::visit(const text_doc &) { get_current().append_child("office:text"); }
 
-void writer::visit(const list &) { }
+void writer::visit(const list &l)
+{
+    auto n = get_current().append_child("text:list");
+    n.append_attribute("text:style-name").set_value(l.get_style().get_name().c_str());
+}
 
-void writer::visit(const list_item &) { }
+void writer::visit(const list_item &) { auto n = get_current().append_child("text:list-item"); }
 
-void writer::visit(const list_style_num &) { }
+void writer::visit(const list_style_num &) { get_current().append_child(""); }
 
-void writer::visit(const list_style_bullet &) { }
+void writer::visit(const list_style_bullet &) { get_current().append_child(""); }
 
 void writer::visit(const frame &) { get_current().append_child("draw:frame"); }
 
