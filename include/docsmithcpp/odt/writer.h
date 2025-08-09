@@ -26,6 +26,17 @@
 
 namespace docsmith::odt
 {
+
+void write_xml(pugi::xml_node &n, const style_name &sn);
+
+void write_xml(pugi::xml_node &n, const style &s);
+void write_xml(pugi::xml_node &n, const list_style &ls);
+void write_xml(pugi::xml_node &n, const list_style_bullet &b);
+void write_xml(pugi::xml_node &n, const list_style_num &b);
+void write_xml(pugi::xml_node &n, const text_props &props);
+
+
+
 class writer : private element_visitor
 {
 public:
@@ -64,6 +75,8 @@ private:
     };
 
     pugi::xml_document m_content;         //!< Content for content.xml. Owns underlying node memory
+    pugi::xml_node m_styles;              //!< Node for the office:styles
+    pugi::xml_node m_automatic_styles;    //!< Node for the office:automatic-styles
     pugi::xml_document m_manifest;        //!< Content for manifest.xml
     pugi::xml_node m_manifest_files_node; //!< Node containing mainifest file list
     std::set<archive_item> m_pictures;    //!< Pictures to add to the archive

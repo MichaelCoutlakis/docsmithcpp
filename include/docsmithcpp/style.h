@@ -15,7 +15,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *****************************************************************************/
+#pragma once
+#include <optional>
 #include <string>
+
+#include "docsmithcpp/named_registry.h"
 
 namespace docsmith
 {
@@ -65,8 +69,9 @@ public:
         m_font_name{font_name}
     {
     }
+    const std::string &get_name() const { return m_font_name; }
 
-private:
+    private:
     std::string m_font_name;
 };
 
@@ -91,6 +96,106 @@ struct font_size
     float m_points;
 };
 
+struct dim
+{
+    double m_num;
+    std::string m_unit;
+};
+
+struct text_props
+{
+    template <typename... Args>
+    explicit text_props(Args &&...args)
+    {
+        (set(args), ...);
+    }
+
+    text_props &set(const font_size &fs)
+    {
+        m_font_size = fs;
+        return *this;
+    }
+    text_props &set(const font_style &fs)
+    {
+        m_font_style = fs;
+        return *this;
+    }
+    text_props &set(const font_name &fn)
+    {
+        m_font_name = fn;
+        return *this;
+    }
+    std::optional<font_size> m_font_size;
+    std::optional<font_style> m_font_style;
+    std::optional<font_name> m_font_name;
+};
+
+class graphics_props
+{
+public:
+    template <typename... Args>
+    explicit graphics_props(Args &&...args)
+    {
+        (set(args), ...);
+    }
+
+    graphics_props &set(align_horiz h)
+    {
+        m_horiz_pos = h;
+        return *this;
+    }
+    graphics_props &set(align_vert v)
+    {
+        m_vert_pos = v;
+        return *this;
+    }
+    std::optional<align_horiz> m_horiz_pos;
+    std::optional<align_vert> m_vert_pos;
+};
+
+struct paragraph_props
+{
+};
+
+///
+class style
+{
+public:
+    style() = default;
+    template <typename... Args>
+    explicit style(const style_name &name, const Args &...args) :
+        m_name{name}
+    {
+        (set(args), ...);
+    }
+
+    style &set(const graphics_props &props)
+    {
+        m_graphics_props = props;
+        return *this;
+    }
+    style &set(const text_props &props)
+    {
+        m_text_props = props;
+        return *this;
+    }
+    style &set(const paragraph_props &props)
+    {
+        m_paragraph_props = props;
+        return *this;
+    }
+    operator style_name() const { return m_name; }
+    style_name m_name;
+    style_name m_parent_style;
+    std::optional<graphics_props> m_graphics_props;
+    std::optional<text_props> m_text_props;
+    std::optional<paragraph_props> m_paragraph_props;
+};
+
+inline constexpr std::string get_style_name(const style &s) { return s.m_name.get_name(); }
+
+using style_registry = named_registry<style, get_style_name>;
+
 template <typename Derived>
 class styled
 {
@@ -106,7 +211,7 @@ public:
         return static_cast<Derived &>(*this);
     }
 
-    template<typename HasStyle>
+    template <typename HasStyle>
     Derived &set_style(const styled<HasStyle> &has_style)
     {
         return set_style(style_name(has_style.get_style()));
@@ -116,4 +221,5 @@ public:
 private:
     style_name m_style_name;
 };
+
 };

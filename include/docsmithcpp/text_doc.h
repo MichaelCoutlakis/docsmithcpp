@@ -17,6 +17,7 @@
  *****************************************************************************/
 #pragma once
 #include <list>
+#include <map>
 #include <memory>
 #include <optional>
 #include <stdexcept>
@@ -26,66 +27,15 @@
 #include <vector>
 
 #include "docsmithcpp/element.h"
+#include "docsmithcpp/forward_decl.h"
 #include "docsmithcpp/has_children.h"
+#include "docsmithcpp/list.h"
+#include "docsmithcpp/named_registry.h"
 #include "docsmithcpp/style.h"
 #include "docsmithcpp/text.h"
 
 namespace docsmith
 {
-
-class text;
-class span;
-class heading;
-class paragraph;
-class hyperlink;
-class text_doc;
-class list;
-class list_item;
-class frame;
-class image;
-
-class style_graphics
-{
-public:
-    template <typename... Args>
-    explicit style_graphics(Args &&...args)
-    {
-        (set(args), ...);
-    }
-
-    style_graphics &set(align_horiz h)
-    {
-        m_horiz_pos = h;
-        return *this;
-    }
-    style_graphics &set(align_vert v)
-    {
-        m_vert_pos = v;
-        return *this;
-    }
-    std::optional<align_horiz> m_horiz_pos;
-    std::optional<align_vert> m_vert_pos;
-};
-
-class style
-{
-public:
-    template <typename... Args>
-    explicit style(const style_name &name, const Args &...args) :
-        m_name{name}
-    {
-        (set(args), ...);
-    }
-
-    style &set(const style_graphics &g)
-    {
-        m_graphics_props = g;
-        return *this;
-    }
-    operator style_name() const { return m_name; }
-    style_name m_name;
-    std::optional<style_graphics> m_graphics_props;
-};
 
 class span : public element_base<span>, public element_children<span>, public styled<span>
 {
@@ -104,100 +54,6 @@ private:
 // clang-format off
 template <> struct is_valid_child<span, span> : std::true_type {};
 template <> struct is_valid_child<span, text> : std::true_type {};
-// clang-format on
-
-enum class list_enum : char
-{
-    arabic = '1',
-    lower_alpha = 'a',
-    upper_alpha = 'A',
-    lower_roman = 'i',
-    upper_roman = 'I',
-};
-
-class list_style_num : public styled<list_style_num>
-{
-public:
-    list_style_num(style_name sn, list_enum format_, std::string suffix = ".", int start_from = 1,
-        std::string prefix = {}) :
-        styled<list_style_num>(sn),
-        m_format(format_),
-        m_num_prefix(prefix),
-        m_num_suffix(suffix),
-        m_start_from(start_from)
-    {
-    }
-    list_enum m_format;            //!< Numbering format
-    std::string m_num_prefix;      //!< Place before the number
-    std::string m_num_suffix{"."}; //!< Place after the number
-    int m_start_from{1};           //!< Start numbering from here
-};
-
-struct bullet_type
-{
-    constexpr static inline std::string bullet() { return "•"; }
-    constexpr static inline std::string black_circ() { return "●"; }
-    constexpr static inline std::string heavy_check_mark() { return "✔"; }
-    constexpr static inline std::string ballot_x() { return "✗"; }
-    constexpr static inline std::string right_arrow() { return "➔"; }
-    constexpr static inline std::string three_d_right_arrow() { return "➢"; }
-};
-
-class list_style_bullet : public styled<list_style_bullet>
-{
-public:
-    list_style_bullet(style_name sn, std::string bullet_char) :
-        styled<list_style_bullet>(sn), m_bullet_char(bullet_char)
-    {
-    }
-    std::string m_bullet_char;
-};
-
-class list_style
-{
-public:
-    // list_style(
-
-    style_name m_style_name;
-
-private:
-};
-
-class list_item : public element_base<list_item>, public element_children<list_item>
-{
-public:
-    using element_children::element_children;
-
-    /// List items don't contain raw text - must always be wrapped in a paragraph. This wrapping is
-    /// provided here for convenience.
-    list_item(std::string t);
-
-    bool operator==(const list_item &other) const
-    {
-        return compare_equality(m_children, other.m_children);
-    }
-};
-
-// clang-format off
-template <> struct is_valid_child<list_item, paragraph> : std::true_type {};
-template <> struct is_valid_child<list_item, heading> : std::true_type {};
-template <> struct is_valid_child<list_item, list> : std::true_type {};
-// clang-format on
-
-class list : public element_base<list>, public element_children<list>, public styled<list>
-{
-public:
-    using element_children::element_children;
-
-    bool operator==(const list &other) const
-    {
-        return compare_equality(m_children, other.m_children);
-    }
-};
-
-// clang-format off
-template <> struct is_valid_child<list, list_item> : std::true_type {};
-
 // clang-format on
 
 class hyperlink : public element_base<hyperlink>, public element_children<hyperlink>
@@ -327,6 +183,15 @@ public:
     {
         return compare_equality(m_children, other.m_children);
     }
+
+    style_registry &styles() { return m_styles; }
+    const style_registry &styles() const { return m_styles; }
+    list_style_registry &list_styles() { return m_list_styles; }
+    const list_style_registry &list_styles() const { return m_list_styles; }
+
+private:
+    style_registry m_styles;
+    list_style_registry m_list_styles;
 };
 
 // clang-format off

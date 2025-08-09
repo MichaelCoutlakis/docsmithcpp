@@ -1,4 +1,4 @@
-﻿/******************************************************************************
+/******************************************************************************
  * Copyright 2025 Michael Coutlakis
  *
  * SPDX-License-Identifier: Apache-2.0
@@ -15,6 +15,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *****************************************************************************/
+#include "docsmithcpp/list.h"
 #include "docsmithcpp/text_doc.h"
 
+namespace docsmith
+{
 
+list_item::list_item(std::string t) :
+    element_children<list_item>(paragraph(text(t)))
+{
+}
+}

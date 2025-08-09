@@ -18,6 +18,7 @@
 #include <filesystem>
 #include <iostream>
 #include <sstream>
+#include <fmt/format.h>
 
 #include "docsmithcpp/iostream_writer.h"
 #include "docsmithcpp/odt/writer.h"
@@ -50,31 +51,9 @@ writer::writer(std::string filename)
     xmlns:dc="http://purl.org/dc/elements/1.1/"
     xmlns:xlink="http://www.w3.org/1999/xlink"
     office:version="1.2">
+    <office:styles>
+    </office:styles>
     <office:automatic-styles>
-        <text:list-style style:name="L2">
-            <text:list-level-style-bullet text:level="1" text:style-name="Bullet_20_Symbols" loext:num-list-format="%1%." style:num-suffix="." text:bullet-char="•">
-                <style:list-level-properties text:list-level-position-and-space-mode="label-alignment">
-                    <style:list-level-label-alignment text:label-followed-by="listtab" text:list-tab-stop-position="1.27cm" fo:text-indent="-0.635cm" fo:margin-left="1.27cm"/>
-                </style:list-level-properties>
-            </text:list-level-style-bullet>
-            <text:list-level-style-bullet text:level="2" text:style-name="Bullet_20_Symbols" loext:num-list-format="%2%." style:num-suffix="." text:bullet-char="◦">
-                <style:list-level-properties text:list-level-position-and-space-mode="label-alignment">
-                    <style:list-level-label-alignment text:label-followed-by="listtab" text:list-tab-stop-position="1.905cm" fo:text-indent="-0.635cm" fo:margin-left="1.905cm"/>
-                </style:list-level-properties>
-            </text:list-level-style-bullet>
-        </text:list-style>
-        <text:list-style style:name="L3">
-            <text:list-level-style-number text:level="1" text:style-name="Numbering_20_Symbols" loext:num-list-format="%1%)" style:num-suffix=")" style:num-format="a" text:start-value="1">
-                <style:list-level-properties text:list-level-position-and-space-mode="label-alignment">
-                    <style:list-level-label-alignment text:label-followed-by="listtab" text:list-tab-stop-position="1.27cm" fo:text-indent="-0.635cm" fo:margin-left="1.27cm"/>
-                </style:list-level-properties>
-            </text:list-level-style-number>
-            <text:list-level-style-number text:level="2" text:style-name="Numbering_20_Symbols" loext:num-list-format="%2%)" style:num-suffix=")" style:num-format="a">
-                <style:list-level-properties text:list-level-position-and-space-mode="label-alignment">
-                    <style:list-level-label-alignment text:label-followed-by="listtab" text:list-tab-stop-position="1.905cm" fo:text-indent="-0.635cm" fo:margin-left="1.905cm"/>
-                </style:list-level-properties>
-            </text:list-level-style-number>
-        </text:list-style>
     </office:automatic-styles>
     <office:body>
     </office:body>
@@ -83,10 +62,18 @@ writer::writer(std::string filename)
 
     m_content.load_string(odt_base_content.c_str());
 
-    auto office_body = m_content.find_node(
-        [](const pugi::xml_node &node) { return std::string(node.name()) == "office:body"; });
+    auto find_node = [this](std::string name)
+    {
+        return m_content.find_node([name](const pugi::xml_node &node) { //
+            return std::string(node.name()) == name;
+        });
+    };
+
+    auto office_body = find_node("office:body");
     m_node_stack.push(office_body);
     m_current = m_node_stack.top();
+    m_automatic_styles = find_node("office:automatic-styles");
+    m_styles = find_node("office:styles");
 
     std::string manifest_xml{R"(
 <?xml version="1.0" encoding="UTF-8"?>
@@ -154,7 +141,11 @@ void writer::visit(const span &) { get_current().append_child("text:span"); }
 
 void writer::visit(const heading &) { get_current().append_child("text:h"); }
 
-void writer::visit(const paragraph &) { get_current().append_child("text:p"); }
+void writer::visit(const paragraph &p)
+{
+    auto n = get_current().append_child("text:p");
+    n.append_attribute("text:style-name").set_value(p.get_style().get_name().c_str());
+}
 
 void writer::visit(const hyperlink &v)
 {
@@ -162,7 +153,17 @@ void writer::visit(const hyperlink &v)
     url.append_attribute("xlink:href") = v.get_url();
 }
 
-void writer::visit(const text_doc &) { get_current().append_child("office:text"); }
+void writer::visit(const text_doc &doc)
+{
+    get_current().append_child("office:text");
+
+    // Add any list / automatic styles:
+    for(auto &[name, s] : doc.list_styles())
+        write_xml(m_automatic_styles, s);
+    // Add any text styles:
+    for(auto &[name, s] : doc.styles())
+        write_xml(m_styles, s);
+}
 
 void writer::visit(const list &l)
 {
@@ -201,4 +202,106 @@ void writer::push() { m_node_stack.push(get_current().last_child()); }
 void writer::pop() { m_node_stack.pop(); }
 
 pugi::xml_node writer::get_current() { return m_node_stack.top(); }
+
+void write_xml(pugi::xml_node &n, const style_name &sn)
+{
+    n.append_attribute("style:name").set_value(sn.get_name().c_str());
+}
+
+void write_xml(pugi::xml_node &n, const style &s)
+{
+    auto style_node = n.append_child("style:style");
+    write_xml(style_node, s.m_name);
+
+    // FIXME
+    style_node.append_attribute("style:family") = "paragraph";
+
+    if(!s.m_parent_style.is_empty())
+        style_node.append_attribute("style:parent-style-name") =
+            s.m_parent_style.get_name().c_str();
+
+    if(s.m_text_props)
+        write_xml(style_node, s.m_text_props.value());
+
+    // TODO: Other properties if present...
+}
+void write_xml(pugi::xml_node &n, const list_style &ls)
+{
+    auto ls_node = n.append_child("text:list-style");
+    write_xml(ls_node, ls.m_name);
+
+    for(const auto &level_style : ls.m_level_styles)
+    {
+        std::visit([&](const auto &s) { write_xml(ls_node, s); }, level_style);
+    }
+}
+
+void write_xml(pugi::xml_node &n, const list_style_bullet &lsb)
+{
+    auto bullet_node = n.append_child("text:list-level-style-bullet");
+    //write_xml(bullet_node, lsb.m_style_name);
+    //  TODO: type parameter for write_xml with the style name:
+    if(!lsb.m_style_name.is_empty())
+    n.append_attribute("text:style-name").set_value(lsb.m_style_name.get_name().c_str());
+    bullet_node.append_attribute("text:level") = lsb.m_level;
+    bullet_node.append_attribute("text:bullet-char") = lsb.m_bullet_char.c_str();
+    // TODO: serialize optional props
+
+    //auto llp = bullet_node.append_child("style:list-level-properties");
+    //llp.append_attribute("text:list-level-position-and-space-mode") = "label-alignment";
+    //auto llpa = llp.append_child("style:list-level-label-alignment");
+    //llpa.append_attribute("text:label-followed-by") = "listtab";
+    //llpa.append_attribute("text:list-tab-stop-position") = "1.27cm";
+    //llpa.append_attribute("fo:text-indent") = "-0.635cm";
+    //llpa.append_attribute("fo:margin-left") = "1.27cm";
+}
+
+void write_xml(pugi::xml_node &n, const list_style_num &s)
+{
+    auto num_node = n.append_child("text:list-level-style-number");
+   // write_xml(num_node, s.m_style_name);
+
+    // TODO: type parameter for write_xml with the style name:
+    if(!s.m_style_name.is_empty())
+    n.append_attribute("text:style-name").set_value(s.m_style_name.get_name().c_str());
+
+    //if(!s.m_style_name.is_empty())
+
+
+    num_node.append_attribute("text:level") = s.m_level;
+    num_node.append_attribute("loext:num-list-format") = fmt::format("%{}%.", s.m_level);
+    num_node.append_attribute("style:num-format") = fmt::format("{}", static_cast<char>(s.m_format));
+    num_node.append_attribute("text:start-value") = s.m_start_from;
+    num_node.append_attribute("style:num-suffix") = s.m_num_suffix.c_str();
+    num_node.append_attribute("style:num-prefix") = s.m_num_prefix.c_str();
+
+    // TODO: serialize optional props
+}
+void write_xml(pugi::xml_node &n, const text_props &tp)
+{
+    auto text_props_node = n.append_child("style:text-properties");
+
+    if(tp.m_font_size)
+        text_props_node.append_attribute("fo:font-size") = fmt::format("{}pt", tp.m_font_size->m_points);
+    
+    if(tp.m_font_style)
+    {
+        const char *val = nullptr;
+        switch(*tp.m_font_style)
+        {
+        case docsmith::font_style::normal:
+            val = "normal";
+            break;
+        case docsmith::font_style::italic:
+            val = "italic";
+            break;
+        case docsmith::font_style::oblique:
+            val = "oblique";
+            break;
+        }
+        text_props_node.append_attribute("fo:font-style") = val;
+    }
+    if(tp.m_font_name)
+        text_props_node.append_attribute("style:font-name") = tp.m_font_name->get_name().c_str();
+}
 }

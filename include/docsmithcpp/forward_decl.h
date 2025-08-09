@@ -1,4 +1,4 @@
-﻿/******************************************************************************
+/******************************************************************************
  * Copyright 2025 Michael Coutlakis
  *
  * SPDX-License-Identifier: Apache-2.0
@@ -15,6 +15,18 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *****************************************************************************/
-#include "docsmithcpp/text_doc.h"
+#pragma once
 
-
+namespace docsmith
+{
+class text;
+class span;
+class heading;
+class paragraph;
+class hyperlink;
+class text_doc;
+class list;
+class list_item;
+class frame;
+class image;
+}
