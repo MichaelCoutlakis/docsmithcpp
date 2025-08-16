@@ -22,7 +22,7 @@ namespace docsmith
 {
 
 list_item::list_item(std::string t) :
-    element_children<list_item>(paragraph(text(t)))
+    nodes<list_item>(paragraph(text(t)))
 {
 }
 }

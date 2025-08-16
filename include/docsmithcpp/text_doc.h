@@ -28,19 +28,28 @@
 
 #include "docsmithcpp/element.h"
 #include "docsmithcpp/forward_decl.h"
-#include "docsmithcpp/has_children.h"
 #include "docsmithcpp/list.h"
 #include "docsmithcpp/named_registry.h"
+#include "docsmithcpp/nodes.h"
 #include "docsmithcpp/style.h"
 #include "docsmithcpp/text.h"
 
 namespace docsmith
 {
 
-class span : public element_base<span>, public element_children<span>, public styled<span>
+template <typename Derived, elem_t TagType>
+class elem_tagged_nodes_styled : public element_base<Derived>,
+                                 public nodes<Derived>,
+                                 public styled<Derived>,
+                                 public elem_tagged<Derived, TagType>
+{
+    using nodes<Derived>::nodes;
+};
+
+class span : public elem_tagged_nodes_styled<span, elem_t::spn>
 {
 public:
-    using element_children::element_children;
+    using elem_tagged_nodes_styled::elem_tagged_nodes_styled;
 
     bool operator==(const span &rhs) const
     {
@@ -56,12 +65,14 @@ template <> struct is_valid_child<span, span> : std::true_type {};
 template <> struct is_valid_child<span, text> : std::true_type {};
 // clang-format on
 
-class hyperlink : public element_base<hyperlink>, public element_children<hyperlink>
+class hyperlink : public element_base<hyperlink>,
+                  public nodes<hyperlink>,
+                  public elem_tagged<paragraph, elem_t::href>
 {
 public:
     template <typename... Args>
     hyperlink(std::string url, Args &&...args) :
-        element_children<hyperlink>(std::forward<Args>(args)...), m_url(url)
+        nodes<hyperlink>(std::forward<Args>(args)...), m_url(url)
     {
     }
 
@@ -82,7 +93,7 @@ template <> struct is_valid_child<hyperlink, text> : std::true_type {};
 
 // clang-format on
 
-class image : public element_base<image>
+class image : public element_base<image>, public elem_tagged<image, elem_t::img>
 {
 public:
     explicit image(std::string uri) :
@@ -102,10 +113,10 @@ private:
     std::string m_uri;
 };
 
-class frame : public element_base<frame>, public element_children<frame>, public styled<frame>
+class frame : public elem_tagged_nodes_styled<frame, elem_t::fr>
 {
 public:
-    using element_children::element_children;
+    using elem_tagged_nodes_styled::elem_tagged_nodes_styled;
 
     bool operator==(const frame &other) const
     {
@@ -118,12 +129,10 @@ template <> struct is_valid_child<frame, image> : std::true_type {};
 
 // clang-format on
 
-class paragraph : public element_base<paragraph>,
-                  public element_children<paragraph>,
-                  public styled<paragraph>
+class paragraph : public elem_tagged_nodes_styled<paragraph, elem_t::p>
 {
 public:
-    using element_children::element_children;
+    using elem_tagged_nodes_styled::elem_tagged_nodes_styled;
 
     bool operator==(const paragraph &other) const
     {
@@ -141,13 +150,14 @@ template <> struct is_valid_child<paragraph, frame> : std::true_type {};
 // clang-format on
 
 class heading : public element_base<heading>,
-                public element_children<heading>,
-                public styled<heading>
+                public nodes<heading>,
+                public styled<heading>,
+                public elem_tagged<heading, elem_t::h>
 {
 public:
     template <typename... Args>
     heading(int level, Args &&...args) :
-        element_children<heading>(std::forward<Args>(args)...), m_level(level)
+        nodes<heading>(std::forward<Args>(args)...), m_level(level)
     {
     }
 
@@ -168,14 +178,16 @@ template <> struct is_valid_child<heading, span> : std::true_type {};
 template <> struct is_valid_child<heading, text> : std::true_type {};
 // clang-format on
 
-class text_doc : public element_base<text_doc>, public element_children<text_doc>
+class text_doc : public element_base<text_doc>,
+                 public nodes<text_doc>,
+                 public elem_tagged<paragraph, elem_t::doc>
 {
 public:
     text_doc() = default;
 
     template <typename... Args>
     text_doc(Args &&...args) :
-        element_children<text_doc>(std::forward<Args>(args)...)
+        nodes<text_doc>(std::forward<Args>(args)...)
     {
     }
 

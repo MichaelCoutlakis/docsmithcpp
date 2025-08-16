@@ -18,7 +18,7 @@ add_library(docsmithcpp
 
     "text_doc.cpp"
     "odt/file.cpp" 
-    "odt/writer.cpp" "has_children.cpp" "list.cpp")
+    "odt/writer.cpp" "nodes.cpp" "list.cpp")
 endif()
 
 target_include_directories(docsmithcpp PUBLIC

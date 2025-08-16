@@ -16,7 +16,7 @@
  * limitations under the License.
  *****************************************************************************/
 
-#include "docsmithcpp/has_children.h"
+#include "docsmithcpp/nodes.h"
 #include "docsmithcpp/text.h"
 
 namespace docsmith

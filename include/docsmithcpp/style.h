@@ -71,7 +71,7 @@ public:
     }
     const std::string &get_name() const { return m_font_name; }
 
-    private:
+private:
     std::string m_font_name;
 };
 
@@ -196,8 +196,16 @@ inline constexpr std::string get_style_name(const style &s) { return s.m_name.ge
 
 using style_registry = named_registry<style, get_style_name>;
 
+class styled_base
+{
+public:
+    virtual ~styled_base() = default;
+    virtual void style(style_name) = 0;
+    virtual const style_name &style() const = 0;
+};
+
 template <typename Derived>
-class styled
+class styled : public styled_base
 {
 public:
     styled() = default;
@@ -217,6 +225,9 @@ public:
         return set_style(style_name(has_style.get_style()));
     }
     const style_name &get_style() const { return m_style_name; }
+
+    void style(style_name sn) override { set_style(sn); }
+    const style_name &style() const override { return get_style(); }
 
 private:
     style_name m_style_name;

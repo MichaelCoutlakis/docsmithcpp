@@ -31,7 +31,9 @@ public:
 
     void save(const text_doc &doc);
 
-private:
+    const std::string &filename() const { return m_filename; }
+
+    private:
     std::string m_filename;
 };
 

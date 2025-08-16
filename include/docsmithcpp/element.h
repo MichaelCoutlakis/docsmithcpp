@@ -16,14 +16,32 @@
  * limitations under the License.
  *****************************************************************************/
 #pragma once
+#include <iostream>
 #include <list>
 #include <memory>
 #include <stdexcept>
 #include <type_traits>
-#include <iostream>
+#include <vector>
 
 namespace docsmith
 {
+enum class elem_t
+{
+    h,
+    p,
+    lst,
+    lit,
+    t,
+    txt=t,
+    s,
+    spn = s,
+    doc,
+    tbl,
+    cell,
+    img,
+    fr,
+    href
+};
 
 /// Base class for all document elements
 class element
@@ -32,12 +50,61 @@ public:
     virtual ~element() = default;
     virtual void accept(class element_visitor &) const = 0;
     virtual std::unique_ptr<element> clone() const = 0;
-    virtual bool is_equal(const element &other) const { return false; }
+    virtual bool is_equal(const element &other) const
+    {
+        return false;
+    }
 
     virtual void add_child(std::unique_ptr<element> child)
     {
         throw std::logic_error("This element does not accept children");
     }
+
+    // Default element has no children
+    virtual std::list<element *> children() { return {}; }
+
+    virtual elem_t type() const = 0;
+    virtual bool is_type(elem_t query) const = 0;
+
+    template <typename T>
+    std::vector<T *> get_elem_of()
+    {
+        std::vector<T *> r;
+
+        if(auto *me = dynamic_cast<T *>(this))
+            r.push_back(me);
+
+        for(auto *c : children())
+        {
+            auto kids = c->get_elem_of<T>();
+            r.insert(r.end(), kids.begin(), kids.end());
+        }
+        return r;
+    }
+
+    template <typename T, typename Predicate>
+    std::vector<T *> find_all(Predicate pred)
+    {
+        std::vector<T *> r;
+
+        if(auto *me = dynamic_cast<T *>(this); me && pred(this))
+            r.push_back(me);
+
+        for(auto *c : children())
+        {
+            auto kids = c->find_all<T>(pred);
+            r.insert(r.end(), kids.begin(), kids.end());
+        }
+        return r;
+    }
+};
+
+
+template <typename Derived, elem_t TypeTag>
+struct elem_tagged : virtual element
+{
+    elem_t type() const override { return TypeTag; }
+    bool is_type(elem_t query) const override { return query == TypeTag; }
 };
 
 // clang-format off
@@ -83,6 +150,5 @@ struct element_visitor
     {
     }
 };
-
 
 } // namespace docsmith

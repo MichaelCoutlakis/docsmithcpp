@@ -18,12 +18,12 @@
 #pragma once
 #include <string>
 
-#include "docsmithcpp/has_children.h"
+#include "docsmithcpp/nodes.h"
 
 namespace docsmith
 {
 
-class text : public element_base<text>
+class text : public element_base<text>, public elem_tagged<text, elem_t::txt>
 {
 public:
     explicit text(const char *s) :

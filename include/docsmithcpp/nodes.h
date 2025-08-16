@@ -52,16 +52,16 @@ class text;
 void add_text(std::list<std::unique_ptr<element>> &dest, std::string t);
 
 template <typename Derived>
-struct element_children : virtual element
+struct nodes : virtual element
 {
-    element_children() { std::cout << "default constructor\n"; }
+    nodes() { std::cout << "default constructor\n"; }
 
     template <typename... Args, // clang-format off
           typename = std::enable_if_t<(
               (is_valid_child_v<Derived, std::decay_t<Args>> ||
                (std::is_convertible_v<std::decay_t<Args>, std::string> && is_valid_child_v<Derived, text>))
               && ...)>> // clang-format on
-    explicit element_children(Args &&...args)
+    explicit nodes(Args &&...args)
     {
         std::cout << "constructor\n";
         (add(std::forward<Args>(args)), ...);
@@ -72,27 +72,27 @@ struct element_children : virtual element
               (is_valid_child_v<Derived, std::decay_t<Args>> ||
                (std::is_convertible_v<std::decay_t<Args>, std::string> && is_valid_child_v<Derived, text>))
               && ...)>> // clang-format on
-    explicit element_children(kids_tag tg, Args &&...args)
+    explicit nodes(kids_tag tg, Args &&...args)
     {
         std::cout << "tag constructor\n";
         (add(std::forward<Args>(args)), ...);
     }
 
     template <typename... ChildTypes>
-    element_children(kids<ChildTypes...> &&content)
+    nodes(kids<ChildTypes...> &&content)
     {
         std::apply([this](auto &&...args) { (add(std::forward<decltype(args)>(args)), ...); },
             content.m_child_content);
     }
 
     // Deep copy constructor:
-    element_children(const element_children &other)
+    nodes(const nodes &other)
     {
         std::cout << "copy constructor\n";
         for(const auto &child : other.m_children)
             m_children.push_back(child->clone());
     }
-    element_children &operator=(const element_children &other)
+    nodes &operator=(const nodes &other)
     {
         std::cout << "copy assignment operator\n";
         if(this != &other)
@@ -104,8 +104,8 @@ struct element_children : virtual element
         return *this;
     }
 
-    element_children(element_children &&other) { m_children = std::move(other.m_children); }
-    element_children &operator=(element_children &&other)
+    nodes(nodes &&other) { m_children = std::move(other.m_children); }
+    nodes &operator=(nodes &&other)
     {
         if(this != &other)
         {
@@ -180,13 +180,21 @@ struct element_children : virtual element
     auto begin() const { return m_children.begin(); }
     auto end() const { return m_children.end(); }
 
+    std::list<element *> children()
+    {
+        std::list<element *> chldrn;
+        for(auto &c : m_children)
+            chldrn.push_back(c.get());
+        return chldrn;
+    }
+
     std::list<std::unique_ptr<element>> m_children;
 };
 
 // clang-format off
-// Helpers to determine if the class heirarchy has element_children mixed in:
+// Helpers to determine if the class heirarchy has nodes mixed in:
 template<typename NodeType>
-struct is_element_children : std::is_base_of<element_children<NodeType>, NodeType> {};
+struct is_element_children : std::is_base_of<nodes<NodeType>, NodeType> {};
 
 template<typename NodeType>
 inline constexpr bool has_children_v = is_element_children<NodeType>::value;
@@ -218,7 +226,14 @@ struct element_base : virtual element
     {
         if(auto p = dynamic_cast<const Derived *>(&other))
         {
-            return static_cast<const Derived &>(*this) == *p;
+            const auto &me = static_cast<const Derived &>(*this);
+            const auto &you = *p;
+
+            bool result = static_cast<const Derived &>(*this) == *p;
+            if(!result)
+                std::cout << "not equal\n";
+
+            return result;
         }
 
         return false;

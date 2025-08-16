@@ -20,7 +20,7 @@
 #include <variant>
 
 #include "docsmithcpp/element.h"
-#include "docsmithcpp/has_children.h"
+#include "docsmithcpp/nodes.h"
 #include "docsmithcpp/style.h"
 #include "docsmithcpp/text.h"
 
@@ -111,10 +111,12 @@ template <> struct is_valid_child<list_style, list_style_bullet> : std::true_typ
 template <> struct is_valid_child<list_style, list_style_num> : std::true_type {};
 // clang-format on
 
-class list_item : public element_base<list_item>, public element_children<list_item>
+class list_item : public element_base<list_item>,
+                  public nodes<list_item>,
+                  public elem_tagged<paragraph, elem_t::lit>
 {
 public:
-    using element_children::element_children;
+    using nodes::nodes;
 
     /// List items don't contain raw text - must always be wrapped in a paragraph. This wrapping is
     /// provided here for convenience.
@@ -132,10 +134,13 @@ template <> struct is_valid_child<list_item, heading> : std::true_type {};
 template <> struct is_valid_child<list_item, list> : std::true_type {};
 // clang-format on
 
-class list : public element_base<list>, public element_children<list>, public styled<list>
+class list : public element_base<list>,
+             public nodes<list>,
+             public styled<list>,
+             public elem_tagged<paragraph, elem_t::lst>
 {
 public:
-    using element_children::element_children;
+    using nodes::nodes;
 
     bool operator==(const list &other) const
     {

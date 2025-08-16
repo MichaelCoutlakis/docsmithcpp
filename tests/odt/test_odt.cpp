@@ -53,6 +53,12 @@ bool do_user_verification(std::string request)
     }
 }
 
+void open_file(std::string filename)
+{
+    std::string cmd = R"("start "" ")" + filename + R"(")";
+    std::system(cmd.c_str());
+}
+
 TEST(DOCSMITH, BasicUsage)
 {
     heading h{1, text{"This is the heading"}};
@@ -78,36 +84,41 @@ TEST(ODT, ParseBasicFile)
 TEST(ODT, ParseModerateFile)
 {
     auto f = odt_file("odt/moderate.odt");
-    const text_doc actual = f.parse_text_doc();
+    text_doc actual = f.parse_text_doc();
 
-    // list_style_num arabic_list_from7(style_name("L1"), list_enum::arabic, ")", 7);
-    // list_style_bullet bullets(style_name("L2"), bullet_type::bullet());
-    // list_style_num alpha(style_name("L3"), list_enum::lower_alpha, ")", 3);
-    // list_style_bullet bullets2(style_name("L4"), bullet_type::bullet());
+    // Remove paragraph style names:
+    auto v = actual.find_all<styled_base>([](element *p) { return p->is_type(elem_t::p); });
+    for(auto &e : v)
+        e->style(style_name{});
 
-    // const text_doc expected{//
-    //     heading{1, "Heading 1"},
-    //     par{"First par"},
-    //     heading{2, "Second Heading"},
-    //     par{"Second par."},
-    //     list{list_item{par{"First numbered list item, numbering starts at 7."}},
-    //         list_item{par{"Item two."}}}
-    //         .set_style(arabic_list_from7),
-    //     par{"Bullet points:"},
-    //     list{list_item{par{"First; and"}}, list_item{par{"Second."}}}.set_style(bullets),
-    //     par{"Alpha list:"},
-    //     list{list_item{par{"Item a"}}}.set_style(alpha),
-    //     list{list_item{list{list_item{par{"Sub items of alpha list are bullets"}}}}}.set_style(
-    //         bullets2),
-    //     list{list_item{par{"Item b"}}}.set_style(alpha),
-    //     par{text{"Here is a url to "},
-    //         hyperlink{"https://github.com/MichaelCoutlakis/docsmithcpp", "docsmith"},
-    //         text{" on "},
-    //         span{kids_tag{}, span{text{"GitHub"}}.set_style("T1")}.set_style("Source_20_Text"),
-    //         text{"."}}};
+    list_style arabic_from7("L1", {list_style_num(style{}, 1, list_enum::arabic, ")", 7)});
+    list_style bullets("L2", {list_style_bullet(style{}, 1, bullet_type::bullet())});
+    list_style alpha("L3", {list_style_num(style{}, 1, list_enum::lower_alpha, ")", 3)});
+    list_style bullets2("L4", {list_style_bullet(style{}, 1, bullet_type::bullet())});
 
-    // print_compare(expected, actual);
-    // EXPECT_EQ(expected, actual);
+    text_doc expected{//
+        heading{1, "Heading 1"},
+        par{"First paragraph"},
+        heading{2, "Second Heading"},
+        par{"Second paragraph."},
+        list{list_item{par{"First numbered list item, numbering starts at 7."}},
+            list_item{par{"Item two."}}}
+            .set_style(arabic_from7),
+        par{"Bullet points:"},
+        list{list_item{par{"First; and"}}, list_item{par{"Second."}}}.set_style(bullets),
+        par{"Alpha list:"},
+        list{list_item{par{"Item a"}}}.set_style(alpha),
+        list{list_item{list{list_item{par{"Sub items of alpha list are bullets"}}}}}.set_style(
+            bullets2),
+        list{list_item{par{"Item b"}}}.set_style(alpha),
+        par{text{"Here is a url to "},
+            hyperlink{"https://github.com/MichaelCoutlakis/docsmithcpp", "docsmith"},
+            text{" on "},
+            span{kids_tag{}, span{text{"GitHub"}}.set_style("T1")}.set_style("Source_20_Text"),
+            text{"."}}};
+
+    print_compare(expected, actual);
+    EXPECT_EQ(expected, actual);
 }
 
 TEST(ODT, ParseImage)
@@ -196,4 +207,6 @@ TEST(ODT, WriteLists)
     d.accept(w);
 
     // EXPECT_TRUE(do_user_verification("Open write_lists.odt and confirm the following:"));
+
+    open_file(f.filename());
 }
