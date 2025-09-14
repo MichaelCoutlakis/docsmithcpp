@@ -25,22 +25,26 @@
 
 namespace docsmith
 {
+
+/// Document element type tags. These are useful for search functionality to avoid dynamic casting
+/// (e.g., find all tables).
 enum class elem_t
 {
-    h,
-    p,
-    lst,
-    lit,
-    t,
-    txt=t,
-    s,
-    spn = s,
-    doc,
-    tbl,
-    cell,
-    img,
-    fr,
-    href
+    h,        // Heading
+    p,        // Paragraph
+    lst,      // List
+    lit,      // List item
+    t,        // Text
+    txt = t,  // Text
+    s,        // Span
+    spn = s,  // Span
+    doc,      // Document
+    tbl,      // Table
+    cell,     // Cell
+    img,      // Image
+    fr,       // Frame
+    href,     // Href
+    bookmark, // Bookmark
 };
 
 /// Base class for all document elements
@@ -52,6 +56,7 @@ public:
     virtual std::unique_ptr<element> clone() const = 0;
     virtual bool is_equal(const element &other) const
     {
+        //
         return false;
     }
 
@@ -99,7 +104,6 @@ public:
     }
 };
 
-
 template <typename Derived, elem_t TypeTag>
 struct elem_tagged : virtual element
 {
@@ -141,6 +145,8 @@ struct element_visitor
 
     virtual void visit(const class frame &) { }
     virtual void visit(const class image &) { }
+
+    virtual void visit(const class bookmark &) { }
 
     virtual void push() { }
     virtual void pop() { }

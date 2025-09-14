@@ -127,7 +127,8 @@ TEST(ODT, ParseImage)
     const text_doc actual = f.parse_text_doc();
     style im_style("fr1", graphics_props{});
     text_doc expected{par{
-        frame{image{"Pictures/100000000000002A0000002A13903900F3783A21.png"}}.set_style(im_style)}};
+        frame{image{"Pictures/100000000000002A0000002A13903900F3783A21.png"}}.set_style(im_style)}
+                          .set_style("Standard")};
 
     print_compare(expected, actual);
     EXPECT_EQ(expected, actual);
@@ -208,5 +209,26 @@ TEST(ODT, WriteLists)
 
     // EXPECT_TRUE(do_user_verification("Open write_lists.odt and confirm the following:"));
 
+    open_file(f.filename());
+}
+
+TEST(ODT, GenerateBookmark)
+{
+    text_doc d;
+    style style_page_break("PageBreak", paragraph_props(break_before{break_type::page}));
+
+    d.add(paragraph("Some text"));
+    bookmark b("Bookmark 1");
+    d.add(paragraph{"paragraph with bookmark", b});
+    d.add(paragraph{"Next paragraph with page break to ensure scrolling is necessary when bookmark "
+                    "link is followed"}
+              .set_style(style_page_break));
+
+    d.styles().add(style_page_break);
+
+    d.add(paragraph(hyperlink("#Bookmark 1", "Link back to the bookmark")));
+
+    odt_file f("odt/out/bookmark.odt");
+    f.save(d);
     open_file(f.filename());
 }

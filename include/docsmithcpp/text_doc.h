@@ -46,6 +46,23 @@ class elem_tagged_nodes_styled : public element_base<Derived>,
     using nodes<Derived>::nodes;
 };
 
+class bookmark : public element_base<bookmark>, public elem_tagged<bookmark, elem_t::bookmark>
+{
+public:
+    explicit bookmark(std::string name) :
+        m_name(name)
+    {
+    }
+    bool operator==(const bookmark &rhs) const { return m_name == rhs.m_name; }
+    std::string m_name;
+};
+
+// clang-format off
+template <> struct is_valid_child<heading, bookmark> : std::true_type {};
+template <> struct is_valid_child<paragraph, bookmark> : std::true_type {};
+template <> struct is_valid_child<span, bookmark> : std::true_type {};
+// clang-format on
+
 class span : public elem_tagged_nodes_styled<span, elem_t::spn>
 {
 public:
@@ -67,7 +84,7 @@ template <> struct is_valid_child<span, text> : std::true_type {};
 
 class hyperlink : public element_base<hyperlink>,
                   public nodes<hyperlink>,
-                  public elem_tagged<paragraph, elem_t::href>
+                  public elem_tagged<hyperlink, elem_t::href>
 {
 public:
     template <typename... Args>
@@ -180,7 +197,7 @@ template <> struct is_valid_child<heading, text> : std::true_type {};
 
 class text_doc : public element_base<text_doc>,
                  public nodes<text_doc>,
-                 public elem_tagged<paragraph, elem_t::doc>
+                 public elem_tagged<text_doc, elem_t::doc>
 {
 public:
     text_doc() = default;

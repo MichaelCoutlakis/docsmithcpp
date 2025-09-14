@@ -16,9 +16,9 @@
  * limitations under the License.
  *****************************************************************************/
 #include <filesystem>
+#include <fmt/format.h>
 #include <iostream>
 #include <sstream>
-#include <fmt/format.h>
 
 #include "docsmithcpp/iostream_writer.h"
 #include "docsmithcpp/odt/writer.h"
@@ -35,6 +35,13 @@ std::string get_media_type(const fs::path &p)
         return "image/png";
     return {};
 }
+
+std::string to_string(align_horiz a);
+std::string to_string(align_vert a);
+std::string to_string(font_style fs);
+std::string to_string(font_weight fw);
+std::string to_string(text_align ta);
+std::string to_string(break_type b);
 
 writer::writer(std::string filename)
 {
@@ -179,6 +186,12 @@ void writer::visit(const list_style_bullet &) { get_current().append_child(""); 
 
 void writer::visit(const frame &) { get_current().append_child("draw:frame"); }
 
+void writer::visit(const bookmark &b)
+{
+    auto n = get_current().append_child("text:bookmark");
+    n.append_attribute("text:name").set_value(b.m_name.c_str());
+}
+
 void writer::visit(const image &v)
 {
     auto n = get_current().append_child("draw:image");
@@ -223,6 +236,9 @@ void write_xml(pugi::xml_node &n, const style &s)
     if(s.m_text_props)
         write_xml(style_node, s.m_text_props.value());
 
+    if(s.m_paragraph_props)
+        write_xml(style_node, s.m_paragraph_props.value());
+
     // TODO: Other properties if present...
 }
 void write_xml(pugi::xml_node &n, const list_style &ls)
@@ -239,38 +255,38 @@ void write_xml(pugi::xml_node &n, const list_style &ls)
 void write_xml(pugi::xml_node &n, const list_style_bullet &lsb)
 {
     auto bullet_node = n.append_child("text:list-level-style-bullet");
-    //write_xml(bullet_node, lsb.m_style_name);
-    //  TODO: type parameter for write_xml with the style name:
+    // write_xml(bullet_node, lsb.m_style_name);
+    //   TODO: type parameter for write_xml with the style name:
     if(!lsb.m_style_name.is_empty())
-    n.append_attribute("text:style-name").set_value(lsb.m_style_name.get_name().c_str());
+        n.append_attribute("text:style-name").set_value(lsb.m_style_name.get_name().c_str());
     bullet_node.append_attribute("text:level") = lsb.m_level;
     bullet_node.append_attribute("text:bullet-char") = lsb.m_bullet_char.c_str();
     // TODO: serialize optional props
 
-    //auto llp = bullet_node.append_child("style:list-level-properties");
-    //llp.append_attribute("text:list-level-position-and-space-mode") = "label-alignment";
-    //auto llpa = llp.append_child("style:list-level-label-alignment");
-    //llpa.append_attribute("text:label-followed-by") = "listtab";
-    //llpa.append_attribute("text:list-tab-stop-position") = "1.27cm";
-    //llpa.append_attribute("fo:text-indent") = "-0.635cm";
-    //llpa.append_attribute("fo:margin-left") = "1.27cm";
+    // auto llp = bullet_node.append_child("style:list-level-properties");
+    // llp.append_attribute("text:list-level-position-and-space-mode") = "label-alignment";
+    // auto llpa = llp.append_child("style:list-level-label-alignment");
+    // llpa.append_attribute("text:label-followed-by") = "listtab";
+    // llpa.append_attribute("text:list-tab-stop-position") = "1.27cm";
+    // llpa.append_attribute("fo:text-indent") = "-0.635cm";
+    // llpa.append_attribute("fo:margin-left") = "1.27cm";
 }
 
 void write_xml(pugi::xml_node &n, const list_style_num &s)
 {
     auto num_node = n.append_child("text:list-level-style-number");
-   // write_xml(num_node, s.m_style_name);
+    // write_xml(num_node, s.m_style_name);
 
     // TODO: type parameter for write_xml with the style name:
     if(!s.m_style_name.is_empty())
-    n.append_attribute("text:style-name").set_value(s.m_style_name.get_name().c_str());
+        n.append_attribute("text:style-name").set_value(s.m_style_name.get_name().c_str());
 
-    //if(!s.m_style_name.is_empty())
-
+    // if(!s.m_style_name.is_empty())
 
     num_node.append_attribute("text:level") = s.m_level;
     num_node.append_attribute("loext:num-list-format") = fmt::format("%{}%.", s.m_level);
-    num_node.append_attribute("style:num-format") = fmt::format("{}", static_cast<char>(s.m_format));
+    num_node.append_attribute("style:num-format") =
+        fmt::format("{}", static_cast<char>(s.m_format));
     num_node.append_attribute("text:start-value") = s.m_start_from;
     num_node.append_attribute("style:num-suffix") = s.m_num_suffix.c_str();
     num_node.append_attribute("style:num-prefix") = s.m_num_prefix.c_str();
@@ -282,26 +298,98 @@ void write_xml(pugi::xml_node &n, const text_props &tp)
     auto text_props_node = n.append_child("style:text-properties");
 
     if(tp.m_font_size)
-        text_props_node.append_attribute("fo:font-size") = fmt::format("{}pt", tp.m_font_size->m_points);
-    
+        text_props_node.append_attribute("fo:font-size") =
+            fmt::format("{}pt", tp.m_font_size->m_points);
+
     if(tp.m_font_style)
-    {
-        const char *val = nullptr;
-        switch(*tp.m_font_style)
-        {
-        case docsmith::font_style::normal:
-            val = "normal";
-            break;
-        case docsmith::font_style::italic:
-            val = "italic";
-            break;
-        case docsmith::font_style::oblique:
-            val = "oblique";
-            break;
-        }
-        text_props_node.append_attribute("fo:font-style") = val;
-    }
+        text_props_node.append_attribute("fo:font-style") =
+            to_string(tp.m_font_style.value()).c_str();
+
     if(tp.m_font_name)
         text_props_node.append_attribute("style:font-name") = tp.m_font_name->get_name().c_str();
+}
+void write_xml(pugi::xml_node &n, const paragraph_props &props)
+{
+    auto para_props_node = n.append_child("style:paragraph-properties");
+
+    if(props.m_break_after)
+        para_props_node.append_attribute("fo:break-after") =
+            to_string(props.m_break_after->m_break_type).c_str();
+    if(props.m_break_before)
+        para_props_node.append_attribute("fo:break-before") =
+            to_string(props.m_break_before->m_break_type).c_str();
+}
+
+std::string to_string(align_horiz a)
+{
+    switch(a)
+    {
+    case align_horiz::left: return "left";
+    case align_horiz::centre: return "center";
+    case align_horiz::right: return "right";
+    case align_horiz::from_inside: return "from-inside";
+    case align_horiz::from_left: return "from-left";
+    case align_horiz::inside: return "inside";
+    case align_horiz::outside: return "outside";
+    default: return {};
+    }
+}
+std::string to_string(align_vert a)
+{
+    switch(a)
+    {
+    case align_vert::top: return "top";
+    case align_vert::middle: return "middle";
+    case align_vert::bottom: return "bottom";
+    case align_vert::from_top: return "from-top";
+    case align_vert::below: return "below";
+    default: return {};
+    }
+}
+
+std::string to_string(font_style fs)
+{
+    switch(fs)
+    {
+    case font_style::normal: return "normal";
+    case font_style::italic: return "italic";
+    case font_style::oblique: return "oblique";
+    default: return {};
+    }
+}
+std::string to_string(font_weight fw)
+{
+    switch(fw)
+    {
+    case font_weight::normal: return "normal";
+    case font_weight::bold: return "bold";
+    default: return {};
+    }
+}
+std::string to_string(text_align ta)
+{
+    switch(ta)
+    {
+    case text_align::start: return "start";
+    case text_align::end: return "end";
+    case text_align::left: return "left";
+    case text_align::right: return "right";
+    case text_align::centre: return "center";
+    case text_align::justify: return "justify";
+    default: return {};
+    }
+}
+
+std::string to_string(break_type b)
+{
+    switch(b)
+    {
+    case break_type::automatic: return "auto";
+    case break_type::column: return "column";
+    case break_type::page: return "page";
+    case break_type::even_page: return "even-page";
+    case break_type::odd_page: return "odd-page";
+    default: return {};
+    }
 }
 }

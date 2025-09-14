@@ -19,14 +19,16 @@
 
 namespace docsmith
 {
-class text;
-class span;
+class bookmark;
+class frame;
 class heading;
-class paragraph;
 class hyperlink;
-class text_doc;
+class image;
 class list;
 class list_item;
-class frame;
-class image;
+class paragraph;
+class span;
+class text;
+class text_doc;
+
 }

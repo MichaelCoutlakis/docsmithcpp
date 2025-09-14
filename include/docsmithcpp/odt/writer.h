@@ -34,8 +34,7 @@ void write_xml(pugi::xml_node &n, const list_style &ls);
 void write_xml(pugi::xml_node &n, const list_style_bullet &b);
 void write_xml(pugi::xml_node &n, const list_style_num &b);
 void write_xml(pugi::xml_node &n, const text_props &props);
-
-
+void write_xml(pugi::xml_node &n, const paragraph_props &props);
 
 class writer : private element_visitor
 {
@@ -59,6 +58,8 @@ private:
 
     void visit(const class frame &) override;
     void visit(const class image &) override;
+
+    void visit(const class bookmark &) override;
 
     void push() override;
     void pop() override;

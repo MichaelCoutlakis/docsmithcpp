@@ -36,3 +36,4 @@ AlwaysBreakTemplateDeclarations:            Yes
 # Allow short stuff on single lines:
 AllowShortBlocksOnASingleLine:               true
 AllowShortLambdasOnASingleLine:             All
+AllowShortCaseLabelsOnASingleLine:           true

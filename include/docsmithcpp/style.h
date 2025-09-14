@@ -24,18 +24,26 @@
 namespace docsmith
 {
 
+/// style:horizontal-pos
 enum class align_horiz
 {
     left,
     centre,
     right,
+    from_inside,
+    from_left,
+    inside,
+    outside
 };
 
+/// style:vertical-pos
 enum class align_vert
 {
     top,
-    centre,
+    middle,
     bottom,
+    from_top,
+    below
 };
 
 class list;
@@ -130,6 +138,54 @@ struct text_props
     std::optional<font_name> m_font_name;
 };
 
+/// fo:text-align
+enum class text_align
+{
+    start,
+    end,
+    left,
+    right,
+    centre,
+    justify
+};
+
+enum class break_type
+{
+    column,
+    page,
+    even_page,
+    odd_page,
+    automatic
+};
+
+// clang-format off
+struct break_before { break_type m_break_type; };
+struct break_after { break_type m_break_type; };
+// clang-format on
+
+class paragraph_props
+{
+public:
+    template <typename... Args>
+    explicit paragraph_props(Args &&...args)
+    {
+        (set(std::forward<Args>(args)), ...);
+    }
+
+    paragraph_props &set(const break_before &b)
+    {
+        m_break_before = b;
+        return *this;
+    }
+    paragraph_props &set(const break_after &b)
+    {
+        m_break_after = b;
+        return *this;
+    }
+    std::optional<break_before> m_break_before;
+    std::optional<break_after> m_break_after;
+};
+
 class graphics_props
 {
 public:
@@ -151,10 +207,6 @@ public:
     }
     std::optional<align_horiz> m_horiz_pos;
     std::optional<align_vert> m_vert_pos;
-};
-
-struct paragraph_props
-{
 };
 
 ///
