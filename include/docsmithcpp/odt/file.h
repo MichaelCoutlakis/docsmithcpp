@@ -33,7 +33,7 @@ public:
 
     const std::string &filename() const { return m_filename; }
 
-    private:
+private:
     std::string m_filename;
 };
 

@@ -33,6 +33,7 @@
 #include "docsmithcpp/nodes.h"
 #include "docsmithcpp/style.h"
 #include "docsmithcpp/text.h"
+#include "docsmithcpp/table.h"
 
 namespace docsmith
 {
@@ -57,11 +58,7 @@ public:
     std::string m_name;
 };
 
-// clang-format off
-template <> struct is_valid_child<heading, bookmark> : std::true_type {};
-template <> struct is_valid_child<paragraph, bookmark> : std::true_type {};
-template <> struct is_valid_child<span, bookmark> : std::true_type {};
-// clang-format on
+
 
 class span : public elem_tagged_nodes_styled<span, elem_t::spn>
 {
@@ -77,10 +74,7 @@ private:
     style_name m_style_name;
 };
 
-// clang-format off
-template <> struct is_valid_child<span, span> : std::true_type {};
-template <> struct is_valid_child<span, text> : std::true_type {};
-// clang-format on
+
 
 class hyperlink : public element_base<hyperlink>,
                   public nodes<hyperlink>,
@@ -104,11 +98,7 @@ private:
     std::string m_url;
 };
 
-// clang-format off
-template <> struct is_valid_child<hyperlink, span> : std::true_type {};
-template <> struct is_valid_child<hyperlink, text> : std::true_type {};
 
-// clang-format on
 
 class image : public element_base<image>, public elem_tagged<image, elem_t::img>
 {
@@ -141,10 +131,7 @@ public:
     }
 };
 
-// clang-format off
-template <> struct is_valid_child<frame, image> : std::true_type {};
 
-// clang-format on
 
 class paragraph : public elem_tagged_nodes_styled<paragraph, elem_t::p>
 {
@@ -159,12 +146,7 @@ public:
 private:
 };
 
-// clang-format off
-template <> struct is_valid_child<paragraph, span> : std::true_type {};
-template <> struct is_valid_child<paragraph, text> : std::true_type {};
-template <> struct is_valid_child<paragraph, hyperlink> : std::true_type {};
-template <> struct is_valid_child<paragraph, frame> : std::true_type {};
-// clang-format on
+
 
 class heading : public element_base<heading>,
                 public nodes<heading>,
@@ -189,11 +171,7 @@ private:
     int m_level{1};
 };
 
-// clang-format off
-template <> struct is_valid_child<heading, paragraph> : std::true_type {};
-template <> struct is_valid_child<heading, span> : std::true_type {};
-template <> struct is_valid_child<heading, text> : std::true_type {};
-// clang-format on
+
 
 class text_doc : public element_base<text_doc>,
                  public nodes<text_doc>,
@@ -223,11 +201,6 @@ private:
     list_style_registry m_list_styles;
 };
 
-// clang-format off
-template <> struct is_valid_child<text_doc, heading> : std::true_type {};
-template <> struct is_valid_child<text_doc, paragraph> : std::true_type {};
-template <> struct is_valid_child<text_doc, list> : std::true_type {};
-template <> struct is_valid_child<text_doc, frame> : std::true_type {};
-// clang-format on
+
 
 } // namespace docsmith

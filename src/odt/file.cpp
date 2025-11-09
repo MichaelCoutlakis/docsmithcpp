@@ -18,8 +18,8 @@
 #include <iostream>
 #include <map>
 #include <optional>
-#include <stack>
 #include <sstream>
+#include <stack>
 
 #include <fmt/format.h>
 #include <libzippp/libzippp.h>
@@ -83,6 +83,21 @@ image make_image(pugi::xml_node &node)
     return i;
 }
 
+table make_table(pugi::xml_node &node)
+{
+    table t;
+    return t;
+}
+
+table_cell make_table_cell(pugi::xml_node &node)
+{
+    table_cell c;
+    c.rowspan() = node.attribute("table:number-rows-spanned").as_ullong(1U);
+    c.colspan() = node.attribute("table:number-columns-spanned").as_ullong(1U);
+
+    return c;
+}
+
 template <typename T>
 std::function<std::unique_ptr<element>(pugi::xml_node &)> wrap_factory(
     std::function<T(pugi::xml_node &)> make_object)
@@ -99,6 +114,8 @@ block_factory factory = {
     {"text:list-item", wrap_factory<list_item>(make_list_item)},
     {"draw:frame", wrap_factory<frame>(make_frame)},
     {"draw:image", wrap_factory<image>(make_image)},
+    {"table:table", wrap_factory<table>(make_table)},
+    {"table:table-cell", wrap_factory<table_cell>(make_table_cell)},
 };
 }
 
@@ -132,40 +149,113 @@ private:
 
         if(auto it = m_factory.find(tag); it != m_factory.end())
         {
-            m_blocks.push(it->second(node));
-
-            for(auto child : node.children())
-            {
-                if(child.type() == pugi::node_pcdata)
-                {
-                    m_blocks.top()->add_child(std::make_unique<text>(std::string(child.value())));
-                }
-                else
-                {
-                    // Recursion:
-                    handle_node(child);
-                }
-            }
+            m_blocks.push(context{it->second(node)});
+            handle_child_nodes(node);
 
             // This level is now complete:
-            auto completed_element = std::move(m_blocks.top());
-            m_blocks.pop();
-            if(!m_blocks.empty())
+            complete_level();
+            // auto completed_ctx = std::move(ctx());
+            // m_blocks.pop();
+            // if(!m_blocks.empty())
+            //{
+            //     if(current()->is_type(elem_t::tbl))
+            //         add_to_table(std::move(completed_ctx.m_elem));
+            //     else
+            //         current()->add_child(std::move(completed_ctx.m_elem));
+            // }
+            // else
+            //     m_doc.add_child(std::move(completed_ctx.m_elem));
+        }
+        else if(handle_table_nodes(node))
+            std::cout << "table node handled\n";
+        else
+            std::cout << "Tag " << tag << " is not handled\n";
+    }
+
+    void handle_child_nodes(pugi::xml_node &node)
+    {
+        for(auto child : node.children())
+        {
+            if(child.type() == pugi::node_pcdata)
             {
-                m_blocks.top()->add_child(std::move(completed_element));
+                m_blocks.top().m_elem->add_child(
+                    std::make_unique<text>(std::string(child.value())));
             }
             else
             {
-                m_doc.add_child(std::move(completed_element));
+                // Recursion:
+                handle_node(child);
             }
         }
-        else
-        {
-            std::cout << "Tag " << tag << " is not handled\n";
-        }
     }
+
+    bool handle_table_nodes(pugi::xml_node &node)
+    {
+        if(!has_ctx() || !current()->is_type(elem_t::tbl))
+            return false;
+
+        // We are in a table, check for table elements like table:table-header-rows
+        auto tag = std::string(node.name());
+        auto t = current()->as<table>();
+
+        if(tag == "table:table-header-rows")
+            ctx().m_tbl_ctx.m_num_header_rows++;
+        else if(tag == "table:table-row")
+            // ctx().m_tbl_ctx.m_row_idx++;
+            t->add_row();
+        else
+            return false;
+
+        handle_child_nodes(node);
+        return true;
+        // else if(tag == "
+    }
+
+    void complete_level()
+    {
+        auto completed_ctx = std::move(ctx());
+        m_blocks.pop();
+        if(!m_blocks.empty())
+        {
+            // Handle table cells differently
+            if(current()->is_type(elem_t::tbl) && completed_ctx.m_elem->is_type(elem_t::cell))
+            {
+                auto t = current()->as<table>();
+                auto cell = dynamic_cast<table_cell *>(completed_ctx.m_elem.release());
+                if(!cell)
+                    throw std::runtime_error("parse table / cell logic broken");
+
+                t->add_cell(std::move(*cell));
+            }
+            else
+                current()->add_child(std::move(completed_ctx.m_elem));
+        }
+        else
+            m_doc.add_child(std::move(completed_ctx.m_elem));
+    }
+
+    struct table_context
+    {
+        size_t m_num_header_rows{};
+        size_t m_row_idx{};
+        // size_t m_col_idx{};
+    };
+
+    /// Additional parser context:
+    struct context
+    {
+        std::unique_ptr<element> m_elem;
+        table_context m_tbl_ctx{};
+    };
+
+    context &ctx() { return m_blocks.top(); }
+    bool has_ctx() { return !m_blocks.empty(); }
+
+    std::unique_ptr<element> &current() { return ctx().m_elem; }
+
     block_factory m_factory;
-    std::stack<std::unique_ptr<element>> m_blocks;
+    // std::stack<std::unique_ptr<element>> m_blocks;
+    std::stack<context> m_blocks;
     text_doc m_doc;
 };
 
@@ -196,8 +286,5 @@ text_doc odt_file::parse_text_doc()
     return p.get();
 }
 
-void odt_file::save(const text_doc &doc)
-{
-    odt::writer::write(doc, m_filename);
-}
+void odt_file::save(const text_doc &doc) { odt::writer::write(doc, m_filename); }
 }

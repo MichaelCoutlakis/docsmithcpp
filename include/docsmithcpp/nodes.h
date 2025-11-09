@@ -188,6 +188,12 @@ struct nodes : virtual element
         return chldrn;
     }
 
+    /// Check if the children are equal:
+    bool children_equal(const nodes<Derived> &other) const
+    {
+        return compare_equality(m_children, other.m_children);
+    }
+
     std::list<std::unique_ptr<element>> m_children;
 };
 

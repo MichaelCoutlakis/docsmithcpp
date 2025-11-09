@@ -59,6 +59,26 @@ void open_file(std::string filename)
     std::system(cmd.c_str());
 }
 
+/// Parse a text doc and strip the style names. Useful to compare parsing a document with a code
+/// generated document without worrying about comparing style names
+text_doc parse_strip_styles(std::string filename)
+{
+    auto f = odt_file(filename);
+    text_doc doc = f.parse_text_doc();
+
+    //// Remove paragraph style names:
+    // auto v = doc.find_all<styled_base>([](element *p) { return p->is_type(elem_t::p); });
+    // for(auto &e : v)
+    //     e->style(style_name{});
+
+    // Remove styles:
+    auto v = doc.get_elem_of<styled_base>();
+    for(auto &e : v)
+        e->style(style_name{});
+
+    return doc;
+}
+
 TEST(DOCSMITH, BasicUsage)
 {
     heading h{1, text{"This is the heading"}};
@@ -231,4 +251,26 @@ TEST(ODT, GenerateBookmark)
     odt_file f("odt/out/bookmark.odt");
     f.save(d);
     open_file(f.filename());
+}
+
+TEST(ODT, ParseTable)
+{
+    text_doc actual = parse_strip_styles("odt/basic_table.odt");
+
+    auto actual_table = *actual.get_elem_of<table>().front();
+
+    text_doc expected;
+    table t(2, 2);
+    t.row(0).assign(paragraph{"Col 0"}, paragraph{"Col 1"});
+    t.cell(1, 0).add(paragraph()); // LO empty table cell defaults to empty paragraph
+    t.cell(1, 1).add(paragraph("Some text value"));
+    expected.add(t);
+
+    print_compare(t, actual_table);
+    EXPECT_EQ(t, actual_table);
+
+     odt_file f("odt/out/table.odt");
+     f.save(expected);
+     open_file(f.filename());
+     //open_file("content.xml");
 }

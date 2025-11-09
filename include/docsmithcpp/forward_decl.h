@@ -17,6 +17,8 @@
  *****************************************************************************/
 #pragma once
 
+#include <type_traits>
+
 namespace docsmith
 {
 class bookmark;
@@ -24,11 +26,20 @@ class frame;
 class heading;
 class hyperlink;
 class image;
+
+class list_style;
+class list_style_bullet;
+class list_style_num;
+
 class list;
 class list_item;
 class paragraph;
 class span;
 class text;
 class text_doc;
+
+class table_cell;
+class table_row;
+class table;
 
 }

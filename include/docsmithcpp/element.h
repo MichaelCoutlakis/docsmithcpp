@@ -23,6 +23,9 @@
 #include <type_traits>
 #include <vector>
 
+#include "docsmithcpp/forward_decl.h"
+#include "docsmithcpp/valid_relations.h"
+
 namespace docsmith
 {
 
@@ -71,6 +74,16 @@ public:
     virtual elem_t type() const = 0;
     virtual bool is_type(elem_t query) const = 0;
 
+    template<typename T>
+    T *as()
+    {
+        T *p = dynamic_cast<T *>(this);
+        if(!p)
+            throw std::runtime_error("Could not convert this to T");
+        return p;
+    }
+    
+
     template <typename T>
     std::vector<T *> get_elem_of()
     {
@@ -113,13 +126,6 @@ struct elem_tagged : virtual element
 
 // clang-format off
 
-// Helper to define allowed relationships between elements:
-template <typename Parent, typename Child>
-struct is_valid_child : std::false_type {};
-
-template <typename Parent, typename Child>
-constexpr bool is_valid_child_v = is_valid_child<Parent, Child>::value;
-
 // Utility to help print the name during compilation when there are template compile errors
 template<typename T>
 struct RevealType;
@@ -147,6 +153,9 @@ struct element_visitor
     virtual void visit(const class image &) { }
 
     virtual void visit(const class bookmark &) { }
+
+    virtual void visit(const table_cell &) { }
+    virtual void visit(const table &) { }
 
     virtual void push() { }
     virtual void pop() { }

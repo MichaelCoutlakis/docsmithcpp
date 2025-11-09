@@ -61,6 +61,9 @@ private:
 
     void visit(const class bookmark &) override;
 
+     void visit(const table_cell &) override;
+     void visit(const table &) override;
+
     void push() override;
     void pop() override;
 

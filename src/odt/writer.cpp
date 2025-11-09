@@ -17,6 +17,7 @@
  *****************************************************************************/
 #include <filesystem>
 #include <fmt/format.h>
+#include <fstream>
 #include <iostream>
 #include <sstream>
 
@@ -120,6 +121,11 @@ void writer::write(const text_doc &doc, const std::string &filename)
     content_xml = content_stream.str();
     zip.addData("content.xml", content_xml.data(), content_xml.size());
 
+    // Also save in a file for easy debugging:
+    std::ofstream content_file("content.xml");
+    content_file << content_xml;
+    content_file.close();
+
     // Add the manifest:
 
     for(auto &picture : w.m_pictures)
@@ -208,6 +214,33 @@ void writer::visit(const image &v)
     n.append_attribute("xlink:show").set_value("embed");
     n.append_attribute("draw:mime-type").set_value(entry.m_type);
     n.append_attribute("xlink:actuate").set_value("onLoad");
+}
+
+void writer::visit(const table_cell &c)
+{
+    auto n = get_current().append_child("table:table-cell");
+    // Default to string value type, unless there's simple content?
+    n.append_attribute("office:value_type").set_value("string");
+}
+
+void writer::visit(const table &t)
+{
+    auto n = get_current().append_child("table:table");
+    auto table_column = n.append_child("table:table-column");
+    table_column.append_attribute("table:number-columns-repeated").set_value(t.num_cols());
+
+    push(); // Push the table node
+    for(size_t r{}; r != t.num_rows(); ++r)
+    {
+        auto xml_row = n.append_child("table:table-row");
+        for(size_t c{}; c != t.num_cols(); ++c)
+        {
+            push(); // Push the cell node to current
+            t.cell(r, c).accept(*this);
+            pop();
+        }
+    }
+    pop();
 }
 
 void writer::push() { m_node_stack.push(get_current().last_child()); }

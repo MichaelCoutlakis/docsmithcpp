@@ -65,6 +65,33 @@ public:
 
     void visit(const class image &i) override { print_line("Image: uri={}", i.get_uri()); }
 
+    void visit(const class bookmark &b) override { print_line("Bookmark: name={}", b.m_name); }
+
+    void visit(const table_cell &c) override
+    {
+        print_line("rowspan={}, colspan={}", c.rowspan(), c.colspan());
+        //c.accept(*this);
+    }
+    void visit(const table &t) override
+    {
+        print_line("Table: ({}x{})", t.num_rows(), t.num_cols());
+
+        for(size_t r = 0; r != t.num_rows(); ++r)
+        {
+            // auto row = t.row(r);
+            // row.at(
+            for(size_t c = 0; c != t.num_cols(); ++c)
+            {
+                auto &cell = t.cell(r, c);
+                print_line("Cell ({}, {})", r, c);
+                push();
+                //visit(t.cell(r, c));
+                t.cell(r, c).accept(*this);
+                pop();
+            }
+        }
+    }
+
     void push() override { m_indent += 2; }
 
     void pop() override { m_indent -= 2; }
