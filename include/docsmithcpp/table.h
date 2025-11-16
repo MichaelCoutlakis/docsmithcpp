@@ -35,6 +35,13 @@ public:
     // Re-use the nodes constructor:
     using nodes<table_cell>::nodes;
 
+    // Allow implicit conversion of child types, but don't replace the table_cell copy constructor:
+    template <typename Content, typename = enable_if_not_same_t<table_cell, Content>>
+    table_cell(Content &&content) :
+        nodes<table_cell>(content)
+    {
+    }
+
     bool operator==(const table_cell &rhs) const
     {
         return m_rowspan == rhs.m_rowspan && m_colspan == rhs.m_colspan && children_equal(rhs);
@@ -44,6 +51,25 @@ public:
 
     size_t &rowspan() { return m_rowspan; }
     size_t &colspan() { return m_colspan; }
+
+    table_cell &rowspan(size_t rowspan)
+    {
+        m_rowspan = rowspan;
+        return *this;
+    }
+
+    table_cell &colspan(size_t colspan)
+    {
+        m_colspan = colspan;
+        return *this;
+    }
+
+    table_cell &set_span(size_t rowspan, size_t colspan)
+    {
+        m_rowspan = rowspan;
+        m_colspan = colspan;
+        return *this;
+    }
 
 private:
     size_t m_rowspan{1};
@@ -89,6 +115,7 @@ class table : public element_base<table>,
 public:
     table() { }
     table(size_t rows, size_t cols);
+    static table from_cells(std::vector<std::vector<table_cell>> cells);
 
     // caption?
 
@@ -114,6 +141,8 @@ public:
 
     // table needs to implement children() as it doesn't store cells directly as nodes:
     std::list<element *> children() override;
+
+    bool is_cell_covered(size_t row, size_t col) const;
 
 private:
     std::vector<std::vector<table_cell>> m_cells;

@@ -21,10 +21,11 @@
 #include "docsmithcpp/element.h"
 #include "docsmithcpp/iostream_writer.h"
 #include "docsmithcpp/odt/file.h"
+#include "docsmithcpp/terse.h"
 #include "docsmithcpp/text_doc.h"
 
 using namespace docsmith;
-using par = paragraph;
+using namespace docsmith::terse;
 
 template <typename Elem1, typename Elem2>
 void print_compare(const element_base<Elem1> &expected, const element_base<Elem2> &actual)
@@ -269,8 +270,46 @@ TEST(ODT, ParseTable)
     print_compare(t, actual_table);
     EXPECT_EQ(t, actual_table);
 
-     odt_file f("odt/out/table.odt");
-     f.save(expected);
-     open_file(f.filename());
-     //open_file("content.xml");
+    odt_file f("odt/out/table.odt");
+    f.save(expected);
+    open_file(f.filename());
+    // open_file("content.xml");
+}
+
+TEST(ODT, IntermediateTable)
+{
+    text_doc actual = parse_strip_styles("odt/table-intermediate.odt");
+    auto ta = *actual.get_elem_of<table>().front();
+
+    text_doc expected_doc;
+
+    // OK
+    table tnest = table::from_cells({//
+        {par("c(0,0)"), par("c(0,1)")},
+        {par("c(1,0)"), par("c(1,1)")}});
+
+    table te = table::from_cells({
+        //
+        {par("Col 0"), par("Col 1"), par("Col 2")},                                // Header row
+        {tc(par("Merged Cells – row and col span")).set_span(2, 2), {}, par("a")}, //
+        {{}, {}, par("b")},
+        {tc(par("col span")).set_span(1, 2), {}, tc(par("row span")).set_span(2, 1)},
+        {tc(par("This cell contains a table and has no padding"), tnest), par("123"), {}} //
+    });
+
+    EXPECT_FALSE(te.is_cell_covered(2, 2));
+
+    EXPECT_TRUE(te.is_cell_covered(1, 1));
+    EXPECT_TRUE(te.is_cell_covered(2, 0));
+    EXPECT_TRUE(te.is_cell_covered(2, 1));
+
+    io_writer w(std::cout);
+    te.accept(w);
+
+    expected_doc.add(std::move(te));
+
+    odt_file f("odt/out/table-intermediate.odt");
+    f.save(expected_doc);
+    open_file(f.filename());
+    open_file("content.xml");
 }

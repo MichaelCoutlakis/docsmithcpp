@@ -51,6 +51,6 @@ public:
     std::size_t size() const noexcept { return m_data.size(); }
     bool empty() const noexcept { return m_data.empty(); }
 
-    private:
+private:
     std::unordered_map<key_type, mapped_type> m_data;
 };

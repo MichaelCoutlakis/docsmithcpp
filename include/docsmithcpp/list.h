@@ -106,11 +106,6 @@ public:
 constexpr std::string get_list_style_name(const list_style &ls) { return ls.m_name.get_name(); }
 using list_style_registry = named_registry<list_style, get_list_style_name>;
 
-// clang-format off
-template <> struct is_valid_child<list_style, list_style_bullet> : std::true_type {};
-template <> struct is_valid_child<list_style, list_style_num> : std::true_type {};
-// clang-format on
-
 class list_item : public element_base<list_item>,
                   public nodes<list_item>,
                   public elem_tagged<paragraph, elem_t::lit>
@@ -128,12 +123,6 @@ public:
     }
 };
 
-// clang-format off
-template <> struct is_valid_child<list_item, paragraph> : std::true_type {};
-template <> struct is_valid_child<list_item, heading> : std::true_type {};
-template <> struct is_valid_child<list_item, list> : std::true_type {};
-// clang-format on
-
 class list : public element_base<list>,
              public nodes<list>,
              public styled<list>,
@@ -148,8 +137,4 @@ public:
     }
 };
 
-// clang-format off
-template <> struct is_valid_child<list, list_item> : std::true_type {};
-
-// clang-format on
 }

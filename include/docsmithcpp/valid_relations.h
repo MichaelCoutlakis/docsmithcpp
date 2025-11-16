@@ -32,6 +32,10 @@ struct is_valid_child : std::false_type
 template <typename Parent, typename Child>
 constexpr bool is_valid_child_v = is_valid_child<Parent, Child>::value;
 
+template <typename ThisType, typename TestType>
+using enable_if_not_same_t =
+    std::enable_if_t<!std::is_same_v<std::decay_t<ThisType>, std::decay_t<TestType>>>;
+
 // clang-format off
 
 // bookmark parents

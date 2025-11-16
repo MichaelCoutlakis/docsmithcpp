@@ -221,6 +221,11 @@ void writer::visit(const table_cell &c)
     auto n = get_current().append_child("table:table-cell");
     // Default to string value type, unless there's simple content?
     n.append_attribute("office:value_type").set_value("string");
+
+    if(c.rowspan() != 1U)
+        n.append_attribute("table:number-rows-spanned").set_value(c.rowspan());
+    if(c.colspan() != 1U)
+        n.append_attribute("table:number-columns-spanned").set_value(c.colspan());
 }
 
 void writer::visit(const table &t)
@@ -236,7 +241,12 @@ void writer::visit(const table &t)
         for(size_t c{}; c != t.num_cols(); ++c)
         {
             push(); // Push the cell node to current
-            t.cell(r, c).accept(*this);
+            if(!t.is_cell_covered(r, c))
+                t.cell(r, c).accept(*this);
+            else
+            {
+                auto n = get_current().append_child("table:covered-table-cell");
+            }
             pop();
         }
     }
