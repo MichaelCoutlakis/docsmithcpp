@@ -28,7 +28,8 @@ namespace docsmith::odt
 /// An .odt file: the document model plus the rest of the ODF package
 /// (styles.xml, meta.xml, embedded images, ...). Parts the model doesn't
 /// represent are kept from load() and written back by save(), so load, edit,
-/// save doesn't lose them.
+/// save doesn't lose them. doc.meta is read from meta.xml and written back
+/// into it, keeping the properties the model doesn't hold.
 ///
 ///     auto f = odt::file::load("in.odt");
 ///     f.doc.add(paragraph("appended"));

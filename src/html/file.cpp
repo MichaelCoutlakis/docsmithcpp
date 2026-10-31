@@ -154,9 +154,18 @@ void plain_text(const std::vector<inline_node> &kids, std::string &out)
             k.v);
 }
 
-/// The page title: the first heading's text, if there is one.
+/// The page title: the document's title, else the title paragraph's or the
+/// first heading's text.
 std::string default_title(const text_doc &doc)
 {
+    if(!doc.meta.title.empty())
+        return doc.meta.title;
+    if(const paragraph *p = doc.find_title())
+    {
+        std::string t;
+        plain_text(p->children(), t);
+        return t;
+    }
     for(const auto &b : doc.body)
         if(const auto *h = std::get_if<heading>(&b.v))
         {
@@ -261,9 +270,24 @@ public:
 
     void page(const std::string &title, const std::string &extra_css)
     {
-        m_os << "<!DOCTYPE html>\n<html>\n<head>\n<meta charset=\"utf-8\">\n<title>";
+        const metadata &meta = m_doc.meta;
+        m_os << "<!DOCTYPE html>\n<html";
+        if(!meta.language.empty())
+        {
+            m_os << " lang=\"";
+            escape(m_os, meta.language, true);
+            m_os << '"';
+        }
+        m_os << ">\n<head>\n<meta charset=\"utf-8\">\n<title>";
         escape(m_os, title);
         m_os << "</title>\n";
+
+        std::string keywords;
+        for(const auto &k : meta.keywords)
+            keywords += (keywords.empty() ? "" : ", ") + k;
+        meta_tag("author", meta.author);
+        meta_tag("description", meta.description);
+        meta_tag("keywords", keywords);
 
         const std::string css = generated_css(m_doc) + extra_css;
         if(!css.empty())
@@ -276,6 +300,15 @@ public:
     }
 
 private:
+    void meta_tag(std::string_view name, std::string_view content)
+    {
+        if(content.empty())
+            return;
+        m_os << "<meta name=\"" << name << "\" content=\"";
+        escape(m_os, content, true);
+        m_os << "\">\n";
+    }
+
     void block(const block_node &b)
     {
         std::visit([this](const auto &n) { emit_block(n); }, b.v);

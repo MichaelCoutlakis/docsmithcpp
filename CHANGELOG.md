@@ -80,8 +80,9 @@ held in `std::variant`. This is a breaking change to almost every public API.
 - `docsmith.h`: a convenience header for the whole public API.
 - `DOCSMITHCPP_DEBUG_FILES` CMake option (ON in the `dev` preset). When set, saving an
   `.odt` also writes `<name>.content.xml` next to it.
-- Examples `create_document` (build a document, save it as `.odt` and `.html`),
-  `read_odt` (parse, print the tree, list the links) and `odt_to_html`.
+- Examples `create_document` (build a document, save it as `.odt` and `.html`, plus
+  a test report with a title and metadata), `read_odt` (parse, print the tree, list
+  the links) and `odt_to_html`.
 - **Document resources**: `text_doc::resources()` holds the bytes and media type of
   each image, by name (`resource`, `resource_registry`; the bytes are shared and
   read-only, so copying a document stays cheap). `add_image(name, data, media_type)`
@@ -95,6 +96,20 @@ held in `std::variant`. This is a breaking change to almost every public API.
   `resource_dir/Pictures/` unless already inside `resource_dir`. `to_string()` writes
   the same `src` values without writing files. Converting a parsed `.odt` to HTML now
   shows its images.
+- **Document metadata**: `text_doc::meta` (`metadata`, in `metadata.h`) holds the
+  title, author, language, subject, description, keywords, created and modified
+  dates, and custom properties. `odt::file` reads it from `meta.xml` and writes it
+  back in place, keeping the generator, statistics and unchanged values as they
+  were. HTML writes `<html lang>`, `<title>` and `author` / `description` /
+  `keywords` meta tags. `html::file::title` now defaults to `doc.meta.title`, then
+  the first heading.
+- **Title paragraph**: `builtin::title` names the Title paragraph style, which writers
+  know without a definition in `text_doc::styles()`. `text_doc::find_title()` returns
+  the first paragraph with it, and `set_title(text)` sets that paragraph's text or
+  adds one at the start of the body. The ODT writer defines the style as LibreOffice's
+  Title (centred, 28pt bold) unless the document or the loaded file already does.
+  HTML gives it `class="Title"` and no CSS, and uses its text for `<title>` when
+  `meta.title` is empty.
 - `named_registry::find` has a `const` overload, and registries compare with `==`.
 - `docsmith::docsmithcpp` alias target, so in-tree and installed builds use the same
   target name. The package now installs a version file.

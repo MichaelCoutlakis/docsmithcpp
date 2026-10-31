@@ -10,6 +10,7 @@ add_library(docsmithcpp
     "../include/docsmithcpp/table.h"
     "../include/docsmithcpp/iostream_writer.h"
     "../include/docsmithcpp/resource.h"
+    "../include/docsmithcpp/metadata.h"
     "../include/docsmithcpp/text_doc.h"
     "../include/docsmithcpp/odt/file.h"
     "../include/docsmithcpp/html/file.h"
@@ -17,6 +18,8 @@ add_library(docsmithcpp
     # Private: the archive and XML details stay out of the public headers.
     "odf/package.h"
     "odf/package.cpp"
+    "odf/meta.h"
+    "odf/meta.cpp"
     "odt/writer.h"
     "odt/writer.cpp"
     "odt/file.cpp"

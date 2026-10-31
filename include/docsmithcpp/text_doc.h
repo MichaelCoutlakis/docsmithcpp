@@ -24,6 +24,7 @@
 #include <vector>
 
 #include "docsmithcpp/list.h"
+#include "docsmithcpp/metadata.h"
 #include "docsmithcpp/nodes.h"
 #include "docsmithcpp/resource.h"
 #include "docsmithcpp/style.h"
@@ -71,11 +72,20 @@ public:
     /// and returns an image that refers to it.
     image add_image(std::string name, std::string data, std::string media_type);
 
+    /// The first paragraph with the builtin::title style, or nullptr.
+    paragraph *find_title();
+    const paragraph *find_title() const;
+
+    /// Sets the title paragraph's text, adding one at the start of body if
+    /// there is none. meta.title is separate and left as is.
+    text_doc &set_title(std::string text);
+
     /// Writes each resource an image in body refers to as dir / name. Pages or
     /// documents written to the same dir share these files, and a resource
     /// with the same name overwrites the other's.
     void write_resources(const std::filesystem::path &dir) const;
 
+    metadata meta;
     std::vector<block_node> body;
 
 private:

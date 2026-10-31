@@ -68,6 +68,13 @@ private:
     std::string m_name;
 };
 
+/// Style names writers know without a definition in text_doc::styles(). Each
+/// writer maps them to its format's own style of that name.
+namespace builtin
+{
+inline const style_name title{"Title"};
+}
+
 struct font_name
 {
 public:

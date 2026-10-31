@@ -293,3 +293,65 @@ TEST(ODT, IntermediateTable)
 
     odt::file(text_doc{te}).save("odt/out/table-intermediate.odt");
 }
+
+TEST(ODT, ReadMetadata)
+{
+    using namespace std::chrono;
+    const auto meta = odt::file::load("odt/basic.odt").doc.meta;
+    EXPECT_EQ(meta.created, sys_days{2025y / June / 16} + 13h + 50min + 22s);
+    EXPECT_EQ(meta.modified, sys_days{2025y / June / 16} + 21h + 23min + 36s);
+    EXPECT_TRUE(meta.title.empty());
+}
+
+TEST(ODT, MetadataRoundTrips)
+{
+    using namespace std::chrono;
+    text_doc doc{paragraph("Body")};
+    doc.meta = {.title = "The Title",
+        .author = "A. Writer",
+        .language = "en-ZA",
+        .subject = "Testing",
+        .description = "A <short> & sweet summary",
+        .keywords = {"one", "two"},
+        .created = sys_days{2025y / October / 31} + 9h,
+        .custom = {{"Reviewed", "yes"}}};
+    odt::file(doc).save("odt/out/metadata.odt");
+
+    EXPECT_EQ(odt::file::load("odt/out/metadata.odt").doc.meta, doc.meta);
+}
+
+TEST(ODT, EditMetadataKeepsTheRest)
+{
+    auto f = odt::file::load("odt/basic.odt");
+    f.doc.meta.title = "Retitled";
+    f.doc.meta.keywords = {"edited"};
+    f.save("odt/out/basic_retitled.odt");
+
+    const auto again = odt::file::load("odt/out/basic_retitled.odt");
+    EXPECT_EQ(again.doc.meta, f.doc.meta);
+
+    // meta.xml keeps what the model doesn't hold, and the original dates as written.
+    again.save("odt/out/basic_retitled2.odt");
+    EXPECT_EQ(odt::file::load("odt/out/basic_retitled2.odt").doc.meta, f.doc.meta);
+}
+
+TEST(ODT, NewDocumentWithoutMetadata)
+{
+    odt::file(text_doc{paragraph("Body")}).save("odt/out/no_metadata.odt");
+    EXPECT_EQ(odt::file::load("odt/out/no_metadata.odt").doc.meta, metadata{});
+}
+
+TEST(ODT, TitleStyleIsDefined)
+{
+    text_doc doc;
+    doc.set_title("The Title");
+    odt::file(doc).save("odt/out/title.odt");
+
+    const auto again = odt::file::load("odt/out/title.odt");
+    ASSERT_NE(again.doc.find_title(), nullptr);
+    EXPECT_EQ(*again.doc.find_title(), *doc.find_title());
+
+    // Saved once, defined once.
+    again.save("odt/out/title_resaved.odt");
+    EXPECT_EQ(odt::file::load("odt/out/title_resaved.odt").doc, again.doc);
+}

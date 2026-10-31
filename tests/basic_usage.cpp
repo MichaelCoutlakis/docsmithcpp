@@ -77,3 +77,28 @@ TEST(BASIC_USAGE, ChainedAdd)
     EXPECT_EQ(h.children().size(), 2U);
     EXPECT_EQ(nested.children().size(), 2U);
 }
+
+TEST(BASIC_USAGE, SetTitle)
+{
+    text_doc doc{paragraph("Body")};
+    EXPECT_EQ(doc.find_title(), nullptr);
+
+    doc.set_title("First");
+    ASSERT_NE(doc.find_title(), nullptr);
+    EXPECT_EQ(doc.body.front(), to_block(paragraph("First").set_style(builtin::title)));
+
+    // A second call changes the title in place rather than adding another.
+    doc.set_title("Second");
+    EXPECT_EQ(doc.body.size(), 2U);
+    EXPECT_EQ(*doc.find_title(), paragraph("Second").set_style(builtin::title));
+    EXPECT_TRUE(doc.meta.title.empty());
+}
+
+TEST(BASIC_USAGE, FindTitleAnywhere)
+{
+    // A title placed by hand, after a logo, is still the title.
+    text_doc doc{paragraph("Logo"), paragraph("Report").set_style(builtin::title)};
+    doc.set_title("Renamed");
+    EXPECT_EQ(doc.body.size(), 2U);
+    EXPECT_EQ(doc.body.back(), to_block(paragraph("Renamed").set_style(builtin::title)));
+}

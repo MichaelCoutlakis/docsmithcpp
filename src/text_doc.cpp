@@ -20,6 +20,7 @@
 #include <fstream>
 #include <set>
 #include <stdexcept>
+#include <utility>
 
 namespace docsmith
 {
@@ -30,6 +31,28 @@ image text_doc::add_image(std::string name, std::string data, std::string media_
     image img{name};
     m_resources.add(resource(std::move(name), std::move(data), std::move(media_type)));
     return img;
+}
+
+paragraph *text_doc::find_title()
+{
+    return const_cast<paragraph *>(std::as_const(*this).find_title());
+}
+
+const paragraph *text_doc::find_title() const
+{
+    const auto titles =
+        find_all<paragraph>(*this, [](const paragraph &p) { return p.style == builtin::title; });
+    return titles.empty() ? nullptr : titles.front();
+}
+
+text_doc &text_doc::set_title(std::string text)
+{
+    paragraph p = paragraph(std::move(text)).set_style(builtin::title);
+    if(paragraph *existing = find_title())
+        *existing = std::move(p);
+    else
+        body.insert(body.begin(), block_node{std::move(p)});
+    return *this;
 }
 
 void text_doc::write_resources(const fs::path &dir) const

@@ -26,6 +26,7 @@
 
 #include <pugixml.hpp>
 
+#include "odf/meta.h"
 #include "odf/package.h"
 #include "odt/writer.h"
 
@@ -226,6 +227,8 @@ file file::load(const std::filesystem::path &p)
     auto text_node =
         xml.child("office:document-content").child("office:body").child("office:text");
     f.doc.body = parse_block_children(text_node);
+    if(const auto *meta = f.m_impl->pkg.find("meta.xml"))
+        f.doc.meta = odf::read_meta(meta->data);
 
     // Move the images the tree refers to out of the package into the document,
     // so every format can reach them. Entries only unknown markup refers to
@@ -246,6 +249,7 @@ void file::save(const std::filesystem::path &p) const
     // Written before content.xml is replaced: the writer reads the original.
     std::string content = write_content(doc, out);
     out.set("content.xml", std::move(content), "text/xml");
+    odf::write_meta(doc.meta, out);
     out.write(p);
 
 #ifdef DOCSMITHCPP_DEBUG_FILES

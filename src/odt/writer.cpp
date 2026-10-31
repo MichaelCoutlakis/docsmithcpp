@@ -19,6 +19,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -89,6 +90,25 @@ constexpr const char *base_content = R"~~(<?xml version="1.0" encoding="UTF-8"?>
     <office:body/>
 </office:document-content>
 )~~";
+
+// LibreOffice's Title, its Heading parent's properties included.
+constexpr const char *title_style = R"~~(<style:style style:name="Title" style:family="paragraph" style:class="chapter">
+    <style:paragraph-properties fo:margin-top="0.423cm" fo:margin-bottom="0.212cm" fo:keep-with-next="always" fo:text-align="center"/>
+    <style:text-properties fo:font-family="'Liberation Sans'" style:font-family-generic="swiss" fo:font-size="28pt" fo:font-weight="bold" style:font-size-asian="28pt" style:font-weight-asian="bold" style:font-size-complex="28pt" style:font-weight-complex="bold"/>
+</style:style>)~~";
+
+/// Whether the package's styles.xml (a loaded file's) defines the style.
+bool defines_style(const odf::package &pkg, const style_name &name)
+{
+    const auto *styles = pkg.find("styles.xml");
+    pugi::xml_document xml;
+    if(!styles || !xml.load_buffer(styles->data.data(), styles->data.size()))
+        return false;
+    for(auto s : xml.child("office:document-styles").child("office:styles").children("style:style"))
+        if(name.get_name() == s.attribute("style:name").as_string())
+            return true;
+    return false;
+}
 } // namespace
 
 std::string write_content(const text_doc &doc, odf::package &pkg) { return writer(pkg).write(doc); }
@@ -177,6 +197,10 @@ void writer::write_doc(const text_doc &doc)
     // Add any text styles:
     for(auto &[name, s] : doc.styles())
         write_xml(m_styles, s);
+    // LibreOffice knows Title without a definition; other readers may not.
+    if(doc.find_title() && !doc.styles().find(builtin::title.get_name()) &&
+        !defines_style(m_pkg, builtin::title))
+        m_styles.append_buffer(title_style, std::strlen(title_style));
 
     for(const auto &b : doc.body)
         write_block(office_text, b);

@@ -12,8 +12,25 @@
 
 #include "docsmithcpp/docsmith.h"
 
+void write_example_test_report()
+{
+    using namespace docsmith;
+    text_doc doc;
+    doc.meta.title = "DocSmith++ Test Report (meta data title)";
+    doc.meta.author = "Example Test Application";
+    doc.set_title("DocSmith++ Test Report");
+    doc.add(paragraph("Hello world"));
+
+    if(auto t = doc.find_title(); t)
+        *t = paragraph("replaced title").set_style(builtin::title);
+
+    odt::file(doc).save("Example DocSmith++ Test Report.odt");
+}
+
 int main(int argc, char **argv)
 {
+    write_example_test_report();
+
     using namespace docsmith;
 
     const std::string name = argc > 1 ? argv[1] : "basic";
@@ -25,7 +42,8 @@ int main(int argc, char **argv)
     text_doc doc{
         heading(1, "Hello World!"),
         paragraph("This is the standard example, with a ",
-            hyperlink("https://github.com/MichaelCoutlakis/docsmithcpp", "link"), "."),
+            hyperlink("https://github.com/MichaelCoutlakis/docsmithcpp", "link"),
+            "."),
         paragraph("Styles carry over to both formats.").set_style(note),
         // A link to a bookmark in a later section: "#" + the bookmark's name.
         paragraph("The results are in ", hyperlink("#results", "the table"), " below."),
@@ -47,8 +65,9 @@ int main(int argc, char **argv)
     odt::file(doc).save(name + ".odt");
 
     html::file page(doc);
-    page.css = "body { font-family: sans-serif; max-width: 40em; margin: auto; }\n"
-               "table { border-collapse: collapse; } td { border: 1px solid #999; padding: 0.3em; }\n";
+    page.css =
+        "body { font-family: sans-serif; max-width: 40em; margin: auto; }\n"
+        "table { border-collapse: collapse; } td { border: 1px solid #999; padding: 0.3em; }\n";
     page.save(name + ".html");
 
     std::cout << "Wrote " << name << ".odt and " << name << ".html\n";

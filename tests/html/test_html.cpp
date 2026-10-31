@@ -246,3 +246,42 @@ TEST(HTML, ConvertsParsedOdt)
     EXPECT_TRUE(has(html, R"(<a href="https://github.com/MichaelCoutlakis/docsmithcpp">docsmith</a>)"));
     EXPECT_EQ(count(html, "<li"), 8U); // 2 + 2 + 1 + (1 with a nested 1) + 1
 }
+
+TEST(HTML, MetadataGoesInTheHead)
+{
+    text_doc doc{heading(1, "Heading")};
+    doc.meta = {.title = "Doc & Title",
+        .author = "A. Writer",
+        .language = "en-ZA",
+        .description = "Say \"hi\"",
+        .keywords = {"one", "two"}};
+    const auto html = html::file(doc).to_string();
+
+    EXPECT_TRUE(has(html, R"(<html lang="en-ZA">)"));
+    EXPECT_TRUE(has(html, "<title>Doc &amp; Title</title>")) << "the document title before the heading";
+    EXPECT_TRUE(has(html, R"(<meta name="author" content="A. Writer">)"));
+    EXPECT_TRUE(has(html, R"(<meta name="description" content="Say &quot;hi&quot;">)"));
+    EXPECT_TRUE(has(html, R"(<meta name="keywords" content="one, two">)"));
+
+    html::file page(doc);
+    page.title = "Override";
+    EXPECT_TRUE(has(page.to_string(), "<title>Override</title>"));
+}
+
+TEST(HTML, NoMetadataNoMetaTags)
+{
+    const auto html = html::file(text_doc{paragraph("x")}).to_string();
+    EXPECT_TRUE(has(html, "<html>\n"));
+    EXPECT_EQ(count(html, "<meta "), 1U); // charset only
+}
+
+TEST(HTML, TitleParagraph)
+{
+    text_doc doc{heading(1, "Heading")};
+    doc.set_title("Report");
+    const auto html = html::file(doc).to_string();
+
+    EXPECT_TRUE(has(html, "<title>Report</title>")) << "the title paragraph before the heading";
+    EXPECT_TRUE(has(html, R"(<p class="Title">Report</p>)"));
+    EXPECT_FALSE(has(html, ".Title {")) << "styling is left to html::file::css";
+}

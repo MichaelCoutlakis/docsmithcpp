@@ -56,7 +56,9 @@ public:
     void save(const std::filesystem::path &p) const;
 
     text_doc doc;
-    std::string title; //!< The <title>; defaults to the first heading's text
+    /// The <title>; defaults to doc.meta.title, then the text of
+    /// doc.find_title(), then of the first heading.
+    std::string title;
     std::string css;   //!< Extra CSS, embedded after the generated rules
     /// Folder for the page's images, relative to the page. Empty puts them
     /// next to it, e.g. an image from an .odt lands in Pictures/ there.
