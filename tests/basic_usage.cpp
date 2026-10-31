@@ -35,7 +35,7 @@ TEST(BASIC_USAGE, CreateDocument)
     io_writer w(std::cout);
     w(doc);
 
-    odt_file f("odt/basic_generated.odt");
+    odt_file f("odt/out/basic_generated.odt");
     f.save(doc);
 }
 

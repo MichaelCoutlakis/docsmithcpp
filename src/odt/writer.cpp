@@ -118,10 +118,10 @@ void writer::write(const text_doc &doc, const std::string &filename)
     std::string content_xml = content_stream.str();
     zip.addData("content.xml", content_xml.data(), content_xml.size());
 
-    // Also save in a file for easy debugging:
-    std::ofstream content_file("content.xml");
-    content_file << content_xml;
-    content_file.close();
+#ifdef DOCSMITHCPP_DEBUG_FILES
+    // Debug aid: dump content.xml next to the archive as <name>.content.xml.
+    std::ofstream(fs::path(filename).replace_extension(".content.xml")) << content_xml;
+#endif
 
     // Add the pictures and their manifest entries:
     for(auto &picture : w.m_pictures)

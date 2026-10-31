@@ -15,22 +15,16 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *****************************************************************************/
-#include <gtest/gtest.h>
 #include <filesystem>
 
-TEST(ODT_TEST, LoadSimpleODT_Doc)
-{
-}
+#include <gtest/gtest.h>
 
-TEST(DOCX_TEST, LoadSimpleDOCX_DOC)
-{
-}
-
-int main(int argc, char** argv)
+int main(int argc, char **argv)
 {
     ::testing::InitGoogleTest(&argc, argv);
 
-    auto cwd = std::filesystem::current_path();
+    // Fixtures are referenced relative to the tests directory (e.g. odt/basic.odt).
+    std::filesystem::current_path(DOCSMITHCPP_TEST_DIR);
 
     return RUN_ALL_TESTS();
 }

@@ -1,13 +1,5 @@
-
-if(DOCSMITHCPP_BUILD_MINIMAL_USAGE)
-
-    add_executable(docsmithcpp
-        "odt/basic_main.cpp"
-    )
-
-else()
-
 add_library(docsmithcpp
+    "../include/docsmithcpp/docsmith.h"
     "../include/docsmithcpp/box.h"
     "../include/docsmithcpp/nodes_fwd.h"
     "../include/docsmithcpp/inline_nodes.h"
@@ -25,17 +17,21 @@ add_library(docsmithcpp
     "odt/file.cpp"
     "odt/writer.cpp"
     "table.cpp")
-endif()
+
+# Same name in-tree as the installed target, so consumers can switch between
+# add_subdirectory and find_package without changing target names.
+add_library(docsmith::docsmithcpp ALIAS docsmithcpp)
 
 target_include_directories(docsmithcpp PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../include>
-    $<INSTALL_INTERFACE:include>
-)
+    $<INSTALL_INTERFACE:include>)
 
 target_compile_features(docsmithcpp PUBLIC cxx_std_20)
 target_link_libraries(docsmithcpp PUBLIC pugixml::pugixml libzippp::libzippp PRIVATE fmt::fmt)
 
+if(DOCSMITHCPP_DEBUG_FILES)
+    target_compile_definitions(docsmithcpp PRIVATE DOCSMITHCPP_DEBUG_FILES)
+endif()
 
-# Install headers and target
 install(TARGETS docsmithcpp EXPORT DocSmithCppTargets)
 install(DIRECTORY ../include/ DESTINATION include)

@@ -35,7 +35,13 @@ held in `std::variant`. This is a breaking change to almost every public API.
 - **C++20 is required.** `target_compile_features` is now `cxx_std_20` (it was
   `cxx_std_17`, which never matched the code).
 - Build: CMake presets restructured into `dev` / `ci` / `release`, with an msys2
-  clang64 user preset using the `x64-mingw-static` vcpkg triplet.
+  clang64 user preset using the `x64-mingw-static` vcpkg triplet. The presets now set
+  the project's real options. They used to set `BUILD_TESTING` / `BUILD_EXAMPLES`,
+  which the project never read, so `dev` built neither tests nor examples.
+- `DOCSMITHCPP_BUILD_TESTS` and `DOCSMITHCPP_BUILD_EXAMPLES` default to ON only when
+  DocSmith++ is the top-level project.
+- The test executable changes into `tests/` at startup, so it can be run from any
+  directory. Generated test files go to `tests/odt/out/`.
 
 ### Added
 - `unknown` pass-through node. The parser stores verbatim XML for elements it does not
@@ -48,15 +54,30 @@ held in `std::variant`. This is a breaking change to almost every public API.
 - The ODT writer emits `text:outline-level` on headings and `xlink:type` on hyperlinks.
   Empty style names are no longer written.
 - Tests: `ValueSemantics`, `ChainedAdd`, `UnknownPassThrough`.
+- `docsmith.h`: a convenience header for the whole public API.
+- `DOCSMITHCPP_DEBUG_FILES` CMake option (ON in the `dev` preset). When set, saving an
+  `.odt` also writes `<name>.content.xml` next to it.
+- Examples `create_basic_odt` (build a document and save it) and `read_odt` (parse,
+  print the tree, list the links).
+- `docsmith::docsmithcpp` alias target, so in-tree and installed builds use the same
+  target name. The package now installs a version file.
 
 ### Removed
 - `element.h` (`element`, `element_base`, `elem_tagged`, `elem_t`, `element_visitor`),
   `valid_relations.h`, `parser.h`, `text.h`, `forward_decl.h`, `src/nodes.cpp`,
   `src/list.cpp`.
 - `kids` / `kids_tag`, `styled_base`, and the short-lived free builder functions.
+- The `DOCSMITHCPP_BUILD_MINIMAL_USAGE` option, which replaced the library with a demo
+  executable and was ON by default. `src/odt/basic_main.cpp` became an example.
+- The empty placeholder tests in `test_main.cpp`, and the `architecture/` sketches.
 
 ### Fixed
 - The parser now reads heading outline levels and style names.
+- `odt/file.h` was missing `#pragma once`.
+- The installed `DocSmithCppConfig.cmake` now finds its dependencies (pugixml,
+  libzippp, fmt), so `find_package(DocSmithCpp)` works from another project.
+- `gtest_discover_tests` is used with `include(GoogleTest)`. The duplicate catch-all
+  `add_test` is gone.
 
 ### Known limitations
 - No HTML output yet.
@@ -66,8 +87,7 @@ held in `std::variant`. This is a breaking change to almost every public API.
   parsed document's style registries are empty. Style *names* on nodes are kept.
 - `set_style(style)` keeps only the name. The definition must also be added to
   `text_doc::styles()`.
-- The ODT writer always uses `style:family="paragraph"` and writes a debug
-  `content.xml` to the working directory.
+- The ODT writer always uses `style:family="paragraph"`.
 
 ## Pre-release history (untagged)
 

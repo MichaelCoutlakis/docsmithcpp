@@ -41,30 +41,48 @@ This project uses [CMake](https://cmake.org/) for building and configuring.
 - C++20 compiler (MSVC ≥ 2019 16.10, GCC ≥ 11, Clang ≥ 14). Builds against
   libstdc++, libc++ and the MSVC STL.
 - CMake ≥ 3.20
-- Dependencies:
-  - [libzip](https://libzip.org/)
-  - [libzippp](https://github.com/ctabin/libzippp)
+- Dependencies (e.g. via [vcpkg](https://vcpkg.io/)):
   - [pugixml](https://pugixml.org/)
-  - [gtest](https://github.com/google/googletest)
+  - [libzippp](https://github.com/ctabin/libzippp) (and [libzip](https://libzip.org/))
+  - [fmt](https://fmt.dev/)
+  - [gtest](https://github.com/google/googletest) (tests only)
 
-### Build Example
+### Build
+
+The repository ships `dev`, `ci` and `release` configure presets. They contain
+no toolchain, so put your compiler and vcpkg toolchain file in a
+`CMakeUserPresets.json` base preset named `user-base`.
 
 ```bash
-cd DocSmithCpp
-mkdir build && cd build
-cmake ..
-make
+cmake --preset dev
+cmake --build --preset dev-debug
+ctest --preset dev
 ```
+
+Without presets:
+
+```bash
+cmake -S . -B build -DCMAKE_TOOLCHAIN_FILE=<vcpkg>/scripts/buildsystems/vcpkg.cmake
+cmake --build build
+ctest --test-dir build
+```
+
+| Option                       | Default            | Effect                                                     |
+| ---------------------------- | ------------------ | ---------------------------------------------------------- |
+| `DOCSMITHCPP_BUILD_TESTS`    | ON when top-level  | Build the GoogleTest suite                                 |
+| `DOCSMITHCPP_BUILD_EXAMPLES` | ON when top-level  | Build `examples/`                                          |
+| `DOCSMITHCPP_DEBUG_FILES`    | OFF (ON in `dev`)  | Also write `<name>.content.xml` next to each saved `.odt`  |
 
 ### 🧪 Testing
 
-DocSmithCpp includes unit and integration tests for document parsing, writing,
-and transformation. Tests rely on a collection of small .docx and .odt files
-under the tests directory.
+The tests are unit and integration tests for parsing, writing and transforming
+documents. They use small `.odt` fixtures in `tests/odt/`. Files the tests
+generate go to `tests/odt/out/`.
 
-To run tests:
+### Examples
 
-cmake -DBUILD_TESTING=ON .. make ctest
+- `example_create_basic_odt [out.odt]`: build a document in code and save it.
+- `example_read_odt <in.odt>`: parse a file, print its tree and list its links.
 
 📚 Example Usage
 

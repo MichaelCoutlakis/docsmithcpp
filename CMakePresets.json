@@ -14,8 +14,9 @@
             "hidden": true,
             "inherits": "base",
             "cacheVariables": {
-                "BUILD_TESTING": "ON",
-                "BUILD_EXAMPLES": "ON",
+                "DOCSMITHCPP_BUILD_TESTS": "ON",
+                "DOCSMITHCPP_BUILD_EXAMPLES": "ON",
+                "DOCSMITHCPP_DEBUG_FILES": "ON",
                 "CMAKE_BUILD_TYPE": "Debug"
             }
         },
@@ -24,8 +25,8 @@
             "hidden": true,
             "inherits": "base",
             "cacheVariables": {
-                "BUILD_TESTING": "ON",
-                "BUILD_EXAMPLES": "OFF"
+                "DOCSMITHCPP_BUILD_TESTS": "ON",
+                "DOCSMITHCPP_BUILD_EXAMPLES": "OFF"
             }
         },
         {
@@ -33,8 +34,8 @@
             "hidden": true,
             "inherits": "base",
             "cacheVariables": {
-                "BUILD_TESTING": "OFF",
-                "BUILD_EXAMPLES": "OFF"
+                "DOCSMITHCPP_BUILD_TESTS": "OFF",
+                "DOCSMITHCPP_BUILD_EXAMPLES": "OFF"
             }
         }
     ]
