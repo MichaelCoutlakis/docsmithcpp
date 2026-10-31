@@ -102,6 +102,23 @@ ODT) works. Move `[Unreleased]` in `CHANGELOG.md` to `[0.1.0]` and tag it.
 - If allocation ever shows up in profiles, `box` is the natural place to add an
   arena or pool.
 
+## Debugger display
+VS Code with clang (lldb/gdb) doesn't show a document's body usefully. Easy
+inspection should be one of the payoffs of value semantics.
+
+- Likely cause: `box<T>` stores `void *m_ptr`, so the debugger has no type to
+  dereference. Storing `T *m_ptr` should work with an incomplete `T` (a pointer
+  member and the `static_cast`s through `void *` don't need `T` complete). That
+  alone may make spans, list items and table cells expandable. Check on
+  libc++, libstdc++ and MSVC.
+- Then hide the plumbing (`box`, `variant` `.v`, the `has_children` vector) with
+  visualisers checked into the repo:
+  - `.natvis` for the VS debugger and for VS Code's `cppvsdbg` / `cppdbg`
+    (`"visualizerFile"` in `launch.json`).
+  - An lldb Python formatter for CodeLLDB (it doesn't read natvis), and possibly
+    gdb pretty printers.
+- Document the debugger setup in CONTRIBUTING.md.
+
 ## Docs and project
 - Write a short spec of the generic document model in `DESIGN.md`: which nodes
   exist and which may contain which, independent of any one format. It would
