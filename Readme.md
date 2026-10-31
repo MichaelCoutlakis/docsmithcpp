@@ -13,22 +13,25 @@ asdf
 
 ### 🚧 Roadmap
 
-| Status | Feature                               |
-| ------ | ------------------------------------- |
-| :x:    | Basic .docx read support              |
-| :x:    | Basic .odt read support               |
-| :x:    | Manipulate the abstract document tree |
-| :x:    | Basic .odt output                     |
-| :x:    | Basic .docx output                    |
-| :x:    | HTML output                           |
+| Status             | Feature                               |
+| ------------------ | ------------------------------------- |
+| :x:                | Basic .docx read support              |
+| :white_check_mark: | Basic .odt read support               |
+| :white_check_mark: | Manipulate the abstract document tree |
+| :white_check_mark: | Basic .odt output                     |
+| :x:                | Basic .docx output                    |
+| :white_check_mark: | HTML output                           |
 
 ## Features
 
-- 📝 Read and write `.odt` (OpenDocument Text) files
+- 📝 Read and write `.odt` (OpenDocument Text) files. Load, edit and save keeps
+  the parts of the file the model doesn't represent (styles, metadata, images).
+- 🌐 Write HTML5 pages: styles become CSS classes, list styles pick `<ol>`/`<ul>`
 - 🔍 Query support: search paragraphs, headings, styles, etc.
 - ⚙️ Built with modern C++ idioms (the document tree is plain value types in
   `std::variant`, with `std::visit`-based traversal)
-- 🔌 Flexible design: future extensions (e.g., HTML/PDF) planned
+- 🔌 Format-agnostic document model: more formats (e.g. `.docx`, Markdown, PDF)
+  planned
 
 ---
 
@@ -81,8 +84,10 @@ generate go to `tests/odt/out/`.
 
 ### Examples
 
-- `example_create_basic_odt [out.odt]`: build a document in code and save it.
+- `example_create_document [name]`: build a document in code and save it as
+  `<name>.odt` and `<name>.html`.
 - `example_read_odt <in.odt>`: parse a file, print its tree and list its links.
+- `example_odt_to_html <in.odt> [out.html]`: convert through the document model.
 
 📚 Example Usage
 
@@ -104,6 +109,7 @@ int main() {
         paragraph().set_style("Quote").add("built incrementally"),
     };
     odt::file(hello).save("hello_world.odt");
+    html::file(hello).save("hello_world.html");
 
     // Load, query and edit. Saving keeps the parts of the package the model
     // doesn't represent (styles.xml, meta.xml, embedded images, ...).

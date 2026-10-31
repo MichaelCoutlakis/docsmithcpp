@@ -20,6 +20,7 @@
 // Convenience header for the whole public API. Include individual headers
 // instead if compile time matters.
 
+#include "docsmithcpp/html/file.h"       // HTML output
 #include "docsmithcpp/iostream_writer.h" // io_writer: debug tree printer
 #include "docsmithcpp/odt/file.h"        // ODT read / write
 #include "docsmithcpp/text_doc.h"        // document model, traversal and search

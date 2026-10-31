@@ -42,6 +42,11 @@ public:
         auto it = m_data.find(name);
         return it != m_data.end() ? &it->second : nullptr;
     }
+    const mapped_type *find(const key_type &name) const
+    {
+        auto it = m_data.find(name);
+        return it != m_data.end() ? &it->second : nullptr;
+    }
 
     iterator begin() noexcept { return m_data.begin(); }
     iterator end() noexcept { return m_data.end(); }

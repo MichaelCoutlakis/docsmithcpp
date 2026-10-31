@@ -64,12 +64,22 @@ held in `std::variant`. This is a breaking change to almost every public API.
 - The ODT writer emits `text:outline-level` on headings and `xlink:type` on hyperlinks.
   Empty style names are no longer written.
 - Tests: `ValueSemantics`, `ChainedAdd`, `UnknownPassThrough`, `ResaveLoadedFile`,
-  `ResaveLoadedImage`, `EditLoadedFile`, `MissingImageThrows`.
+  `ResaveLoadedImage`, `EditLoadedFile`, `MissingImageThrows`, and an HTML suite
+  (escaping, no self-closing tags, CSS, lists, tables, bookmarks, image paths, ODT
+  conversion).
+- **HTML output**: `docsmith::html::file` writes an HTML5 page (`save(path)` or
+  `to_string()`). Style names become CSS classes, and definitions in `doc.styles()`
+  become embedded rules (font size, style and family; page and column breaks). Extra
+  CSS goes in `css`. A list becomes `<ol>` (with `type` and `start`) or `<ul>`,
+  according to its list style at each nesting level. Covered table cells are left out
+  and spans become `rowspan` / `colspan`. Bookmarks become ids that `#` links
+  resolve to. Image paths are made relative to the page.
 - `docsmith.h`: a convenience header for the whole public API.
 - `DOCSMITHCPP_DEBUG_FILES` CMake option (ON in the `dev` preset). When set, saving an
   `.odt` also writes `<name>.content.xml` next to it.
-- Examples `create_basic_odt` (build a document and save it) and `read_odt` (parse,
-  print the tree, list the links).
+- Examples `create_document` (build a document, save it as `.odt` and `.html`),
+  `read_odt` (parse, print the tree, list the links) and `odt_to_html`.
+- `named_registry::find` has a `const` overload.
 - `docsmith::docsmithcpp` alias target, so in-tree and installed builds use the same
   target name. The package now installs a version file.
 
@@ -95,7 +105,11 @@ held in `std::variant`. This is a breaking change to almost every public API.
 - The writer used the `loext:` namespace without declaring it.
 
 ### Known limitations
-- No HTML output yet.
+- HTML from a *parsed* `.odt` is plainer than the original. Style definitions aren't
+  loaded (see below), so its classes have no CSS and numbered lists come out as
+  bullets. Images embedded in the `.odt` aren't extracted, so they don't show.
+- HTML leaves out `unknown` nodes, which hold another format's markup. List number
+  prefixes and suffixes, and parent styles, aren't reflected in the CSS.
 - `unknown` round-trips only block- and inline-level content. Unrecognized children
   inside tables and lists, and unknown attributes on known elements, are dropped.
 - Parsing does not load style definitions into the model, so a parsed document's style

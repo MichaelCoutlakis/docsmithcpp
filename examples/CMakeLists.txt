@@ -3,5 +3,6 @@ function(docsmith_example name)
     target_link_libraries(example_${name} PRIVATE docsmith::docsmithcpp)
 endfunction()
 
-docsmith_example(create_basic_odt)
+docsmith_example(create_document)
 docsmith_example(read_odt)
+docsmith_example(odt_to_html)

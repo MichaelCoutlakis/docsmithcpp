@@ -1,7 +1,11 @@
 include(GoogleTest)
 
-add_executable(docsmithcpp_tests test_main.cpp "odt/test_odt.cpp" "basic_usage.cpp")
-target_link_libraries(docsmithcpp_tests PRIVATE docsmithcpp GTest::gtest fmt::fmt)
+add_executable(docsmithcpp_tests
+    test_main.cpp
+    basic_usage.cpp
+    odt/test_odt.cpp
+    html/test_html.cpp)
+target_link_libraries(docsmithcpp_tests PRIVATE docsmithcpp GTest::gtest)
 
 # Fixture paths in the tests are relative to this directory; main() changes into
 # it so the executable can be run from anywhere, not just via ctest.
