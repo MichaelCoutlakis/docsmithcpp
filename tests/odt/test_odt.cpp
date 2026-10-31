@@ -36,29 +36,6 @@ void print_compare(const text_doc &expected, const text_doc &actual)
     w(actual);
 }
 
-bool do_user_verification(std::string request)
-{
-    std::cout << request << "\n";
-    std::cout << "Enter (pass|fail):";
-
-    for(;;)
-    {
-        std::string result;
-        std::cin >> result;
-        if(result == "pass")
-            return true;
-        if(result == "fail")
-            return false;
-        std::cout << "Unexpected response: " << result << ". Try again\n";
-    }
-}
-
-void open_file(std::string filename)
-{
-    std::string cmd = R"("start "" ")" + filename + R"(")";
-    std::system(cmd.c_str());
-}
-
 /// Drop top-level pass-through nodes (e.g. text:sequence-decls that LibreOffice
 /// emits at the start of office:text) so structural comparisons ignore them.
 void drop_unknown(text_doc &doc)
@@ -66,12 +43,11 @@ void drop_unknown(text_doc &doc)
     std::erase_if(doc.body, [](const block_node &b) { return std::holds_alternative<unknown>(b.v); });
 }
 
-/// Parse a text doc and strip all style names. Useful to compare a parsed
+/// Load a document and strip all style names. Useful to compare a parsed
 /// document with a code-generated one without minding style names.
-text_doc parse_strip_styles(std::string filename)
+text_doc load_strip_styles(const std::string &filename)
 {
-    odt_file f(filename);
-    text_doc doc = f.parse_text_doc();
+    text_doc doc = odt::file::load(filename).doc;
     strip_styles(doc);
     drop_unknown(doc);
     return doc;
@@ -90,16 +66,14 @@ TEST(DOCSMITH, BasicUsage)
 
 TEST(DOCSMITH, UnknownPassThrough)
 {
-    // An unrecognized inline node survives a write -> parse -> write round trip.
+    // An unrecognized inline node survives a write -> parse round trip.
     unknown raw{R"(<text:custom-thing foo="bar">hi</text:custom-thing>)"};
 
     text_doc doc;
     doc.add(paragraph().add(raw));
+    odt::file(doc).save("odt/out/unknown_roundtrip.odt");
 
-    odt_file f("odt/out/unknown_roundtrip.odt");
-    f.save(doc);
-
-    text_doc reparsed = f.parse_text_doc();
+    text_doc reparsed = odt::file::load("odt/out/unknown_roundtrip.odt").doc;
     auto unknowns = collect<unknown>(reparsed);
     ASSERT_FALSE(unknowns.empty());
     EXPECT_NE(unknowns.front()->xml.find("text:custom-thing"), std::string::npos);
@@ -107,8 +81,7 @@ TEST(DOCSMITH, UnknownPassThrough)
 
 TEST(ODT, ParseBasicFile)
 {
-    auto f = odt_file("odt/basic.odt");
-    text_doc actual = f.parse_text_doc();
+    text_doc actual = odt::file::load("odt/basic.odt").doc;
     strip_styles(actual);
     drop_unknown(actual);
 
@@ -120,9 +93,9 @@ TEST(ODT, ParseBasicFile)
 
 TEST(ODT, ParseModerateFile)
 {
-    text_doc actual = parse_strip_styles("odt/moderate.odt");
+    text_doc actual = load_strip_styles("odt/moderate.odt");
 
-    // Styles are stripped from both sides, so compare content/structure only.
+    // Styles are stripped, so compare content and structure only.
     text_doc expected{//
         heading(1, "Heading 1"),
         paragraph("First paragraph"),
@@ -146,8 +119,7 @@ TEST(ODT, ParseModerateFile)
 
 TEST(ODT, ParseImage)
 {
-    auto f = odt_file("odt/image.odt");
-    text_doc actual = f.parse_text_doc();
+    text_doc actual = odt::file::load("odt/image.odt").doc;
     strip_styles(actual);
     drop_unknown(actual);
 
@@ -160,13 +132,55 @@ TEST(ODT, ParseImage)
 
 TEST(ODT, ParseParagraphStyle)
 {
-    auto f = odt_file("odt/paragraph_with_style.odt");
-    text_doc actual = f.parse_text_doc();
+    text_doc actual = odt::file::load("odt/paragraph_with_style.odt").doc;
     drop_unknown(actual);
     const text_doc expected{paragraph("Paragraph with style.").set_style("Text_20_body")};
 
     print_compare(expected, actual);
     EXPECT_EQ(expected, actual);
+}
+
+TEST(ODT, ResaveLoadedFile)
+{
+    // load -> save -> load gives back the same document, including style names.
+    for(const char *name : {"basic", "moderate", "paragraph_with_style", "table-intermediate"})
+    {
+        const auto first = odt::file::load(std::string("odt/") + name + ".odt");
+        const std::string resaved = std::string("odt/out/") + name + "_resaved.odt";
+        first.save(resaved);
+        EXPECT_EQ(first.doc, odt::file::load(resaved).doc) << name;
+    }
+}
+
+TEST(ODT, ResaveLoadedImage)
+{
+    // The image lives in the loaded package (Pictures/...), not on disk, so
+    // saving must take it from the package.
+    const auto first = odt::file::load("odt/image.odt");
+    ASSERT_NO_THROW(first.save("odt/out/image_resaved.odt"));
+
+    const auto again = odt::file::load("odt/out/image_resaved.odt");
+    EXPECT_EQ(first.doc, again.doc);
+
+    // ...and the saved file can itself be saved again.
+    EXPECT_NO_THROW(again.save("odt/out/image_resaved2.odt"));
+}
+
+TEST(ODT, EditLoadedFile)
+{
+    auto f = odt::file::load("odt/basic.odt");
+    f.doc.add(paragraph("Appended by the test."));
+    f.save("odt/out/basic_edited.odt");
+
+    const auto edited = odt::file::load("odt/out/basic_edited.odt");
+    ASSERT_EQ(edited.doc.body.size(), f.doc.body.size());
+    EXPECT_EQ(edited.doc.body.back(), to_block(paragraph("Appended by the test.")));
+}
+
+TEST(ODT, MissingImageThrows)
+{
+    text_doc doc{paragraph(frame(image{"no/such/image.png"}))};
+    EXPECT_THROW(odt::file(doc).save("odt/out/missing_image.odt"), std::runtime_error);
 }
 
 TEST(ODT, WriteLists)
@@ -192,13 +206,10 @@ TEST(ODT, WriteLists)
     d.list_styles().add(bullets);
     d.list_styles().add(alpha);
 
-    odt_file f("odt/out/write_lists.odt");
-    f.save(d);
+    odt::file(d).save("odt/out/write_lists.odt");
 
     io_writer w(std::cout);
     w(d);
-
-    // open_file(f.filename());
 }
 
 TEST(ODT, GenerateBookmark)
@@ -216,14 +227,12 @@ TEST(ODT, GenerateBookmark)
 
     d.add(paragraph(hyperlink("#Bookmark 1", "Link back to the bookmark")));
 
-    odt_file f("odt/out/bookmark.odt");
-    f.save(d);
-    // open_file(f.filename());
+    odt::file(d).save("odt/out/bookmark.odt");
 }
 
 TEST(ODT, ParseTable)
 {
-    text_doc actual = parse_strip_styles("odt/basic_table.odt");
+    text_doc actual = load_strip_styles("odt/basic_table.odt");
     auto tables = collect<table>(actual);
     ASSERT_FALSE(tables.empty());
     table actual_table = *tables.front();
@@ -236,19 +245,11 @@ TEST(ODT, ParseTable)
     print_compare(text_doc{t}, text_doc{actual_table});
     EXPECT_EQ(t, actual_table);
 
-    text_doc expected{t};
-    odt_file f("odt/out/table.odt");
-    f.save(expected);
-    // open_file(f.filename());
+    odt::file(text_doc{t}).save("odt/out/table.odt");
 }
 
 TEST(ODT, IntermediateTable)
 {
-    text_doc actual = parse_strip_styles("odt/table-intermediate.odt");
-    auto tables = collect<table>(actual);
-    ASSERT_FALSE(tables.empty());
-    table ta = *tables.front();
-
     table tnest = table::from_cells({//
         {table_cell(paragraph("c(0,0)")), table_cell(paragraph("c(0,1)"))},
         {table_cell(paragraph("c(1,0)")), table_cell(paragraph("c(1,1)"))}});
@@ -274,8 +275,5 @@ TEST(ODT, IntermediateTable)
     io_writer w(std::cout);
     w(text_doc{te});
 
-    text_doc expected_doc{te};
-    odt_file f("odt/out/table-intermediate.odt");
-    f.save(expected_doc);
-    // open_file(f.filename());
+    odt::file(text_doc{te}).save("odt/out/table-intermediate.odt");
 }

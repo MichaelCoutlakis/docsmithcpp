@@ -17,6 +17,8 @@
  *****************************************************************************/
 #pragma once
 
+#include <concepts>
+#include <stdexcept>
 #include <utility>
 
 namespace docsmith
@@ -96,6 +98,8 @@ public:
             return true;
         if(!m_ptr || !other.m_ptr)
             return false;
+        if(!m_vtable->equal)
+            throw std::logic_error("box: the held type has no operator==");
         return m_vtable->equal(m_ptr, other.m_ptr);
     }
 
@@ -123,16 +127,25 @@ private:
         std::swap(m_vtable, other.m_vtable);
     }
 
-    // Instantiated only here, where T is necessarily complete.
+    // Instantiated only here, where T is necessarily complete. Comparison is
+    // captured only if T has an operator== (a pimpl, for example, may not).
     static const vtable *make_vtable()
     {
         static const vtable vt{
             [](const void *p) -> void * { return new T(*static_cast<const T *>(p)); },
             [](void *p) noexcept { delete static_cast<T *>(p); },
-            [](const void *a, const void *b)
-            { return *static_cast<const T *>(a) == *static_cast<const T *>(b); },
+            equal_fn(),
         };
         return &vt;
+    }
+
+    static constexpr bool (*equal_fn())(const void *, const void *)
+    {
+        if constexpr(std::equality_comparable<T>)
+            return [](const void *a, const void *b)
+            { return *static_cast<const T *>(a) == *static_cast<const T *>(b); };
+        else
+            return nullptr;
     }
 
     void *m_ptr;

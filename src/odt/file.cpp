@@ -15,16 +15,19 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *****************************************************************************/
+#include "docsmithcpp/odt/file.h"
+
+#include <fstream>
 #include <optional>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
-#include <libzippp/libzippp.h>
 #include <pugixml.hpp>
 
-#include "docsmithcpp/odt/file.h"
-#include "docsmithcpp/odt/writer.h"
+#include "odf/package.h"
+#include "odt/writer.h"
 
 namespace docsmith
 {
@@ -187,38 +190,62 @@ std::vector<block_node> parse_block_children(const pugi::xml_node &node)
     return out;
 }
 
-} // namespace
-} // namespace odt
+constexpr const char *odt_mimetype = "application/vnd.oasis.opendocument.text";
 
-odt_file::odt_file(const std::string &filename) :
-    m_filename(filename)
+} // namespace
+
+struct file::impl
+{
+    odf::package pkg; //!< Everything in the archive; empty for a new document
+};
+
+file::file() :
+    m_impl(impl{odf::package(odt_mimetype)})
 {
 }
 
-text_doc odt_file::parse_text_doc()
+file::file(text_doc d) :
+    doc(std::move(d)), m_impl(impl{odf::package(odt_mimetype)})
 {
-    libzippp::ZipArchive zip(m_filename);
-    if(!zip.open(libzippp::ZipArchive::ReadOnly))
-        throw std::runtime_error("Could not open archive");
+}
 
-    auto content = zip.getEntry("content.xml");
-    if(content.isNull())
-        throw std::runtime_error("Could not open content.xml");
+file file::load(const std::filesystem::path &p)
+{
+    file f;
+    f.m_impl->pkg = odf::package::read(p);
 
-    auto content_xml = content.readAsText();
+    // Text documents and their relatives (.ott templates) share this prefix.
+    if(!f.m_impl->pkg.mimetype().starts_with(odt_mimetype))
+        throw std::runtime_error("Not an OpenDocument text file: " + p.string());
 
+    const auto *content = f.m_impl->pkg.find("content.xml");
     pugi::xml_document xml;
-    if(!xml.load_string(content_xml.c_str()))
-        throw std::runtime_error("Failed to parse the content.xml");
+    if(!content || !xml.load_buffer(content->data.data(), content->data.size()))
+        throw std::runtime_error("Could not read content.xml from " + p.string());
 
     auto text_node =
         xml.child("office:document-content").child("office:body").child("office:text");
-
-    text_doc doc;
-    doc.body = odt::parse_block_children(text_node);
-    return doc;
+    f.doc.body = parse_block_children(text_node);
+    return f;
 }
 
-void odt_file::save(const text_doc &doc) { odt::writer::write(doc, m_filename); }
+void file::save(const std::filesystem::path &p) const
+{
+    // Work on a copy so saving leaves this file unchanged and can be repeated.
+    odf::package out = m_impl->pkg;
+    out.set_mimetype(odt_mimetype);
 
+    // Written before content.xml is replaced: the writer reads the original.
+    std::string content = write_content(doc, out);
+    out.set("content.xml", std::move(content), "text/xml");
+    out.write(p);
+
+#ifdef DOCSMITHCPP_DEBUG_FILES
+    // Debug aid: content.xml next to the archive, as <name>.content.xml.
+    std::ofstream(std::filesystem::path(p).replace_extension(".content.xml"), std::ios::binary)
+        << out.find("content.xml")->data;
+#endif
+}
+
+} // namespace odt
 } // namespace docsmith

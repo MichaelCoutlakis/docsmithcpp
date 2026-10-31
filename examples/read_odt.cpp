@@ -22,7 +22,7 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    text_doc doc = odt_file(argv[1]).parse_text_doc();
+    text_doc doc = odt::file::load(argv[1]).doc;
 
     io_writer print(std::cout);
     print(doc);

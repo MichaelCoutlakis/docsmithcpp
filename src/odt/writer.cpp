@@ -15,27 +15,25 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *****************************************************************************/
+#include "odt/writer.h"
+
+#include <algorithm>
+#include <cctype>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <sstream>
+#include <stdexcept>
+#include <string_view>
 #include <variant>
 
 #include <fmt/format.h>
 
-#include "docsmithcpp/odt/writer.h"
-#include "docsmithcpp/text_doc.h"
+#include "odf/package.h"
 
 namespace docsmith::odt
 {
-namespace lzpp = libzippp;
 namespace fs = std::filesystem;
-
-std::string get_media_type(const fs::path &p)
-{
-    if(p.extension() == ".png")
-        return "image/png";
-    return {};
-}
 
 std::string to_string(align_horiz a);
 std::string to_string(align_vert a);
@@ -44,10 +42,35 @@ std::string to_string(font_weight fw);
 std::string to_string(text_align ta);
 std::string to_string(break_type b);
 
-writer::writer()
+namespace
 {
-    std::string odt_base_content{R"~~(
-<?xml version="1.0" encoding="UTF-8"?>
+std::string media_type_of(const fs::path &p)
+{
+    std::string ext = p.extension().string();
+    std::transform(ext.begin(), ext.end(), ext.begin(),
+        [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    if(ext == ".png")
+        return "image/png";
+    if(ext == ".jpg" || ext == ".jpeg")
+        return "image/jpeg";
+    if(ext == ".gif")
+        return "image/gif";
+    if(ext == ".svg")
+        return "image/svg+xml";
+    if(ext == ".bmp")
+        return "image/bmp";
+    return {};
+}
+
+std::string read_file(const fs::path &p)
+{
+    std::ifstream in(p, std::ios::binary);
+    if(!in)
+        throw std::runtime_error("Could not read file: " + p.string());
+    return {std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()};
+}
+
+constexpr const char *base_content = R"~~(<?xml version="1.0" encoding="UTF-8"?>
 <office:document-content
     xmlns:draw="urn:oasis:names:tc:opendocument:xmlns:drawing:1.0"
     xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
@@ -58,86 +81,83 @@ writer::writer()
     xmlns:fo="urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0"
     xmlns:dc="http://purl.org/dc/elements/1.1/"
     xmlns:xlink="http://www.w3.org/1999/xlink"
+    xmlns:loext="urn:org:documentfoundation:names:experimental:office:xmlns:loext:1.0"
     office:version="1.2">
-    <office:styles>
-    </office:styles>
-    <office:automatic-styles>
-    </office:automatic-styles>
-    <office:body>
-    </office:body>
+    <office:font-face-decls/>
+    <office:styles/>
+    <office:automatic-styles/>
+    <office:body/>
 </office:document-content>
-)~~"};
+)~~";
+} // namespace
 
-    m_content.load_string(odt_base_content.c_str());
+std::string write_content(const text_doc &doc, odf::package &pkg) { return writer(pkg).write(doc); }
 
-    auto find_node = [this](std::string name)
-    {
-        return m_content.find_node([name](const pugi::xml_node &node) { //
-            return std::string(node.name()) == name;
-        });
-    };
-
-    m_body = find_node("office:body");
-    m_automatic_styles = find_node("office:automatic-styles");
-    m_styles = find_node("office:styles");
-
-    std::string manifest_xml{R"(
-<?xml version="1.0" encoding="UTF-8"?>
-<manifest:manifest xmlns:manifest="urn:oasis:names:tc:opendocument:xmlns:manifest:1.0" manifest:version="1.2">
-  <manifest:file-entry manifest:media-type="application/vnd.oasis.opendocument.text" manifest:full-path="/"/>
-  <manifest:file-entry manifest:media-type="text/xml" manifest:full-path="content.xml"/>
-</manifest:manifest>)"};
-
-    m_manifest.load_string(manifest_xml.c_str());
-    m_manifest_files_node = m_manifest.root().child("manifest:manifest");
+writer::writer(odf::package &pkg) :
+    m_pkg(pkg)
+{
+    m_content.load_string(base_content);
+    auto root = m_content.child("office:document-content");
+    root.attribute("office:version").set_value(m_pkg.version().c_str());
+    m_font_faces = root.child("office:font-face-decls");
+    m_styles = root.child("office:styles");
+    m_automatic_styles = root.child("office:automatic-styles");
+    m_body = root.child("office:body");
+    carry_over();
 }
 
-void writer::write(const text_doc &doc, const std::string &filename)
+std::string writer::write(const text_doc &doc)
 {
-    writer w;
+    write_doc(doc);
+    std::ostringstream ss;
+    m_content.save(ss, "  ");
+    return ss.str();
+}
 
-    fs::path parent_path = fs::path(filename).parent_path();
-    if(!parent_path.empty() && !fs::exists(parent_path))
-        fs::create_directories(parent_path);
+// A loaded document's content.xml declares things the model doesn't hold: the
+// namespaces its markup uses, its fonts, and its automatic styles (P1, T1, ...).
+// Carry them over so the style names on parsed nodes, and any unknown nodes,
+// still resolve after saving.
+void writer::carry_over()
+{
+    const auto *original = m_pkg.find("content.xml");
+    pugi::xml_document xml;
+    if(!original || !xml.load_buffer(original->data.data(), original->data.size()))
+        return;
 
-    w.write_doc(doc);
+    auto src = xml.child("office:document-content");
+    auto dst = m_content.child("office:document-content");
+    for(auto a : src.attributes())
+        if(std::string_view(a.name()).starts_with("xmlns:") && !dst.attribute(a.name()))
+            dst.append_attribute(a.name()) = a.value();
 
-    lzpp::ZipArchive zip(filename);
-    if(!zip.open(lzpp::ZipArchive::New))
-        throw std::runtime_error("Unable to create odt zip archive for writing");
+    for(auto c : src.child("office:font-face-decls").children())
+        m_font_faces.append_copy(c);
+    for(auto c : src.child("office:automatic-styles").children())
+        m_automatic_styles.append_copy(c);
+}
 
-    // Add the mimetype, must be uncompressed and first:
-    zip.setCompressionMethod(lzpp::CompressionMethod::STORE);
-    std::string mimetype{"application/vnd.oasis.opendocument.text"};
-    if(!zip.addData("mimetype", mimetype.data(), mimetype.length()))
-        throw std::runtime_error("Could not create mimetype");
+// Archive path for an image. An entry the package already holds (e.g. from a
+// loaded file) is referenced in place; a file on disk is copied in under
+// Pictures/, renamed if a different image already has that name.
+std::string writer::resolve_image(const std::string &uri)
+{
+    if(m_pkg.contains(uri))
+        return uri;
+    if(!fs::is_regular_file(uri))
+        throw std::runtime_error("Image not found in the package or on disk: " + uri);
 
-    // Add content.xml:
-    std::ostringstream content_stream;
-    w.m_content.print(content_stream, "  ");
-    std::string content_xml = content_stream.str();
-    zip.addData("content.xml", content_xml.data(), content_xml.size());
+    std::string data = read_file(uri);
+    const fs::path name = fs::path(uri).filename();
+    std::string href = ("Pictures" / name).generic_string();
+    for(int i = 2; m_pkg.contains(href) && m_pkg.find(href)->data != data; ++i)
+        href = (fs::path("Pictures") /
+            (name.stem().string() + "_" + std::to_string(i) + name.extension().string()))
+                   .generic_string();
 
-#ifdef DOCSMITHCPP_DEBUG_FILES
-    // Debug aid: dump content.xml next to the archive as <name>.content.xml.
-    std::ofstream(fs::path(filename).replace_extension(".content.xml")) << content_xml;
-#endif
-
-    // Add the pictures and their manifest entries:
-    for(auto &picture : w.m_pictures)
-    {
-        if(!zip.addFile(picture.m_dest, picture.m_source))
-            throw std::runtime_error("Could not add file to archive");
-        auto manifest_entry = w.m_manifest_files_node.append_child("manifest:file-entry");
-        manifest_entry.append_attribute("manifest:full-path").set_value(picture.m_dest);
-        manifest_entry.append_attribute("manifest:media-type").set_value(picture.m_type);
-    }
-    std::ostringstream manifest_stream;
-    w.m_manifest.print(manifest_stream);
-    std::string manifest_xml = manifest_stream.str();
-    zip.addData("META-INF/manifest.xml", manifest_xml.data(), manifest_xml.size());
-
-    zip.close();
+    if(!m_pkg.contains(href))
+        m_pkg.set(href, std::move(data), media_type_of(uri));
+    return href;
 }
 
 void writer::write_doc(const text_doc &doc)
@@ -217,18 +237,13 @@ void writer::emit(pugi::xml_node parent, const frame &f)
 
 void writer::emit(pugi::xml_node parent, const image &v)
 {
+    const std::string href = resolve_image(v.uri);
+
     auto n = parent.append_child("draw:image");
-
-    archive_item entry{};
-    entry.m_dest = ("Pictures" / fs::path(v.uri).filename()).generic_string();
-    entry.m_source = v.uri;
-    entry.m_type = get_media_type(v.uri);
-    m_pictures.insert(entry);
-
-    n.append_attribute("xlink:href").set_value(entry.m_dest.c_str());
+    n.append_attribute("xlink:href").set_value(href.c_str());
     n.append_attribute("xlink:type").set_value("simple");
     n.append_attribute("xlink:show").set_value("embed");
-    n.append_attribute("draw:mime-type").set_value(entry.m_type.c_str());
+    n.append_attribute("draw:mime-type").set_value(m_pkg.find(href)->media_type.c_str());
     n.append_attribute("xlink:actuate").set_value("onLoad");
 }
 
@@ -286,6 +301,8 @@ void writer::emit(pugi::xml_node parent, const table &t)
 void writer::emit(pugi::xml_node parent, const table_cell &c)
 {
     auto n = parent.append_child("table:table-cell");
+    if(!c.style.is_empty())
+        n.append_attribute("table:style-name").set_value(c.style.get_name().c_str());
     n.append_attribute("office:value-type").set_value("string");
 
     if(c.rowspan != 1)

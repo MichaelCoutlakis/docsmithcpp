@@ -31,7 +31,7 @@ int main(int argc, char **argv)
         }),
     };
 
-    odt_file(out).save(doc);
+    odt::file(doc).save(out);
     std::cout << "Wrote " << out << "\n";
     return 0;
 }

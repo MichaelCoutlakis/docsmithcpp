@@ -107,7 +107,7 @@ public:
     }
     void operator()(const table_cell &c)
     {
-        line("Cell: rowspan={}, colspan={}", c.rowspan, c.colspan);
+        line("Cell: rowspan={}, colspan={}, style={}", c.rowspan, c.colspan, c.style.get_name());
         ++m_indent;
         for(const auto &b : c.children())
             (*this)(b);

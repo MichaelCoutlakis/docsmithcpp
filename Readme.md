@@ -87,8 +87,7 @@ generate go to `tests/odt/out/`.
 📚 Example Usage
 
 ```c++
-#include <docsmithcpp/odt/file.h>
-#include <docsmithcpp/text_doc.h>
+#include <docsmithcpp/docsmith.h>
 #include <iostream>
 
 using namespace docsmith;
@@ -104,10 +103,12 @@ int main() {
                   hyperlink("https://example.com", "link"), "."),
         paragraph().set_style("Quote").add("built incrementally"),
     };
-    odt_file("hello_world.odt").save(hello);
+    odt::file(hello).save("hello_world.odt");
 
-    // Parse, query, and edit.
-    text_doc doc = odt_file("example.odt").parse_text_doc();
+    // Load, query and edit. Saving keeps the parts of the package the model
+    // doesn't represent (styles.xml, meta.xml, embedded images, ...).
+    auto f = odt::file::load("example.odt");
+    text_doc &doc = f.doc;
 
     // Find nodes by type (optionally with a predicate) -- no dynamic_cast.
     for (const hyperlink* a : collect<hyperlink>(doc))
@@ -122,6 +123,9 @@ int main() {
             [](const heading& h) { std::cout << "heading L" << h.level << "\n"; },
             [](const auto&)      { /* other block types */ },
         }, b.v);
+
+    doc.add(paragraph("Appended from C++."));
+    f.save("example_edited.odt");
 }
 ```
 

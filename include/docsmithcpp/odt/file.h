@@ -16,26 +16,42 @@
  * limitations under the License.
  *****************************************************************************/
 #pragma once
-#include <string>
 
+#include <filesystem>
+
+#include "docsmithcpp/box.h"
 #include "docsmithcpp/text_doc.h"
 
-namespace docsmith
+namespace docsmith::odt
 {
 
-class odt_file
+/// An .odt file: the document model plus the rest of the ODF package
+/// (styles.xml, meta.xml, embedded images, ...). Parts the model doesn't
+/// represent are kept from load() and written back by save(), so load, edit,
+/// save doesn't lose them.
+///
+///     auto f = odt::file::load("in.odt");
+///     f.doc.add(paragraph("appended"));
+///     f.save("out.odt");
+///
+///     odt::file(text_doc{heading(1, "New")}).save("new.odt");
+class file
 {
 public:
-    explicit odt_file(const std::string &filename);
+    file();
+    explicit file(text_doc doc);
 
-    text_doc parse_text_doc();
+    static file load(const std::filesystem::path &p);
 
-    void save(const text_doc &doc);
+    /// Images whose uri names an entry in the package are written from it;
+    /// other image uris are read from disk and embedded under Pictures/.
+    void save(const std::filesystem::path &p) const;
 
-    const std::string &filename() const { return m_filename; }
+    text_doc doc;
 
 private:
-    std::string m_filename;
+    struct impl;
+    box<impl> m_impl; // pimpl: copyable, and hides the archive / XML libraries
 };
 
-}
+} // namespace docsmith::odt

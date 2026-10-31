@@ -11,23 +11,33 @@ add_library(docsmithcpp
     "../include/docsmithcpp/iostream_writer.h"
     "../include/docsmithcpp/text_doc.h"
     "../include/docsmithcpp/odt/file.h"
-    "../include/docsmithcpp/odt/writer.h"
+
+    # Private: the archive and XML details stay out of the public headers.
+    "odf/package.h"
+    "odf/package.cpp"
+    "odt/writer.h"
+    "odt/writer.cpp"
+    "odt/file.cpp"
 
     "text_doc.cpp"
-    "odt/file.cpp"
-    "odt/writer.cpp"
     "table.cpp")
 
 # Same name in-tree as the installed target, so consumers can switch between
 # add_subdirectory and find_package without changing target names.
 add_library(docsmith::docsmithcpp ALIAS docsmithcpp)
 
-target_include_directories(docsmithcpp PUBLIC
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../include>
-    $<INSTALL_INTERFACE:include>)
+target_include_directories(docsmithcpp
+    PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../include>
+        $<INSTALL_INTERFACE:include>
+    PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR})
 
 target_compile_features(docsmithcpp PUBLIC cxx_std_20)
-target_link_libraries(docsmithcpp PUBLIC pugixml::pugixml libzippp::libzippp PRIVATE fmt::fmt)
+
+# All private: no public header includes them. A static library still needs
+# them at link time, which CMake propagates and the package config finds.
+target_link_libraries(docsmithcpp PRIVATE pugixml::pugixml libzippp::libzippp fmt::fmt)
 
 if(DOCSMITHCPP_DEBUG_FILES)
     target_compile_definitions(docsmithcpp PRIVATE DOCSMITHCPP_DEBUG_FILES)

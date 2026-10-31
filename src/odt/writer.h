@@ -16,16 +16,28 @@
  * limitations under the License.
  *****************************************************************************/
 #pragma once
-#include <set>
+
+// Private: serialises the document model to an ODT content.xml.
+
 #include <string>
 
-#include <libzippp/libzippp.h>
 #include <pugixml.hpp>
 
 #include "docsmithcpp/text_doc.h"
 
+namespace docsmith::odf
+{
+class package;
+}
+
 namespace docsmith::odt
 {
+
+/// Serialise doc as an ODT content.xml. Images are resolved against pkg:
+/// entries it already holds are referenced in place, and files on disk are
+/// copied into it under Pictures/. If pkg holds an original content.xml (a
+/// loaded file), its namespace, font and automatic-style declarations are kept.
+std::string write_content(const text_doc &doc, odf::package &pkg);
 
 void write_xml(pugi::xml_node &n, const style_name &sn);
 void write_xml(pugi::xml_node &n, const style &s);
@@ -35,20 +47,21 @@ void write_xml(pugi::xml_node &n, const list_style_num &b);
 void write_xml(pugi::xml_node &n, const text_props &props);
 void write_xml(pugi::xml_node &n, const paragraph_props &props);
 
-/// Serializes a text_doc to an .odt archive. Traversal is plain recursion over
-/// the node variants (std::visit) -- each emit() appends to the parent XML node
-/// it is handed and recurses into the node's children.
+/// Traversal is plain recursion over the node variants (std::visit): each
+/// emit() appends to the parent XML node it is handed and recurses into the
+/// node's children.
 class writer
 {
 public:
-    static void write(const text_doc &doc, const std::string &filename);
+    explicit writer(odf::package &pkg);
+    std::string write(const text_doc &doc);
 
 private:
-    writer();
-
+    void carry_over();
     void write_doc(const text_doc &doc);
     void write_block(pugi::xml_node parent, const block_node &b);
     void write_inline(pugi::xml_node parent, const inline_node &i);
+    std::string resolve_image(const std::string &uri);
 
     void emit(pugi::xml_node parent, const paragraph &p);
     void emit(pugi::xml_node parent, const heading &h);
@@ -64,20 +77,12 @@ private:
     void emit(pugi::xml_node parent, const table &t);
     void emit(pugi::xml_node parent, const table_cell &c);
 
-    struct archive_item
-    {
-        std::string m_source; //!< Source on the filesystem
-        std::string m_dest;   //!< Destination within the archive
-        std::string m_type;   //!< Type, e.g. "image/png"
-        bool operator<(const archive_item &rhs) const { return m_source < rhs.m_source; }
-    };
-
-    pugi::xml_document m_content;         //!< content.xml; owns underlying node memory
-    pugi::xml_node m_body;                //!< office:body
-    pugi::xml_node m_styles;              //!< office:styles
-    pugi::xml_node m_automatic_styles;    //!< office:automatic-styles
-    pugi::xml_document m_manifest;        //!< manifest.xml
-    pugi::xml_node m_manifest_files_node; //!< manifest file list
-    std::set<archive_item> m_pictures;    //!< pictures to add to the archive
+    odf::package &m_pkg;
+    pugi::xml_document m_content; //!< content.xml; owns the node memory
+    pugi::xml_node m_font_faces;  //!< office:font-face-decls
+    pugi::xml_node m_styles;      //!< office:styles
+    pugi::xml_node m_automatic_styles;
+    pugi::xml_node m_body;        //!< office:body
 };
+
 } // namespace docsmith::odt

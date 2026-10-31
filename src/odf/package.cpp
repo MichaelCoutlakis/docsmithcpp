@@ -1,0 +1,155 @@
+/******************************************************************************
+ * Copyright 2025 Michael Coutlakis
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *****************************************************************************/
+#include "odf/package.h"
+
+#include <sstream>
+#include <stdexcept>
+
+#include <libzippp/libzippp.h>
+#include <pugixml.hpp>
+
+namespace docsmith::odf
+{
+namespace lzpp = libzippp;
+namespace fs = std::filesystem;
+
+namespace
+{
+constexpr const char *manifest_path = "META-INF/manifest.xml";
+}
+
+package package::read(const fs::path &p)
+{
+    lzpp::ZipArchive zip(p.string());
+    if(!zip.open(lzpp::ZipArchive::ReadOnly))
+        throw std::runtime_error("Could not open archive: " + p.string());
+
+    package pkg;
+    std::string manifest;
+    for(const auto &e : zip.getEntries())
+    {
+        const std::string name = e.getName();
+        if(name == "mimetype")
+            pkg.m_mimetype = e.readAsText();
+        else if(name == manifest_path)
+            manifest = e.readAsText();
+        else
+            pkg.m_entries[name] = entry{e.isDirectory() ? std::string{} : e.readAsText()};
+    }
+    zip.close();
+
+    // Attach the manifest's media types. Directories may be listed without a
+    // zip entry of their own; listed files that don't exist are ignored.
+    pugi::xml_document xml;
+    if(!manifest.empty() && xml.load_buffer(manifest.data(), manifest.size()))
+    {
+        auto root = xml.child("manifest:manifest");
+        if(auto v = root.attribute("manifest:version"))
+            pkg.m_version = v.as_string();
+
+        for(auto fe : root.children("manifest:file-entry"))
+        {
+            const std::string path = fe.attribute("manifest:full-path").as_string();
+            if(path == "/")
+                continue;
+            auto it = pkg.m_entries.find(path);
+            if(it == pkg.m_entries.end() && path.ends_with('/'))
+                it = pkg.m_entries.emplace(path, entry{}).first;
+            if(it != pkg.m_entries.end())
+            {
+                it->second.media_type = fe.attribute("manifest:media-type").as_string();
+                it->second.in_manifest = true;
+            }
+        }
+    }
+    return pkg;
+}
+
+void package::write(const fs::path &p) const
+{
+    if(p.has_parent_path())
+        fs::create_directories(p.parent_path());
+
+    lzpp::ZipArchive zip(p.string());
+    if(!zip.open(lzpp::ZipArchive::New))
+        throw std::runtime_error("Could not create archive: " + p.string());
+
+    // ODF: the mimetype must be the first entry, stored uncompressed.
+    zip.setCompressionMethod(lzpp::CompressionMethod::STORE);
+    if(!zip.addData("mimetype", m_mimetype.data(), m_mimetype.size()))
+        throw std::runtime_error("Could not add the mimetype entry");
+
+    // libzip reads the added buffers when the archive is closed, so all the data
+    // (including the manifest below) must stay alive until close().
+    zip.setCompressionMethod(lzpp::CompressionMethod::DEFLATE);
+    for(const auto &[name, e] : m_entries)
+    {
+        const bool ok = name.ends_with('/') ? zip.addEntry(name)
+                                            : zip.addData(name, e.data.data(), e.data.size());
+        if(!ok)
+            throw std::runtime_error("Could not add archive entry: " + name);
+    }
+
+    const std::string manifest = manifest_xml();
+    if(!zip.addData(manifest_path, manifest.data(), manifest.size()))
+        throw std::runtime_error("Could not add the manifest");
+
+    if(zip.close() != LIBZIPPP_OK)
+        throw std::runtime_error("Could not write archive: " + p.string());
+}
+
+const package::entry *package::find(const std::string &name) const
+{
+    auto it = m_entries.find(name);
+    return it != m_entries.end() ? &it->second : nullptr;
+}
+
+void package::set(const std::string &name, std::string data, std::string media_type)
+{
+    m_entries[name] = entry{std::move(data), std::move(media_type), true};
+}
+
+std::string package::manifest_xml() const
+{
+    pugi::xml_document xml;
+    auto decl = xml.append_child(pugi::node_declaration);
+    decl.append_attribute("version") = "1.0";
+    decl.append_attribute("encoding") = "UTF-8";
+
+    auto root = xml.append_child("manifest:manifest");
+    root.append_attribute("xmlns:manifest") = "urn:oasis:names:tc:opendocument:xmlns:manifest:1.0";
+    root.append_attribute("manifest:version") = m_version.c_str();
+
+    auto add = [&root](const std::string &path, const std::string &media_type)
+    {
+        auto fe = root.append_child("manifest:file-entry");
+        fe.append_attribute("manifest:full-path") = path.c_str();
+        fe.append_attribute("manifest:media-type") = media_type.c_str();
+        return fe;
+    };
+    add("/", m_mimetype).append_attribute("manifest:version") = m_version.c_str();
+    for(const auto &[name, e] : m_entries)
+        if(e.in_manifest)
+            add(name, e.media_type);
+
+    std::ostringstream ss;
+    xml.save(ss, " ");
+    return ss.str();
+}
+
+} // namespace docsmith::odf

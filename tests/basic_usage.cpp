@@ -35,8 +35,7 @@ TEST(BASIC_USAGE, CreateDocument)
     io_writer w(std::cout);
     w(doc);
 
-    odt_file f("odt/out/basic_generated.odt");
-    f.save(doc);
+    odt::file(doc).save("odt/out/basic_generated.odt");
 }
 
 TEST(BASIC_USAGE, ValueSemantics)

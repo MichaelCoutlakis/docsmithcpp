@@ -29,6 +29,16 @@ held in `std::variant`. This is a breaking change to almost every public API.
   no visitor base class.
 - **ODT parser** rewritten as recursive descent returning variants, replacing the
   `unique_ptr<element>` factory and stack.
+- **ODT API**: `docsmith::odt::file` replaces `docsmith::odt_file`. Use
+  `odt::file::load(path)` and `file.save(path)`; the document is the public `doc`
+  member. The file keeps the whole package in memory (`styles.xml`, `meta.xml`,
+  settings, thumbnail, embedded images). Load → edit → save writes those parts back
+  unchanged, along with the original fonts and automatic styles from `content.xml`.
+  `content.xml` itself is regenerated from the model.
+- **Dependencies are private**: `odt/writer.h` moved out of the public headers, so
+  pugixml and libzippp are no longer exposed to users.
+- ODT entries other than `mimetype` are now deflated. Previously everything was
+  stored uncompressed.
 - **Headers** split by concept: `nodes_fwd.h` (forward declarations and mixins),
   `inline_nodes.h`, `list.h`, `table.h`, `nodes.h` (`paragraph`, `heading`,
   `block_node`) and `text_doc.h` (document root and umbrella include).
@@ -53,7 +63,8 @@ held in `std::variant`. This is a breaking change to almost every public API.
   CRTP mixins for the style name and the child sequence. `children()` hides the boxing.
 - The ODT writer emits `text:outline-level` on headings and `xlink:type` on hyperlinks.
   Empty style names are no longer written.
-- Tests: `ValueSemantics`, `ChainedAdd`, `UnknownPassThrough`.
+- Tests: `ValueSemantics`, `ChainedAdd`, `UnknownPassThrough`, `ResaveLoadedFile`,
+  `ResaveLoadedImage`, `EditLoadedFile`, `MissingImageThrows`.
 - `docsmith.h`: a convenience header for the whole public API.
 - `DOCSMITHCPP_DEBUG_FILES` CMake option (ON in the `dev` preset). When set, saving an
   `.odt` also writes `<name>.content.xml` next to it.
@@ -78,13 +89,22 @@ held in `std::variant`. This is a breaking change to almost every public API.
   libzippp, fmt), so `find_package(DocSmithCpp)` works from another project.
 - `gtest_discover_tests` is used with `include(GoogleTest)`. The duplicate catch-all
   `add_test` is gone.
+- A parsed document with images couldn't be saved again: the image path pointed
+  inside the original archive and the writer looked for it on disk.
+- Table cell style names were parsed but never written.
+- The writer used the `loext:` namespace without declaring it.
 
 ### Known limitations
 - No HTML output yet.
 - `unknown` round-trips only block- and inline-level content. Unrecognized children
   inside tables and lists, and unknown attributes on known elements, are dropped.
-- Parsing does not load style definitions (`styles.xml`, automatic styles), so a
-  parsed document's style registries are empty. Style *names* on nodes are kept.
+- Parsing does not load style definitions into the model, so a parsed document's style
+  registries are empty. Style *names* on nodes are kept, and saving a loaded file
+  keeps its original definitions, so formatting survives.
+- Images that are no longer referenced stay in the package when a loaded file is
+  saved.
+- Common styles from `text_doc::styles()` are written into `content.xml`. ODF puts
+  them in `styles.xml`; LibreOffice accepts this.
 - `set_style(style)` keeps only the name. The definition must also be added to
   `text_doc::styles()`.
 - The ODT writer always uses `style:family="paragraph"`.
