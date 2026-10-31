@@ -1,25 +1,33 @@
 # DocSmith++ (⚠️ 🚧 Note: This is a work in progress 🚧)
 
-**DocSmith++** is a modern C++17+ library for reading, modifying, and generating structured document formats like `.docx` and `.odt`. It aims to provide a clean, idiomatic C++ API for working with rich-text documents, with future support for HTML, Markdown, and PDF.
+**DocSmith++** is a modern C++20 library for reading, modifying, and generating
+structured document formats like `.docx` and `.odt`. It aims to provide a clean,
+idiomatic C++ API for working with rich-text documents, with future support for
+HTML, Markdown, and PDF.
+
+## Typical use case scenarios
+
+asdf
 
 ---
 
 ### 🚧 Roadmap
-| Status | Feature |
-| --- | --- |
-| :x: | Basic .docx read support |
-| :x: | Basic .odt read support |
-| :x: | Manipulate the abstract document tree |
-| :x: | Basic .odt output |
-| :x: | Basic .docx output |
 
+| Status | Feature                               |
+| ------ | ------------------------------------- |
+| :x:    | Basic .docx read support              |
+| :x:    | Basic .odt read support               |
+| :x:    | Manipulate the abstract document tree |
+| :x:    | Basic .odt output                     |
+| :x:    | Basic .docx output                    |
+| :x:    | HTML output                           |
 
 ## Features
 
-- 🧾 Read and write `.docx` (Office Open XML) documents
 - 📝 Read and write `.odt` (OpenDocument Text) files
 - 🔍 Query support: search paragraphs, headings, styles, etc.
-- ⚙️ Built with modern C++ idioms (Value semantics, RAII, smart pointers, STL)
+- ⚙️ Built with modern C++ idioms (the document tree is plain value types in
+  `std::variant`, with `std::visit`-based traversal)
 - 🔌 Flexible design: future extensions (e.g., HTML/PDF) planned
 
 ---
@@ -29,8 +37,10 @@
 This project uses [CMake](https://cmake.org/) for building and configuring.
 
 ### Prerequisites
-- C++17 compiler (GCC ≥ 9, Clang ≥ 10, MSVC ≥ 2019)
-- CMake ≥ 3.16
+
+- C++20 compiler (MSVC ≥ 2019 16.10, GCC ≥ 11, Clang ≥ 14). Builds against
+  libstdc++, libc++ and the MSVC STL.
+- CMake ≥ 3.20
 - Dependencies:
   - [libzip](https://libzip.org/)
   - [libzippp](https://github.com/ctabin/libzippp)
@@ -48,52 +58,91 @@ make
 
 ### 🧪 Testing
 
-DocSmithCpp includes unit and integration tests for document parsing, writing, and transformation. Tests rely on a collection of small .docx and .odt files under the tests directory.
+DocSmithCpp includes unit and integration tests for document parsing, writing,
+and transformation. Tests rely on a collection of small .docx and .odt files
+under the tests directory.
 
 To run tests:
 
-cmake -DBUILD_TESTING=ON ..
-make
-ctest
+cmake -DBUILD_TESTING=ON .. make ctest
 
 📚 Example Usage
 
 ```c++
-#include <docsmith/odt/odt_file.h>
-#include <docsmith/docx/docx_file.h>
+#include <docsmithcpp/odt/file.h>
+#include <docsmithcpp/text_doc.h>
+#include <iostream>
 
 using namespace docsmith;
 
 int main() {
-    odt_file file("example.odt");
-    text_doc doc = file.parse_text_doc();
+    // Build a document from code. Nodes are plain values; bare strings become
+    // text. Constructors take a node's scalar attributes; children are passed as
+    // extra arguments or appended with .add() -- so there is no copy-vs-child
+    // ambiguity (nesting a same-type node, e.g. a span in a span, uses .add()).
+    text_doc hello{
+        heading(1, "Hello World!"),
+        paragraph("This is the standard example with a ",
+                  hyperlink("https://example.com", "link"), "."),
+        paragraph().set_style("Quote").add("built incrementally"),
+    };
+    odt_file("hello_world.odt").save(hello);
 
-    auto search_predicate = [](const paragraph& p) { return p.style_name() == "name_to_look_for";};
+    // Parse, query, and edit.
+    text_doc doc = odt_file("example.odt").parse_text_doc();
 
-    for (const auto& para : doc.find_all<paragraph>(search_predicate)) 
-    {
-        std::cout << para.text() << std::endl;
-    }
-    text_doc hello_world{heading(1, "Hello World!"), paragraph(This is the standard example)};
-    docx_file docx("hello_world.docx");
-    docx.set_content(hello_world);
-    docx.save();
+    // Find nodes by type (optionally with a predicate) -- no dynamic_cast.
+    for (const hyperlink* a : collect<hyperlink>(doc))
+        std::cout << a->url << "\n";
+
+    auto body_paras = find_all<paragraph>(doc,
+        [](const paragraph& p) { return p.style.get_name() == "Text_body"; });
+
+    // Visit a node directly with the overloaded idiom.
+    for (const block_node& b : doc.body)
+        std::visit(overloaded{
+            [](const heading& h) { std::cout << "heading L" << h.level << "\n"; },
+            [](const auto&)      { /* other block types */ },
+        }, b.v);
 }
 ```
 
-## Caveats
-Since the library employs a tree structure and braced initialisation there are some subtle edge cases. For example, consider the following code:
-```c++
-span s{span{text{"hello"}}};
-```
-There needs to be a mechanism to disambiguate between 1. Adding a new span as a child via the constructor / braced initialiser and; 2. The span copy constructor. This is especially important when there is a single argument. This code could be written as
-```c++
-    span s{kids_tag{}, span{text{"hello"}}};
-    // Or
-    span s{}.add(span{}.add(text("hello")));
-```
+## Design notes
+
+The document tree is a pair of value-type variants — `inline_node` (text-flow
+content: `text`, `span`, `hyperlink`, `frame`, `bookmark`, `unknown`) and
+`block_node` (`paragraph`, `heading`, `list`, `table`, `frame`, `unknown`). It
+is deliberately a _generic_, format-agnostic model: which group may go where is
+encoded by the child sequence's type, so there is no separate per-format
+validation layer. Copy and `operator==` are compiler-generated, and traversal is
+`std::visit`. Shared behaviour lives in thin, non-polymorphic CRTP mixins:
+`styled<Derived>` (a style name + `set_style`) and `has_children<…>`
+(`children()`/`add()`).
+
+An `unknown` node stores verbatim XML for anything the parser does not model, so
+foreign content survives a parse → write round trip. Note: this currently
+applies to block- and inline-level content only — unrecognized children _inside_
+a table or list, and unknown attributes on known elements, are not yet captured.
+
+The recursive edges (a `span` contains inline nodes, which contain spans…) are
+held through a small value-semantic wrapper, `box<T>`
+(`include/docsmithcpp/box.h`), which keeps the model portable across libstdc++,
+libc++ and the MSVC STL.
+
 ## Bibliography
+
 Worthy mentions and related projects
-- [odfpy](https://github.com/eea/odfpy/wiki/Introduction) Is a python library (GPL) to read and write ODF text documents. It has an API similar to what I'm trying to acheive with docsmithcpp, namely, in terms of generating and manipulating the document structure (e.g. `h=H(outlinelevel=1, stylename=h1style, text="My first text")`, `doc.getElementsByType`)
-- [python-docx](https://python-docx.readthedocs.io/en/latest/), a Python library for creating and updating .docx files. The document generation API is similar to what I'm trying to acheive.
-- [docx4j](https://www.docx4java.org/trac/docx4j) is a Java library for creating and manipulating docx adn other OOXML files. However, it looks to be on the heavier and more verbose side. E.g. `WordprocessingMLPackage wordPackage = WordprocessingMLPackage.createPackage();`
+
+- [odfpy](https://github.com/eea/odfpy/wiki/Introduction) Is a python library
+  (GPL) to read and write ODF text documents. It has an API similar to what I'm
+  trying to acheive with docsmithcpp, namely, in terms of generating and
+  manipulating the document structure (e.g.
+  `h=H(outlinelevel=1, stylename=h1style, text="My first text")`,
+  `doc.getElementsByType`)
+- [python-docx](https://python-docx.readthedocs.io/en/latest/), a Python library
+  for creating and updating .docx files. The document generation API is similar
+  to what I'm trying to acheive.
+- [docx4j](https://www.docx4java.org/trac/docx4j) is a Java library for creating
+  and manipulating docx adn other OOXML files. However, it looks to be on the
+  heavier and more verbose side. E.g.
+  `WordprocessingMLPackage wordPackage = WordprocessingMLPackage.createPackage();`

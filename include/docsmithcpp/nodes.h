@@ -16,248 +16,84 @@
  * limitations under the License.
  *****************************************************************************/
 #pragma once
-#include <list>
-#include <memory>
-#include <stdexcept>
-#include <tuple>
-#include <type_traits>
 
-#include <iostream>
+// ============================================================================
+//  The block-level glue: the paragraph/heading text nodes and the block_node
+//  variant that ties the block-level alternatives together. Including this
+//  header pulls in the whole node model.
+//
+//  Model overview: nodes are plain value types held in std::variant, in two
+//  groups matching the HTML / ODT content models -- inline_node (text-flow
+//  content) and block_node (paragraph-level content). It is deliberately a
+//  format-agnostic ("generic document") model: which group may go where is
+//  captured by the child sequence's type, not a per-format relation table.
+//  Copy and operator== are compiler generated; traversal is std::visit
+//  (visit.h). Construction is via each node's constructors (scalar attributes)
+//  plus a fluent .add() for children. Shared behaviour lives in the styled<>
+//  (style.h) and has_children<> (nodes_fwd.h) mixins.
+//
+//  File map: nodes_fwd.h (fwd + mixins), inline_nodes.h (inline content),
+//  list.h / table.h (list and table nodes), this header (paragraph/heading +
+//  block_node), text_doc.h (the document root).
+// ============================================================================
 
-#include "docsmithcpp/element.h"
+#include <variant>
+
+#include "docsmithcpp/inline_nodes.h"
+#include "docsmithcpp/list.h"
+#include "docsmithcpp/nodes_fwd.h"
+#include "docsmithcpp/table.h"
 
 namespace docsmith
 {
-template <typename... ChildTypes>
-struct kids
+
+class paragraph : public styled<paragraph>, public has_children<inline_node, paragraph, false>
 {
-    kids(ChildTypes &&...children) :
-        m_child_content(std::forward<ChildTypes>(children)...)
+public:
+    paragraph() = default;
+    template <typename... Args, typename = content_ctor_t<paragraph, Args...>>
+    paragraph(Args &&...content)
     {
+        (this->add(std::forward<Args>(content)), ...);
     }
-    std::tuple<ChildTypes...> m_child_content;
+
+    bool operator==(const paragraph &) const = default;
 };
 
-// Tag for adding kids, use an object of this type when constructor could be confused, for example,
-// adding a single span to a span. To make it more concise, constexpr auto ins = kids_tag{}.
-struct kids_tag
+class heading : public styled<heading>, public has_children<inline_node, heading, false>
 {
+public:
+    int level{1};
+
+    heading() = default;
+    explicit heading(int lvl) :
+        level(lvl)
+    {
+    }
+    template <typename... Args, typename = std::enable_if_t<(sizeof...(Args) >= 1)>>
+    heading(int lvl, Args &&...content) :
+        level(lvl)
+    {
+        (this->add(std::forward<Args>(content)), ...);
+    }
+
+    bool operator==(const heading &) const = default;
 };
 
-// Deduction guide for kids:
-template <typename... ChildTypes>
-kids(ChildTypes &&...) -> kids<ChildTypes...>;
-
-class text;
-void add_text(std::list<std::unique_ptr<element>> &dest, std::string t);
-
-template <typename Derived>
-struct nodes : virtual element
+struct block_node
 {
-    nodes() { std::cout << "default constructor\n"; }
-
-    template <typename... Args, // clang-format off
-          typename = std::enable_if_t<(
-              (is_valid_child_v<Derived, std::decay_t<Args>> ||
-               (std::is_convertible_v<std::decay_t<Args>, std::string> && is_valid_child_v<Derived, text>))
-              && ...)>> // clang-format on
-    explicit nodes(Args &&...args)
-    {
-        std::cout << "constructor\n";
-        (add(std::forward<Args>(args)), ...);
-    }
-
-    template <typename... Args, // clang-format off
-          typename = std::enable_if_t<(
-              (is_valid_child_v<Derived, std::decay_t<Args>> ||
-               (std::is_convertible_v<std::decay_t<Args>, std::string> && is_valid_child_v<Derived, text>))
-              && ...)>> // clang-format on
-    explicit nodes(kids_tag tg, Args &&...args)
-    {
-        std::cout << "tag constructor\n";
-        (add(std::forward<Args>(args)), ...);
-    }
-
-    template <typename... ChildTypes>
-    nodes(kids<ChildTypes...> &&content)
-    {
-        std::apply([this](auto &&...args) { (add(std::forward<decltype(args)>(args)), ...); },
-            content.m_child_content);
-    }
-
-    // Deep copy constructor:
-    nodes(const nodes &other)
-    {
-        std::cout << "copy constructor\n";
-        for(const auto &child : other.m_children)
-            m_children.push_back(child->clone());
-    }
-    nodes &operator=(const nodes &other)
-    {
-        std::cout << "copy assignment operator\n";
-        if(this != &other)
-        {
-            m_children.clear();
-            for(const auto &child : other.m_children)
-                m_children.push_back(child->clone());
-        }
-        return *this;
-    }
-
-    nodes(nodes &&other) { m_children = std::move(other.m_children); }
-    nodes &operator=(nodes &&other)
-    {
-        if(this != &other)
-        {
-            m_children = std::move(other.m_children);
-        }
-        return *this;
-    }
-
-    template <typename... Args, // clang-format off
-        typename = std::enable_if_t<(
-            (is_valid_child_v<Derived, std::decay_t<Args>> ||
-             std::is_convertible_v<std::decay_t<Args>, std::string>)
-            && ...)>> // clang-format on
-    Derived &set_content(Args &&...args)
-    {
-        (add(std::forward<Args>(args)), ...);
-    }
-
-    template <typename Child,
-        typename = std::enable_if_t<is_valid_child_v<Derived, std::decay_t<Child>>>>
-    Derived &add(Child &&child)
-    {
-        using DecayChild = std::decay_t<Child>;
-        static_assert(is_valid_child_v<Derived, DecayChild>, "Invalid child type");
-        using ChildType = decltype(child);
-
-        if constexpr(std::is_lvalue_reference_v<ChildType>)
-        {
-            // Have to copy then use the move constructor, if we use the constructor it will call
-            // add which will be recursive...
-            auto child_copy = child;
-            m_children.emplace_back(std::make_unique<DecayChild>(std::move(child_copy)));
-        }
-        else if constexpr(std::is_rvalue_reference_v<ChildType>)
-        {
-            auto p = std::make_unique<DecayChild>(std::forward<Child>(child));
-            m_children.emplace_back(std::move(p));
-        }
-        else
-            static_assert(false, "Unhandled reference type");
-
-        return *static_cast<Derived *>(this);
-    }
-    template <typename = Derived, typename = std::enable_if_t<is_valid_child_v<Derived, text>>>
-    Derived &add(const char *t)
-    {
-        static_assert(
-            is_valid_child_v<Derived, text>, "text is not a child type - can't add string literal");
-
-        // return add(text(t));
-        add_text(m_children, t);
-        return *static_cast<Derived *>(this);
-    }
-
-    template <typename = Derived, typename = std::enable_if_t<is_valid_child_v<Derived, text>>>
-    Derived &add(const std::string &t)
-    {
-        static_assert(
-            is_valid_child_v<Derived, text>, "text is not a child type - can't add string");
-
-        // return add(text(t));
-        add_text(m_children, t);
-        return *static_cast<Derived *>(this);
-    }
-
-    void add_child(std::unique_ptr<element> child) override
-    {
-        using U = std::remove_reference_t<decltype(*child)>;
-        m_children.push_back(std::move(child));
-    }
-
-    auto begin() const { return m_children.begin(); }
-    auto end() const { return m_children.end(); }
-
-    std::list<element *> children()
-    {
-        std::list<element *> chldrn;
-        for(auto &c : m_children)
-            chldrn.push_back(c.get());
-        return chldrn;
-    }
-
-    /// Check if the children are equal:
-    bool children_equal(const nodes<Derived> &other) const
-    {
-        return compare_equality(m_children, other.m_children);
-    }
-
-    std::list<std::unique_ptr<element>> m_children;
+    std::variant<paragraph, heading, list, table, frame, unknown> v;
+    bool operator==(const block_node &) const = default;
 };
 
-// clang-format off
-// Helpers to determine if the class heirarchy has nodes mixed in:
-template<typename NodeType>
-struct is_element_children : std::is_base_of<nodes<NodeType>, NodeType> {};
-
-template<typename NodeType>
-inline constexpr bool has_children_v = is_element_children<NodeType>::value;
-// clang-format on
-
-template <typename Derived>
-struct element_base : virtual element
+// Conversion helpers into block_node (the variant is now complete).
+inline block_node to_block(const char *s) { return block_node{paragraph{s}}; }
+inline block_node to_block(const std::string &s) { return block_node{paragraph{s}}; }
+inline block_node to_block(block_node n) { return n; }
+template <typename T>
+block_node to_block(T node)
 {
-    void accept(element_visitor &visitor) const override
-    {
-        visitor.visit(static_cast<const Derived &>(*this));
-
-        if constexpr(has_children_v<Derived>)
-        {
-            visitor.push();
-            const auto &self = static_cast<const Derived &>(*this);
-            for(const auto &child : self)
-                child->accept(visitor);
-            visitor.pop();
-        }
-    }
-
-    std::unique_ptr<element> clone() const override
-    {
-        return std::make_unique<Derived>(static_cast<const Derived &>(*this));
-    }
-
-    bool is_equal(const element &other) const override
-    {
-        if(auto p = dynamic_cast<const Derived *>(&other))
-        {
-            const auto &me = static_cast<const Derived &>(*this);
-            const auto &you = *p;
-
-            bool result = static_cast<const Derived &>(*this) == *p;
-            if(!result)
-                std::cout << "not equal\n";
-
-            return result;
-        }
-
-        return false;
-    }
-};
-
-inline bool compare_equality(
-    const std::list<std::unique_ptr<element>> &lhs, const std::list<std::unique_ptr<element>> &rhs)
-{
-    if(lhs.size() != rhs.size())
-        return false;
-
-    for(auto it_lhs = std::cbegin(lhs), it_rhs = std::cbegin(rhs); it_lhs != std::cend(lhs);
-        std::advance(it_lhs, 1), std::advance(it_rhs, 1))
-    {
-        if(!(*it_lhs)->is_equal(*it_rhs->get()))
-            return false;
-    }
-    return true;
+    return block_node{std::move(node)};
 }
-}
+
+} // namespace docsmith

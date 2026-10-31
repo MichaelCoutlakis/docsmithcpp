@@ -1,4 +1,4 @@
-﻿/******************************************************************************
+/******************************************************************************
  * Copyright 2025 Michael Coutlakis
  *
  * SPDX-License-Identifier: Apache-2.0
@@ -16,12 +16,12 @@
  * limitations under the License.
  *****************************************************************************/
 #include <filesystem>
-#include <fmt/format.h>
 #include <fstream>
-#include <iostream>
 #include <sstream>
+#include <variant>
 
-#include "docsmithcpp/iostream_writer.h"
+#include <fmt/format.h>
+
 #include "docsmithcpp/odt/writer.h"
 #include "docsmithcpp/text_doc.h"
 
@@ -44,7 +44,7 @@ std::string to_string(font_weight fw);
 std::string to_string(text_align ta);
 std::string to_string(break_type b);
 
-writer::writer(std::string filename)
+writer::writer()
 {
     std::string odt_base_content{R"~~(
 <?xml version="1.0" encoding="UTF-8"?>
@@ -77,9 +77,7 @@ writer::writer(std::string filename)
         });
     };
 
-    auto office_body = find_node("office:body");
-    m_node_stack.push(office_body);
-    m_current = m_node_stack.top();
+    m_body = find_node("office:body");
     m_automatic_styles = find_node("office:automatic-styles");
     m_styles = find_node("office:styles");
 
@@ -96,14 +94,13 @@ writer::writer(std::string filename)
 
 void writer::write(const text_doc &doc, const std::string &filename)
 {
-    writer w(filename);
+    writer w;
 
     fs::path parent_path = fs::path(filename).parent_path();
     if(!parent_path.empty() && !fs::exists(parent_path))
         fs::create_directories(parent_path);
 
-    doc.accept(w);
-    std::string content_xml, manifest_xml;
+    w.write_doc(doc);
 
     lzpp::ZipArchive zip(filename);
     if(!zip.open(lzpp::ZipArchive::New))
@@ -111,14 +108,14 @@ void writer::write(const text_doc &doc, const std::string &filename)
 
     // Add the mimetype, must be uncompressed and first:
     zip.setCompressionMethod(lzpp::CompressionMethod::STORE);
-    std::string m_mimetype = std::string{"application/vnd.oasis.opendocument.text"};
-    if(!zip.addData("mimetype", m_mimetype.data(), m_mimetype.length()))
+    std::string mimetype{"application/vnd.oasis.opendocument.text"};
+    if(!zip.addData("mimetype", mimetype.data(), mimetype.length()))
         throw std::runtime_error("Could not create mimetype");
 
-    // Add the content.xml:
+    // Add content.xml:
     std::ostringstream content_stream;
     w.m_content.print(content_stream, "  ");
-    content_xml = content_stream.str();
+    std::string content_xml = content_stream.str();
     zip.addData("content.xml", content_xml.data(), content_xml.size());
 
     // Also save in a file for easy debugging:
@@ -126,8 +123,7 @@ void writer::write(const text_doc &doc, const std::string &filename)
     content_file << content_xml;
     content_file.close();
 
-    // Add the manifest:
-
+    // Add the pictures and their manifest entries:
     for(auto &picture : w.m_pictures)
     {
         if(!zip.addFile(picture.m_dest, picture.m_source))
@@ -138,37 +134,15 @@ void writer::write(const text_doc &doc, const std::string &filename)
     }
     std::ostringstream manifest_stream;
     w.m_manifest.print(manifest_stream);
-    w.m_manifest.print(std::cout, "  ");
-    manifest_xml = manifest_stream.str();
+    std::string manifest_xml = manifest_stream.str();
     zip.addData("META-INF/manifest.xml", manifest_xml.data(), manifest_xml.size());
 
     zip.close();
 }
 
-void writer::visit(const text &val)
+void writer::write_doc(const text_doc &doc)
 {
-    get_current().append_child(pugi::node_pcdata).set_value(val.m_text);
-}
-
-void writer::visit(const span &) { get_current().append_child("text:span"); }
-
-void writer::visit(const heading &) { get_current().append_child("text:h"); }
-
-void writer::visit(const paragraph &p)
-{
-    auto n = get_current().append_child("text:p");
-    n.append_attribute("text:style-name").set_value(p.get_style().get_name().c_str());
-}
-
-void writer::visit(const hyperlink &v)
-{
-    auto url = get_current().append_child("text:a");
-    url.append_attribute("xlink:href") = v.get_url();
-}
-
-void writer::visit(const text_doc &doc)
-{
-    get_current().append_child("office:text");
+    auto office_text = m_body.append_child("office:text");
 
     // Add any list / automatic styles:
     for(auto &[name, s] : doc.list_styles())
@@ -176,88 +150,152 @@ void writer::visit(const text_doc &doc)
     // Add any text styles:
     for(auto &[name, s] : doc.styles())
         write_xml(m_styles, s);
+
+    for(const auto &b : doc.body)
+        write_block(office_text, b);
 }
 
-void writer::visit(const list &l)
+void writer::write_block(pugi::xml_node parent, const block_node &b)
 {
-    auto n = get_current().append_child("text:list");
-    n.append_attribute("text:style-name").set_value(l.get_style().get_name().c_str());
+    std::visit([&](const auto &n) { emit(parent, n); }, b.v);
 }
 
-void writer::visit(const list_item &) { auto n = get_current().append_child("text:list-item"); }
-
-void writer::visit(const list_style_num &) { get_current().append_child(""); }
-
-void writer::visit(const list_style_bullet &) { get_current().append_child(""); }
-
-void writer::visit(const frame &) { get_current().append_child("draw:frame"); }
-
-void writer::visit(const bookmark &b)
+void writer::write_inline(pugi::xml_node parent, const inline_node &i)
 {
-    auto n = get_current().append_child("text:bookmark");
-    n.append_attribute("text:name").set_value(b.m_name.c_str());
+    std::visit([&](const auto &n) { emit(parent, n); }, i.v);
 }
 
-void writer::visit(const image &v)
+void writer::emit(pugi::xml_node parent, const paragraph &p)
 {
-    auto n = get_current().append_child("draw:image");
+    auto n = parent.append_child("text:p");
+    if(!p.style.is_empty())
+        n.append_attribute("text:style-name").set_value(p.style.get_name().c_str());
+    for(const auto &c : p.children())
+        write_inline(n, c);
+}
 
-    // TODO: How to map the uri to archive / ODT filename?
-    // Add the image to the manifest and mark an entry for archival:
+void writer::emit(pugi::xml_node parent, const heading &h)
+{
+    auto n = parent.append_child("text:h");
+    n.append_attribute("text:outline-level").set_value(h.level);
+    if(!h.style.is_empty())
+        n.append_attribute("text:style-name").set_value(h.style.get_name().c_str());
+    for(const auto &c : h.children())
+        write_inline(n, c);
+}
+
+void writer::emit(pugi::xml_node parent, const span &s)
+{
+    auto n = parent.append_child("text:span");
+    if(!s.style.is_empty())
+        n.append_attribute("text:style-name").set_value(s.style.get_name().c_str());
+    for(const auto &c : s.children())
+        write_inline(n, c);
+}
+
+void writer::emit(pugi::xml_node parent, const hyperlink &h)
+{
+    auto n = parent.append_child("text:a");
+    n.append_attribute("xlink:type").set_value("simple");
+    n.append_attribute("xlink:href").set_value(h.url.c_str());
+    for(const auto &c : h.children())
+        write_inline(n, c);
+}
+
+void writer::emit(pugi::xml_node parent, const text &t)
+{
+    parent.append_child(pugi::node_pcdata).set_value(t.content.c_str());
+}
+
+void writer::emit(pugi::xml_node parent, const frame &f)
+{
+    auto n = parent.append_child("draw:frame");
+    if(!f.style.is_empty())
+        n.append_attribute("draw:style-name").set_value(f.style.get_name().c_str());
+    emit(n, f.img);
+}
+
+void writer::emit(pugi::xml_node parent, const image &v)
+{
+    auto n = parent.append_child("draw:image");
+
     archive_item entry{};
-    entry.m_dest = ("Pictures" / fs::path(v.get_uri()).filename()).generic_string();
-    entry.m_source = v.get_uri();
-    entry.m_type = get_media_type(v.get_uri());
+    entry.m_dest = ("Pictures" / fs::path(v.uri).filename()).generic_string();
+    entry.m_source = v.uri;
+    entry.m_type = get_media_type(v.uri);
     m_pictures.insert(entry);
-    n.append_attribute("xlink:href").set_value(entry.m_dest);
+
+    n.append_attribute("xlink:href").set_value(entry.m_dest.c_str());
     n.append_attribute("xlink:type").set_value("simple");
     n.append_attribute("xlink:show").set_value("embed");
-    n.append_attribute("draw:mime-type").set_value(entry.m_type);
+    n.append_attribute("draw:mime-type").set_value(entry.m_type.c_str());
     n.append_attribute("xlink:actuate").set_value("onLoad");
 }
 
-void writer::visit(const table_cell &c)
+void writer::emit(pugi::xml_node parent, const bookmark &b)
 {
-    auto n = get_current().append_child("table:table-cell");
-    // Default to string value type, unless there's simple content?
-    n.append_attribute("office:value_type").set_value("string");
-
-    if(c.rowspan() != 1U)
-        n.append_attribute("table:number-rows-spanned").set_value(c.rowspan());
-    if(c.colspan() != 1U)
-        n.append_attribute("table:number-columns-spanned").set_value(c.colspan());
+    auto n = parent.append_child("text:bookmark");
+    n.append_attribute("text:name").set_value(b.name.c_str());
 }
 
-void writer::visit(const table &t)
+void writer::emit(pugi::xml_node parent, const unknown &u)
 {
-    auto n = get_current().append_child("table:table");
-    auto table_column = n.append_child("table:table-column");
-    table_column.append_attribute("table:number-columns-repeated").set_value(t.num_cols());
+    // Re-emit the captured subtree verbatim.
+    pugi::xml_document frag;
+    if(frag.load_string(u.xml.c_str()))
+        for(auto child : frag.children())
+            parent.append_copy(child);
+}
 
-    push(); // Push the table node
-    for(size_t r{}; r != t.num_rows(); ++r)
+void writer::emit(pugi::xml_node parent, const list &l)
+{
+    auto n = parent.append_child("text:list");
+    if(!l.style.is_empty())
+        n.append_attribute("text:style-name").set_value(l.style.get_name().c_str());
+    for(const auto &it : l.items())
+        emit(n, it);
+}
+
+void writer::emit(pugi::xml_node parent, const list_item &it)
+{
+    auto n = parent.append_child("text:list-item");
+    for(const auto &b : it.children())
+        write_block(n, b);
+}
+
+void writer::emit(pugi::xml_node parent, const table &t)
+{
+    auto n = parent.append_child("table:table");
+    auto table_column = n.append_child("table:table-column");
+    table_column.append_attribute("table:number-columns-repeated")
+        .set_value(static_cast<unsigned>(t.num_cols()));
+
+    for(size_t r = 0; r != t.num_rows(); ++r)
     {
         auto xml_row = n.append_child("table:table-row");
-        for(size_t c{}; c != t.num_cols(); ++c)
+        for(size_t c = 0; c != t.num_cols(); ++c)
         {
-            push(); // Push the cell node to current
-            if(!t.is_cell_covered(r, c))
-                t.cell(r, c).accept(*this);
+            if(t.is_cell_covered(r, c))
+                xml_row.append_child("table:covered-table-cell");
             else
-            {
-                auto n = get_current().append_child("table:covered-table-cell");
-            }
-            pop();
+                emit(xml_row, t.cell(r, c));
         }
     }
-    pop();
 }
 
-void writer::push() { m_node_stack.push(get_current().last_child()); }
+void writer::emit(pugi::xml_node parent, const table_cell &c)
+{
+    auto n = parent.append_child("table:table-cell");
+    n.append_attribute("office:value-type").set_value("string");
 
-void writer::pop() { m_node_stack.pop(); }
+    if(c.rowspan != 1)
+        n.append_attribute("table:number-rows-spanned").set_value(c.rowspan);
+    if(c.colspan != 1)
+        n.append_attribute("table:number-columns-spanned").set_value(c.colspan);
 
-pugi::xml_node writer::get_current() { return m_node_stack.top(); }
+    for(const auto &b : c.children())
+        write_block(n, b);
+}
 
 void write_xml(pugi::xml_node &n, const style_name &sn)
 {
@@ -290,50 +328,32 @@ void write_xml(pugi::xml_node &n, const list_style &ls)
     write_xml(ls_node, ls.m_name);
 
     for(const auto &level_style : ls.m_level_styles)
-    {
         std::visit([&](const auto &s) { write_xml(ls_node, s); }, level_style);
-    }
 }
 
 void write_xml(pugi::xml_node &n, const list_style_bullet &lsb)
 {
     auto bullet_node = n.append_child("text:list-level-style-bullet");
-    // write_xml(bullet_node, lsb.m_style_name);
-    //   TODO: type parameter for write_xml with the style name:
     if(!lsb.m_style_name.is_empty())
         n.append_attribute("text:style-name").set_value(lsb.m_style_name.get_name().c_str());
     bullet_node.append_attribute("text:level") = lsb.m_level;
     bullet_node.append_attribute("text:bullet-char") = lsb.m_bullet_char.c_str();
     // TODO: serialize optional props
-
-    // auto llp = bullet_node.append_child("style:list-level-properties");
-    // llp.append_attribute("text:list-level-position-and-space-mode") = "label-alignment";
-    // auto llpa = llp.append_child("style:list-level-label-alignment");
-    // llpa.append_attribute("text:label-followed-by") = "listtab";
-    // llpa.append_attribute("text:list-tab-stop-position") = "1.27cm";
-    // llpa.append_attribute("fo:text-indent") = "-0.635cm";
-    // llpa.append_attribute("fo:margin-left") = "1.27cm";
 }
 
 void write_xml(pugi::xml_node &n, const list_style_num &s)
 {
     auto num_node = n.append_child("text:list-level-style-number");
-    // write_xml(num_node, s.m_style_name);
-
-    // TODO: type parameter for write_xml with the style name:
     if(!s.m_style_name.is_empty())
         n.append_attribute("text:style-name").set_value(s.m_style_name.get_name().c_str());
 
-    // if(!s.m_style_name.is_empty())
-
     num_node.append_attribute("text:level") = s.m_level;
-    num_node.append_attribute("loext:num-list-format") = fmt::format("%{}%.", s.m_level);
+    num_node.append_attribute("loext:num-list-format") = fmt::format("%{}%.", s.m_level).c_str();
     num_node.append_attribute("style:num-format") =
-        fmt::format("{}", static_cast<char>(s.m_format));
+        fmt::format("{}", static_cast<char>(s.m_format)).c_str();
     num_node.append_attribute("text:start-value") = s.m_start_from;
     num_node.append_attribute("style:num-suffix") = s.m_num_suffix.c_str();
     num_node.append_attribute("style:num-prefix") = s.m_num_prefix.c_str();
-
     // TODO: serialize optional props
 }
 void write_xml(pugi::xml_node &n, const text_props &tp)
@@ -342,7 +362,7 @@ void write_xml(pugi::xml_node &n, const text_props &tp)
 
     if(tp.m_font_size)
         text_props_node.append_attribute("fo:font-size") =
-            fmt::format("{}pt", tp.m_font_size->m_points);
+            fmt::format("{}pt", tp.m_font_size->m_points).c_str();
 
     if(tp.m_font_style)
         text_props_node.append_attribute("fo:font-style") =
@@ -435,4 +455,4 @@ std::string to_string(break_type b)
     default: return {};
     }
 }
-}
+} // namespace docsmith::odt

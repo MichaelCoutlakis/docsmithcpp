@@ -46,8 +46,6 @@ enum class align_vert
     below
 };
 
-class list;
-
 class style_name
 {
 public:
@@ -78,6 +76,7 @@ public:
     {
     }
     const std::string &get_name() const { return m_font_name; }
+    bool operator==(const font_name &rhs) const = default;
 
 private:
     std::string m_font_name;
@@ -101,6 +100,7 @@ struct font_size
         m_points{points}
     {
     }
+    bool operator==(const font_size &rhs) const = default;
     float m_points;
 };
 
@@ -108,6 +108,7 @@ struct dim
 {
     double m_num;
     std::string m_unit;
+    bool operator==(const dim &rhs) const = default;
 };
 
 struct text_props
@@ -133,6 +134,8 @@ struct text_props
         m_font_name = fn;
         return *this;
     }
+    bool operator==(const text_props &rhs) const = default;
+
     std::optional<font_size> m_font_size;
     std::optional<font_style> m_font_style;
     std::optional<font_name> m_font_name;
@@ -159,8 +162,8 @@ enum class break_type
 };
 
 // clang-format off
-struct break_before { break_type m_break_type; };
-struct break_after { break_type m_break_type; };
+struct break_before { break_type m_break_type; bool operator==(const break_before&) const = default; };
+struct break_after { break_type m_break_type; bool operator==(const break_after&) const = default; };
 // clang-format on
 
 class paragraph_props
@@ -182,6 +185,8 @@ public:
         m_break_after = b;
         return *this;
     }
+    bool operator==(const paragraph_props &rhs) const = default;
+
     std::optional<break_before> m_break_before;
     std::optional<break_after> m_break_after;
 };
@@ -205,6 +210,8 @@ public:
         m_vert_pos = v;
         return *this;
     }
+    bool operator==(const graphics_props &rhs) const = default;
+
     std::optional<align_horiz> m_horiz_pos;
     std::optional<align_vert> m_vert_pos;
 };
@@ -237,6 +244,8 @@ public:
         return *this;
     }
     operator style_name() const { return m_name; }
+    bool operator==(const style &rhs) const = default;
+
     style_name m_name;
     style_name m_parent_style;
     std::optional<graphics_props> m_graphics_props;
@@ -244,45 +253,26 @@ public:
     std::optional<paragraph_props> m_paragraph_props;
 };
 
-inline constexpr std::string get_style_name(const style &s) { return s.m_name.get_name(); }
+inline std::string get_style_name(const style &s) { return s.m_name.get_name(); }
 
 using style_registry = named_registry<style, get_style_name>;
 
-class styled_base
-{
-public:
-    virtual ~styled_base() = default;
-    virtual void style(style_name) = 0;
-    virtual const style_name &style() const = 0;
-};
-
+/// CRTP mixin giving a node a style name plus a fluent set_style(). It is a
+/// plain code-sharing base (no virtuals, no shared root), not the polymorphic
+/// plumbing the old design used. A derived type's defaulted operator== compares
+/// this base subobject, so style equality composes automatically.
 template <typename Derived>
-class styled : public styled_base
+struct styled
 {
-public:
-    styled() = default;
-    explicit styled(style_name sn) :
-        m_style_name(std::move(sn))
-    {
-    }
+    style_name style;
+
     Derived &set_style(style_name sn)
     {
-        m_style_name = std::move(sn);
+        style = std::move(sn);
         return static_cast<Derived &>(*this);
     }
 
-    template <typename HasStyle>
-    Derived &set_style(const styled<HasStyle> &has_style)
-    {
-        return set_style(style_name(has_style.get_style()));
-    }
-    const style_name &get_style() const { return m_style_name; }
-
-    void style(style_name sn) override { set_style(sn); }
-    const style_name &style() const override { return get_style(); }
-
-private:
-    style_name m_style_name;
+    bool operator==(const styled &) const = default;
 };
 
-};
+} // namespace docsmith

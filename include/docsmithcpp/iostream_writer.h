@@ -1,4 +1,4 @@
-﻿/******************************************************************************
+/******************************************************************************
  * Copyright 2025 Michael Coutlakis
  *
  * SPDX-License-Identifier: Apache-2.0
@@ -16,101 +16,122 @@
  * limitations under the License.
  *****************************************************************************/
 #pragma once
-#include "docsmithcpp/text_doc.h"
 #include <format>
 #include <ostream>
+#include <variant>
+
+#include "docsmithcpp/text_doc.h"
 
 namespace docsmith
-
 {
-class io_writer : public element_visitor
+/// A debug printer for the document tree. It is just a set of operator()
+/// overloads driven by std::visit -- no element_visitor base class, and the
+/// node types know nothing about it.
+class io_writer
 {
 public:
     explicit io_writer(std::ostream &os) :
         m_os(os)
     {
     }
-    void visit(const text_doc &d) override { print_line("Text Doc:"); }
 
-    void visit(const heading &h) override { print_line("Heading: level {}", h.level()); }
-
-    void visit(const paragraph &p) override { print_line("Paragraph"); }
-
-    void visit(const span &s) override { print_line("Span:"); }
-
-    void visit(const hyperlink &href) { print_line("Hyperlink: {}", href.get_url()); }
-
-    void visit(const text &t) override { print_line("Text: {}", t.m_text); }
-
-    void visit(const class list &l) override
+    void operator()(const text_doc &d)
     {
-        print_line("List: Style {}", l.get_style().get_name());
+        line("Text Doc:");
+        ++m_indent;
+        for(const auto &b : d.body)
+            (*this)(b);
+        --m_indent;
     }
 
-    void visit(const class list_item &li) override { print_line("List Item:"); }
+    void operator()(const block_node &b) { std::visit(*this, b.v); }
+    void operator()(const inline_node &i) { std::visit(*this, i.v); }
 
-    void visit(const class list_style_num &s) override
+    void operator()(const paragraph &p)
     {
-        print_line("List Style Numbered: format: {} suffix: {} start from: {}",
-            static_cast<char>(s.m_format),
-            s.m_num_suffix,
-            s.m_start_from);
+        line("Paragraph: style={}", p.style.get_name());
+        kids(p.children());
     }
-    void visit(const class list_style_bullet &s) override
+    void operator()(const heading &h)
     {
-        print_line("List Style Bullet: bullet {}", s.m_bullet_char);
+        line("Heading: level {}", h.level);
+        kids(h.children());
+    }
+    void operator()(const span &s)
+    {
+        line("Span: style={}", s.style.get_name());
+        kids(s.children());
+    }
+    void operator()(const hyperlink &h)
+    {
+        line("Hyperlink: {}", h.url);
+        kids(h.children());
+    }
+    void operator()(const text &t) { line("Text: {}", t.content); }
+    void operator()(const frame &f)
+    {
+        line("Frame: style={}", f.style.get_name());
+        ++m_indent;
+        (*this)(f.img);
+        --m_indent;
+    }
+    void operator()(const image &i) { line("Image: uri={}", i.uri); }
+    void operator()(const bookmark &b) { line("Bookmark: name={}", b.name); }
+    void operator()(const unknown &) { line("Unknown (pass-through)"); }
+
+    void operator()(const list &l)
+    {
+        line("List: style {}", l.style.get_name());
+        ++m_indent;
+        for(const auto &it : l.items())
+            (*this)(it);
+        --m_indent;
+    }
+    void operator()(const list_item &it)
+    {
+        line("List Item:");
+        ++m_indent;
+        for(const auto &b : it.children())
+            (*this)(b);
+        --m_indent;
     }
 
-    void visit(const class frame &f) override { print_line("Frame"); }
-
-    void visit(const class image &i) override { print_line("Image: uri={}", i.get_uri()); }
-
-    void visit(const class bookmark &b) override { print_line("Bookmark: name={}", b.m_name); }
-
-    void visit(const table_cell &c) override
+    void operator()(const table &t)
     {
-        print_line("rowspan={}, colspan={}", c.rowspan(), c.colspan());
-        //c.accept(*this);
-    }
-    void visit(const table &t) override
-    {
-        print_line("Table: ({}x{})", t.num_rows(), t.num_cols());
-
+        line("Table: ({}x{})", t.num_rows(), t.num_cols());
+        ++m_indent;
         for(size_t r = 0; r != t.num_rows(); ++r)
-        {
-            // auto row = t.row(r);
-            // row.at(
             for(size_t c = 0; c != t.num_cols(); ++c)
-            {
-                auto &cell = t.cell(r, c);
-                print_line("Cell ({}, {})", r, c);
-                push();
-                //visit(t.cell(r, c));
-                t.cell(r, c).accept(*this);
-                pop();
-            }
-        }
+                (*this)(t.cell(r, c));
+        --m_indent;
     }
-
-    void push() override { m_indent += 2; }
-
-    void pop() override { m_indent -= 2; }
-
-    template <typename Unhandled>
-    void operator()(const Unhandled &unhandled)
+    void operator()(const table_cell &c)
     {
-        m_os << "Unhandled: " << typeid(unhandled).name() << "\n";
+        line("Cell: rowspan={}, colspan={}", c.rowspan, c.colspan);
+        ++m_indent;
+        for(const auto &b : c.children())
+            (*this)(b);
+        --m_indent;
     }
 
 private:
-    std::ostream &m_os;
-    int m_indent{0};
+    template <typename Kids>
+    void kids(const Kids &ks)
+    {
+        ++m_indent;
+        for(const auto &k : ks)
+            (*this)(k);
+        --m_indent;
+    }
 
     template <typename... Args>
-    void print_line(std::format_string<Args...> fmt, Args &&...args)
+    void line(std::format_string<Args...> fmt, Args &&...args)
     {
-        m_os << get_indent() << std::format(fmt, std::forward<Args>(args)...) << "\n";
+        m_os << std::string(m_indent * 2, ' ') << std::format(fmt, std::forward<Args>(args)...)
+             << '\n';
     }
-    std::string get_indent() const { return std::string(m_indent, ' '); }
+
+    std::ostream &m_os;
+    int m_indent{0};
 };
-}
+} // namespace docsmith

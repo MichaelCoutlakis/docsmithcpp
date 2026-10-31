@@ -1,0 +1,41 @@
+{
+    "version": 6,
+    "configurePresets": [
+        {
+            "name": "base",
+            "hidden": true,
+            "binaryDir": "${sourceDir}/build/${presetName}",
+            "cacheVariables": {
+                "CMAKE_CXX_STANDARD": "20"
+            }
+        },
+        {
+            "name": "dev-config",
+            "hidden": true,
+            "inherits": "base",
+            "cacheVariables": {
+                "BUILD_TESTING": "ON",
+                "BUILD_EXAMPLES": "ON",
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
+        },
+        {
+            "name": "ci-config",
+            "hidden": true,
+            "inherits": "base",
+            "cacheVariables": {
+                "BUILD_TESTING": "ON",
+                "BUILD_EXAMPLES": "OFF"
+            }
+        },
+        {
+            "name": "release-config",
+            "hidden": true,
+            "inherits": "base",
+            "cacheVariables": {
+                "BUILD_TESTING": "OFF",
+                "BUILD_EXAMPLES": "OFF"
+            }
+        }
+    ]
+}

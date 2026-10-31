@@ -6,7 +6,7 @@ CheckOptions:
 
   # Member variable naming
   - { key: readability-identifier-naming.MemberCase,           value: snake_case }
-  - { key: readability-identifier-naming.MemberPrefix,         value: m_ }
+  #- { key: readability-identifier-naming.MemberPrefix,         value: m_ }
 
   # Static member variable naming
   - { key: readability-identifier-naming.StaticMemberCase,     value: snake_case }

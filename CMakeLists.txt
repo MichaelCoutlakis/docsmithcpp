@@ -1,9 +1,17 @@
 cmake_minimum_required(VERSION 3.20)
+
+
+
+
 project(DocSmithCpp VERSION 0.1.0 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 20)
 
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+message("CMAKE_PREFIX_PATH: ${CMAKE_PREFIX_PATH}")
+#list(APPEND CMAKE_PREFIX_PATH "C:/lib/vcpkg/installed/x64-windows-static/share/AudioFile")
+message("CMAKE_TOOLCHAIN_FILE: ${CMAKE_TOOLCHAIN_FILE}")
 
 add_compile_options("$<$<C_COMPILER_ID:MSVC>:/utf-8>")
 add_compile_options("$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
@@ -11,7 +19,8 @@ add_compile_options("$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
 # Options
 option(BUILD_SHARED_LIBS "Build shared libraries" OFF)
 option(DOCSMITHCPP_BUILD_TESTS "Build unit tests" OFF)
-option(DOCSMITHCPP_BUILD_MINIMAL_USAGE "Build only minimual main demonstrating usage" ON)
+option(DOCSMITHCPP_BUILD_MINIMAL_USAGE "Build only minimal main demonstrating usage" ON)
+option(DOCSMITHCPP_BUILD_EXAMPLES "Build examples" OFF)
 
 # Output directories
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
@@ -47,3 +56,8 @@ configure_package_config_file(
 
 install(FILES "${CMAKE_CURRENT_BINARY_DIR}/DocSmithCppConfig.cmake"
         DESTINATION lib/cmake/DocSmithCpp)
+
+
+if(DOCSMITHCPP_BUILD_EXAMPLES)
+    add_subdirectory(examples)
+endif()

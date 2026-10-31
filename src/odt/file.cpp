@@ -1,4 +1,4 @@
-﻿/******************************************************************************
+/******************************************************************************
  * Copyright 2025 Michael Coutlakis
  *
  * SPDX-License-Identifier: Apache-2.0
@@ -15,249 +15,185 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *****************************************************************************/
-#include <iostream>
-#include <map>
 #include <optional>
 #include <sstream>
-#include <stack>
+#include <string>
+#include <vector>
 
-#include <fmt/format.h>
 #include <libzippp/libzippp.h>
 #include <pugixml.hpp>
 
 #include "docsmithcpp/odt/file.h"
 #include "docsmithcpp/odt/writer.h"
-#include "docsmithcpp/parser.h"
+
 namespace docsmith
 {
-using block_factory =
-    std::map<std::string, std::function<std::unique_ptr<element>(pugi::xml_node &node)>>;
-
 namespace odt
 {
-
-hyperlink make_hyperlink(pugi::xml_node &node)
-{
-    style_name sn(node.attribute("text:style-name").as_string());
-    std::string url(node.attribute("xlink:href").as_string());
-    return hyperlink(url);
-}
-
-span make_span(pugi::xml_node &node)
-{
-    style_name sn(node.attribute("text:style-name").as_string());
-    return span{}.set_style(sn);
-}
-
-paragraph make_paragraph(pugi::xml_node &node)
-{
-    style_name sn(node.attribute("text:style-name").as_string());
-    return paragraph{}.set_style(sn);
-}
-
-heading make_heading(pugi::xml_node &node)
-{
-    int level = node.attribute("text:outline-level").as_int();
-    style_name sn(node.attribute("text:style-name").as_string());
-    return heading(level);
-}
-
-list make_list(pugi::xml_node &node)
-{
-    style_name sn(node.attribute("text:style-name").as_string());
-    return list().set_style(sn);
-}
-
-list_item make_list_item(pugi::xml_node &node) { return list_item(); }
-
-frame make_frame(pugi::xml_node &node)
-{
-    style_name sn(node.attribute("draw:style-name").as_string());
-    return frame().set_style(sn);
-}
-
-image make_image(pugi::xml_node &node)
+namespace
 {
 
-    image i(node.attribute("xlink:href").as_string());
-    return i;
+/// Serialize an XML subtree verbatim so it can be re-emitted unchanged.
+std::string serialize(const pugi::xml_node &node)
+{
+    std::ostringstream ss;
+    node.print(ss, "", pugi::format_raw);
+    return ss.str();
 }
 
-table make_table(pugi::xml_node &node)
+style_name style_of(const pugi::xml_node &node, const char *attr)
+{
+    return style_name(node.attribute(attr).as_string());
+}
+
+std::vector<inline_node> parse_inline_children(const pugi::xml_node &node);
+std::vector<block_node> parse_block_children(const pugi::xml_node &node);
+std::optional<block_node> parse_block(const pugi::xml_node &node);
+
+image parse_image(const pugi::xml_node &node) { return image{node.attribute("xlink:href").as_string()}; }
+
+frame parse_frame(const pugi::xml_node &node)
+{
+    frame f;
+    f.style = style_of(node, "draw:style-name");
+    if(auto img = node.child("draw:image"))
+        f.img = parse_image(img);
+    return f;
+}
+
+inline_node parse_inline(const pugi::xml_node &node)
+{
+    std::string tag = node.name();
+
+    if(tag == "text:span")
+    {
+        span s;
+        s.style = style_of(node, "text:style-name");
+        s.children() = parse_inline_children(node);
+        return inline_node{std::move(s)};
+    }
+    if(tag == "text:a")
+    {
+        hyperlink h(node.attribute("xlink:href").as_string());
+        h.children() = parse_inline_children(node);
+        return inline_node{std::move(h)};
+    }
+    if(tag == "draw:frame")
+        return inline_node{parse_frame(node)};
+    if(tag == "text:bookmark" || tag == "text:bookmark-start")
+        return inline_node{bookmark{node.attribute("text:name").as_string()}};
+
+    return inline_node{unknown{serialize(node)}};
+}
+
+std::vector<inline_node> parse_inline_children(const pugi::xml_node &node)
+{
+    std::vector<inline_node> out;
+    for(auto child : node.children())
+    {
+        if(child.type() == pugi::node_pcdata)
+            out.push_back(inline_node{text{child.value()}});
+        else if(child.type() == pugi::node_element)
+            out.push_back(parse_inline(child));
+    }
+    return out;
+}
+
+table parse_table(const pugi::xml_node &node)
 {
     table t;
+
+    auto parse_rows_in = [&t](const pugi::xml_node &container, auto &&self) -> void
+    {
+        for(auto child : container.children())
+        {
+            std::string tag = child.name();
+            if(tag == "table:table-header-rows")
+                self(child, self); // flatten header rows into the body
+            else if(tag == "table:table-row")
+            {
+                std::vector<table_cell> row;
+                for(auto cell_node : child.children())
+                {
+                    std::string ct = cell_node.name();
+                    if(ct == "table:table-cell")
+                    {
+                        table_cell c;
+                        c.rowspan = cell_node.attribute("table:number-rows-spanned").as_int(1);
+                        c.colspan = cell_node.attribute("table:number-columns-spanned").as_int(1);
+                        c.style = style_of(cell_node, "table:style-name");
+                        c.children() = parse_block_children(cell_node);
+                        row.push_back(std::move(c));
+                    }
+                    else if(ct == "table:covered-table-cell")
+                        row.push_back(table_cell{}); // placeholder for a spanned-over slot
+                }
+                t.rows.push_back(std::move(row));
+            }
+        }
+    };
+    parse_rows_in(node, parse_rows_in);
     return t;
 }
 
-table_cell make_table_cell(pugi::xml_node &node)
+list parse_list(const pugi::xml_node &node)
 {
-    table_cell c;
-    c.rowspan() = node.attribute("table:number-rows-spanned").as_ullong(1U);
-    c.colspan() = node.attribute("table:number-columns-spanned").as_ullong(1U);
-
-    return c;
+    list l;
+    l.style = style_of(node, "text:style-name");
+    for(auto item_node : node.children("text:list-item"))
+    {
+        list_item it;
+        it.children() = parse_block_children(item_node);
+        l.items().push_back(std::move(it));
+    }
+    return l;
 }
 
-template <typename T>
-std::function<std::unique_ptr<element>(pugi::xml_node &)> wrap_factory(
-    std::function<T(pugi::xml_node &)> make_object)
+std::optional<block_node> parse_block(const pugi::xml_node &node)
 {
-    return [make_object](pugi::xml_node &node) { return std::make_unique<T>(make_object(node)); };
+    std::string tag = node.name();
+
+    if(tag == "text:p")
+    {
+        paragraph p;
+        p.style = style_of(node, "text:style-name");
+        p.children() = parse_inline_children(node);
+        return block_node{std::move(p)};
+    }
+    if(tag == "text:h")
+    {
+        heading h(node.attribute("text:outline-level").as_int(1));
+        h.style = style_of(node, "text:style-name");
+        h.children() = parse_inline_children(node);
+        return block_node{std::move(h)};
+    }
+    if(tag == "text:list")
+        return block_node{parse_list(node)};
+    if(tag == "table:table")
+        return block_node{parse_table(node)};
+    if(tag == "draw:frame")
+        return block_node{parse_frame(node)};
+
+    return block_node{unknown{serialize(node)}};
 }
 
-block_factory factory = {
-    {"text:p", wrap_factory<paragraph>(make_paragraph)},
-    {"text:h", wrap_factory<heading>(make_heading)},
-    {"text:span", wrap_factory<span>(make_span)},
-    {"text:a", wrap_factory<hyperlink>(make_hyperlink)},
-    {"text:list", wrap_factory<list>(make_list)},
-    {"text:list-item", wrap_factory<list_item>(make_list_item)},
-    {"draw:frame", wrap_factory<frame>(make_frame)},
-    {"draw:image", wrap_factory<image>(make_image)},
-    {"table:table", wrap_factory<table>(make_table)},
-    {"table:table-cell", wrap_factory<table_cell>(make_table_cell)},
-};
+std::vector<block_node> parse_block_children(const pugi::xml_node &node)
+{
+    std::vector<block_node> out;
+    for(auto child : node.children())
+        if(child.type() == pugi::node_element)
+            if(auto b = parse_block(child))
+                out.push_back(std::move(*b));
+    return out;
 }
+
+} // namespace
+} // namespace odt
 
 odt_file::odt_file(const std::string &filename) :
     m_filename(filename)
 {
 }
-const char *node_types[] = {
-    "null", "document", "element", "pcdata", "cdata", "comment", "pi", "declaration"};
-
-struct parser
-{
-    parser(const block_factory &factory) :
-        m_factory(factory)
-    {
-    }
-    void traverse(pugi::xml_node &node)
-    {
-        for(auto &child : node.children())
-        {
-            handle_node(child);
-        }
-    }
-    text_doc get() { return m_doc; }
-
-private:
-    void handle_node(pugi::xml_node &node)
-    {
-        auto tag = std::string(node.name());
-        std::cout << "Processing tag " << tag << "\n";
-
-        if(auto it = m_factory.find(tag); it != m_factory.end())
-        {
-            m_blocks.push(context{it->second(node)});
-            handle_child_nodes(node);
-
-            // This level is now complete:
-            complete_level();
-            // auto completed_ctx = std::move(ctx());
-            // m_blocks.pop();
-            // if(!m_blocks.empty())
-            //{
-            //     if(current()->is_type(elem_t::tbl))
-            //         add_to_table(std::move(completed_ctx.m_elem));
-            //     else
-            //         current()->add_child(std::move(completed_ctx.m_elem));
-            // }
-            // else
-            //     m_doc.add_child(std::move(completed_ctx.m_elem));
-        }
-        else if(handle_table_nodes(node))
-            std::cout << "table node handled\n";
-        else
-            std::cout << "Tag " << tag << " is not handled\n";
-    }
-
-    void handle_child_nodes(pugi::xml_node &node)
-    {
-        for(auto child : node.children())
-        {
-            if(child.type() == pugi::node_pcdata)
-            {
-                m_blocks.top().m_elem->add_child(
-                    std::make_unique<text>(std::string(child.value())));
-            }
-            else
-            {
-                // Recursion:
-                handle_node(child);
-            }
-        }
-    }
-
-    bool handle_table_nodes(pugi::xml_node &node)
-    {
-        if(!has_ctx() || !current()->is_type(elem_t::tbl))
-            return false;
-
-        // We are in a table, check for table elements like table:table-header-rows
-        auto tag = std::string(node.name());
-        auto t = current()->as<table>();
-
-        if(tag == "table:table-header-rows")
-            ctx().m_tbl_ctx.m_num_header_rows++;
-        else if(tag == "table:table-row")
-            // ctx().m_tbl_ctx.m_row_idx++;
-            t->add_row();
-        else
-            return false;
-
-        handle_child_nodes(node);
-        return true;
-        // else if(tag == "
-    }
-
-    void complete_level()
-    {
-        auto completed_ctx = std::move(ctx());
-        m_blocks.pop();
-        if(!m_blocks.empty())
-        {
-            // Handle table cells differently
-            if(current()->is_type(elem_t::tbl) && completed_ctx.m_elem->is_type(elem_t::cell))
-            {
-                auto t = current()->as<table>();
-                auto cell = dynamic_cast<table_cell *>(completed_ctx.m_elem.release());
-                if(!cell)
-                    throw std::runtime_error("parse table / cell logic broken");
-
-                t->add_cell(std::move(*cell));
-            }
-            else
-                current()->add_child(std::move(completed_ctx.m_elem));
-        }
-        else
-            m_doc.add_child(std::move(completed_ctx.m_elem));
-    }
-
-    struct table_context
-    {
-        size_t m_num_header_rows{};
-        size_t m_row_idx{};
-        // size_t m_col_idx{};
-    };
-
-    /// Additional parser context:
-    struct context
-    {
-        std::unique_ptr<element> m_elem;
-        table_context m_tbl_ctx{};
-    };
-
-    context &ctx() { return m_blocks.top(); }
-    bool has_ctx() { return !m_blocks.empty(); }
-
-    std::unique_ptr<element> &current() { return ctx().m_elem; }
-
-    block_factory m_factory;
-    // std::stack<std::unique_ptr<element>> m_blocks;
-    std::stack<context> m_blocks;
-    text_doc m_doc;
-};
 
 text_doc odt_file::parse_text_doc()
 {
@@ -266,7 +202,6 @@ text_doc odt_file::parse_text_doc()
         throw std::runtime_error("Could not open archive");
 
     auto content = zip.getEntry("content.xml");
-
     if(content.isNull())
         throw std::runtime_error("Could not open content.xml");
 
@@ -276,15 +211,14 @@ text_doc odt_file::parse_text_doc()
     if(!xml.load_string(content_xml.c_str()))
         throw std::runtime_error("Failed to parse the content.xml");
 
-    auto doc_node = xml.child("office:document-content").child("office:body").child("office:text");
+    auto text_node =
+        xml.child("office:document-content").child("office:body").child("office:text");
 
-    doc_node.children();
-
-    parser p(odt::factory);
-    p.traverse(doc_node);
-
-    return p.get();
+    text_doc doc;
+    doc.body = odt::parse_block_children(text_node);
+    return doc;
 }
 
 void odt_file::save(const text_doc &doc) { odt::writer::write(doc, m_filename); }
-}
+
+} // namespace docsmith

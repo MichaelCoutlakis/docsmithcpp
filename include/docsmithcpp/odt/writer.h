@@ -17,7 +17,7 @@
  *****************************************************************************/
 #pragma once
 #include <set>
-#include <stack>
+#include <string>
 
 #include <libzippp/libzippp.h>
 #include <pugixml.hpp>
@@ -28,7 +28,6 @@ namespace docsmith::odt
 {
 
 void write_xml(pugi::xml_node &n, const style_name &sn);
-
 void write_xml(pugi::xml_node &n, const style &s);
 void write_xml(pugi::xml_node &n, const list_style &ls);
 void write_xml(pugi::xml_node &n, const list_style_bullet &b);
@@ -36,60 +35,49 @@ void write_xml(pugi::xml_node &n, const list_style_num &b);
 void write_xml(pugi::xml_node &n, const text_props &props);
 void write_xml(pugi::xml_node &n, const paragraph_props &props);
 
-class writer : private element_visitor
+/// Serializes a text_doc to an .odt archive. Traversal is plain recursion over
+/// the node variants (std::visit) -- each emit() appends to the parent XML node
+/// it is handed and recurses into the node's children.
+class writer
 {
 public:
     static void write(const text_doc &doc, const std::string &filename);
 
 private:
-    void visit(const class text &) override;
-    void visit(const class span &) override;
+    writer();
 
-    void visit(const class heading &) override;
-    void visit(const class paragraph &) override;
+    void write_doc(const text_doc &doc);
+    void write_block(pugi::xml_node parent, const block_node &b);
+    void write_inline(pugi::xml_node parent, const inline_node &i);
 
-    void visit(const class hyperlink &) override;
-    void visit(const class text_doc &) override;
-
-    void visit(const class list &) override;
-    void visit(const class list_item &) override;
-    void visit(const class list_style_num &) override;
-    void visit(const class list_style_bullet &) override;
-
-    void visit(const class frame &) override;
-    void visit(const class image &) override;
-
-    void visit(const class bookmark &) override;
-
-     void visit(const table_cell &) override;
-     void visit(const table &) override;
-
-    void push() override;
-    void pop() override;
-
-private:
-    std::string m_filename;
+    void emit(pugi::xml_node parent, const paragraph &p);
+    void emit(pugi::xml_node parent, const heading &h);
+    void emit(pugi::xml_node parent, const span &s);
+    void emit(pugi::xml_node parent, const hyperlink &h);
+    void emit(pugi::xml_node parent, const text &t);
+    void emit(pugi::xml_node parent, const frame &f);
+    void emit(pugi::xml_node parent, const image &i);
+    void emit(pugi::xml_node parent, const bookmark &b);
+    void emit(pugi::xml_node parent, const unknown &u);
+    void emit(pugi::xml_node parent, const list &l);
+    void emit(pugi::xml_node parent, const list_item &it);
+    void emit(pugi::xml_node parent, const table &t);
+    void emit(pugi::xml_node parent, const table_cell &c);
 
     struct archive_item
     {
         std::string m_source; //!< Source on the filesystem
         std::string m_dest;   //!< Destination within the archive
         std::string m_type;   //!< Type, e.g. "image/png"
-        constexpr bool operator<(const archive_item &rhs) const { return m_source < rhs.m_source; }
+        bool operator<(const archive_item &rhs) const { return m_source < rhs.m_source; }
     };
 
-    pugi::xml_document m_content;         //!< Content for content.xml. Owns underlying node memory
-    pugi::xml_node m_styles;              //!< Node for the office:styles
-    pugi::xml_node m_automatic_styles;    //!< Node for the office:automatic-styles
-    pugi::xml_document m_manifest;        //!< Content for manifest.xml
-    pugi::xml_node m_manifest_files_node; //!< Node containing mainifest file list
-    std::set<archive_item> m_pictures;    //!< Pictures to add to the archive
-
-    std::stack<pugi::xml_node> m_node_stack;
-
-    pugi::xml_node m_current;
-    pugi::xml_node get_current();
-
-    writer(std::string filename);
+    pugi::xml_document m_content;         //!< content.xml; owns underlying node memory
+    pugi::xml_node m_body;                //!< office:body
+    pugi::xml_node m_styles;              //!< office:styles
+    pugi::xml_node m_automatic_styles;    //!< office:automatic-styles
+    pugi::xml_document m_manifest;        //!< manifest.xml
+    pugi::xml_node m_manifest_files_node; //!< manifest file list
+    std::set<archive_item> m_pictures;    //!< pictures to add to the archive
 };
-}
+} // namespace docsmith::odt

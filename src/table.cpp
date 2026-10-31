@@ -16,74 +16,63 @@
  * limitations under the License.
  *****************************************************************************/
 
-#include "docsmithcpp/table.h"
+#include <stdexcept>
+
+#include "docsmithcpp/nodes.h"
 
 namespace docsmith
 {
 
-table::table(size_t rows, size_t cols)
+table::table(size_t num_rows, size_t num_cols)
 {
-    m_cells.resize(rows);
-    for(auto &row : m_cells)
-        row.resize(cols);
+    rows.resize(num_rows);
+    for(auto &row : rows)
+        row.resize(num_cols);
 }
 
 table table::from_cells(std::vector<std::vector<table_cell>> cells)
 {
-    // Determine num rows / col
-    size_t rows = cells.size();
     size_t cols = cells.empty() ? 0U : cells.front().size();
 
-    // Require each row to have the same number of columns: Empty cells that are spanned are still
-    // placed:
+    // Require each row to have the same number of columns. Empty cells that are
+    // spanned over are still placed.
     for(auto &row : cells)
         if(row.size() != cols)
             throw std::runtime_error("each row must have the same number of columns");
 
     table t;
-    t.m_cells = cells;
+    t.rows = std::move(cells);
     return t;
 }
 
 cell_view<table_cell> table::row(size_t row_idx)
 {
     std::vector<table_cell *> cells;
-    for(size_t col_idx{}; col_idx < num_cols(); col_idx += cell(row_idx, col_idx).colspan())
-        cells.push_back(&m_cells.at(row_idx).at(col_idx));
-
-    return cell_view<table_cell>(cells);
+    for(size_t col_idx{}; col_idx < num_cols(); col_idx += cell(row_idx, col_idx).colspan)
+        cells.push_back(&rows.at(row_idx).at(col_idx));
+    return cell_view<table_cell>(std::move(cells));
 }
 cell_view<table_cell> table::col(size_t col_idx)
 {
     std::vector<table_cell *> cells;
-    for(size_t row_idx{}; row_idx < num_rows(); row_idx += cell(row_idx, col_idx).rowspan())
-        cells.push_back(&m_cells.at(row_idx).at(col_idx));
-    return cell_view<table_cell>(cells);
+    for(size_t row_idx{}; row_idx < num_rows(); row_idx += cell(row_idx, col_idx).rowspan)
+        cells.push_back(&rows.at(row_idx).at(col_idx));
+    return cell_view<table_cell>(std::move(cells));
 }
 
 cell_view<const table_cell> table::row(size_t row_idx) const
 {
     std::vector<const table_cell *> cells;
-    for(size_t col_idx{}; col_idx < num_cols(); col_idx += cell(row_idx, col_idx).colspan())
-        cells.push_back(&m_cells.at(row_idx).at(col_idx));
-
-    return cell_view<const table_cell>(cells);
+    for(size_t col_idx{}; col_idx < num_cols(); col_idx += cell(row_idx, col_idx).colspan)
+        cells.push_back(&rows.at(row_idx).at(col_idx));
+    return cell_view<const table_cell>(std::move(cells));
 }
 cell_view<const table_cell> table::col(size_t col_idx) const
 {
     std::vector<const table_cell *> cells;
-    for(size_t row_idx{}; row_idx < num_rows(); row_idx += cell(row_idx, col_idx).rowspan())
-        cells.push_back(&m_cells.at(row_idx).at(col_idx));
+    for(size_t row_idx{}; row_idx < num_rows(); row_idx += cell(row_idx, col_idx).rowspan)
+        cells.push_back(&rows.at(row_idx).at(col_idx));
     return cell_view<const table_cell>(std::move(cells));
-}
-
-std::list<element *> table::children()
-{
-    std::list<element *> kids;
-    for(auto &r : m_cells)
-        for(auto &c : r)
-            kids.push_back(&c);
-    return kids;
 }
 
 bool table::is_cell_covered(size_t row, size_t col) const
@@ -91,18 +80,18 @@ bool table::is_cell_covered(size_t row, size_t col) const
     if(row >= num_rows() || col >= num_cols())
         throw std::out_of_range("table cell out of range");
 
-    // any of the preceeding cells (row or column wise) could cover the cell in question
+    // Any of the preceding cells (row- or column-wise) could cover this cell.
     for(size_t r = 0; r <= row; ++r)
     {
         for(size_t c = 0; c <= col; ++c)
         {
-            if(r + cell(r, c).rowspan() > row &&  // covered in the row dimension
-                c + cell(r, c).colspan() > col && // covered in the col dimension
-                !(r == row && c == col))          // don't compare cell to itself
+            if(r + static_cast<size_t>(cell(r, c).rowspan) > row && // covered row-wise
+                c + static_cast<size_t>(cell(r, c).colspan) > col && // covered col-wise
+                !(r == row && c == col))                             // not the cell itself
                 return true;
         }
     }
     return false;
 }
 
-}
+} // namespace docsmith

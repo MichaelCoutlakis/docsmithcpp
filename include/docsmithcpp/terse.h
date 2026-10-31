@@ -17,13 +17,13 @@
  *****************************************************************************/
 #pragma once
 
-#include "docsmithcpp/forward_decl.h"
+#include "docsmithcpp/nodes.h"
 
 namespace docsmith::terse
 {
+// Short aliases for the node value types.
 using par = paragraph;
 using tc = table_cell;
 using spn = span;
 using txt = text;
-
-}
+} // namespace docsmith::terse

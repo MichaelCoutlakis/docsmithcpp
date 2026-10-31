@@ -1,4 +1,4 @@
-﻿/******************************************************************************
+/******************************************************************************
  * Copyright 2025 Michael Coutlakis
  *
  * SPDX-License-Identifier: Apache-2.0
@@ -16,16 +16,14 @@
  * limitations under the License.
  *****************************************************************************/
 #pragma once
+#include <optional>
 #include <string>
 #include <variant>
+#include <vector>
 
-#include "docsmithcpp/element.h"
-#include "docsmithcpp/nodes.h"
-#include "docsmithcpp/style.h"
-#include "docsmithcpp/text.h"
-
-#include "docsmithcpp/forward_decl.h"
 #include "docsmithcpp/named_registry.h"
+#include "docsmithcpp/nodes_fwd.h"
+#include "docsmithcpp/style.h"
 
 namespace docsmith
 {
@@ -42,6 +40,8 @@ enum class list_enum : char
 /// Represents the formatting properties for a specific list level
 class list_level_props
 {
+public:
+    bool operator==(const list_level_props &) const = default;
 };
 
 /// Represents a text:list-level-style-number
@@ -58,6 +58,8 @@ public:
         m_style_name(s.m_name.get_name())
     {
     }
+    bool operator==(const list_style_num &) const = default;
+
     int m_level;                            //!< Nesting level to which this list style applies
     list_enum m_format;                     //!< Numbering format
     std::string m_num_prefix;               //!< Place before the number
@@ -85,6 +87,8 @@ public:
         m_style_name(assoc_style.m_name.get_name()), m_level(level), m_bullet_char(bullet_char)
     {
     }
+    bool operator==(const list_style_bullet &) const = default;
+
     style_name m_style_name;
     int m_level; //!< Nesting level to which this list style applies
     std::string m_bullet_char;
@@ -99,42 +103,54 @@ public:
     {
     }
     operator style_name() const { return m_name; }
+    bool operator==(const list_style &) const = default;
+
     style_name m_name;
     std::vector<level_style> m_level_styles;
 };
 
-constexpr std::string get_list_style_name(const list_style &ls) { return ls.m_name.get_name(); }
+inline std::string get_list_style_name(const list_style &ls) { return ls.m_name.get_name(); }
 using list_style_registry = named_registry<list_style, get_list_style_name>;
 
-class list_item : public element_base<list_item>,
-                  public nodes<list_item>,
-                  public elem_tagged<paragraph, elem_t::lit>
+// ---------------------------------------------------------------------------
+// List content nodes (block level)
+// ---------------------------------------------------------------------------
+class list_item : public has_children<block_node, list_item, true>
 {
 public:
-    using nodes::nodes;
-
-    /// List items don't contain raw text - must always be wrapped in a paragraph. This wrapping is
-    /// provided here for convenience.
-    list_item(std::string t);
-
-    bool operator==(const list_item &other) const
+    list_item() = default;
+    template <typename... Args, typename = content_ctor_t<list_item, Args...>>
+    list_item(Args &&...content)
     {
-        return compare_equality(m_children, other.m_children);
+        (this->add(std::forward<Args>(content)), ...);
     }
+
+    bool operator==(const list_item &) const = default;
 };
 
-class list : public element_base<list>,
-             public nodes<list>,
-             public styled<list>,
-             public elem_tagged<paragraph, elem_t::lst>
+class list : public styled<list>
 {
 public:
-    using nodes::nodes;
-
-    bool operator==(const list &other) const
+    list() = default;
+    template <typename... Args, typename = content_ctor_t<list, Args...>>
+    list(Args &&...items)
     {
-        return compare_equality(m_children, other.m_children);
+        (add(std::forward<Args>(items)), ...);
     }
+
+    list &add(list_item it)
+    {
+        m_items.push_back(std::move(it));
+        return *this;
+    }
+
+    std::vector<list_item> &items() { return m_items; }
+    const std::vector<list_item> &items() const { return m_items; }
+
+    bool operator==(const list &) const = default;
+
+private:
+    std::vector<list_item> m_items;
 };
 
-}
+} // namespace docsmith

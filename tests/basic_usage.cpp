@@ -16,40 +16,48 @@
  * limitations under the License.
  *****************************************************************************/
 
+#include <iostream>
+
 #include <gtest/gtest.h>
 
-#include "docsmithcpp/element.h"
 #include "docsmithcpp/iostream_writer.h"
 #include "docsmithcpp/odt/file.h"
 #include "docsmithcpp/text_doc.h"
 
 using namespace docsmith;
 
-#include <iostream>
-#include <string>
-#include <utility> // For std::move
-
-#include <pugixml.hpp>
-
 TEST(BASIC_USAGE, CreateDocument)
 {
-    text_doc doc;
+    text_doc doc{
+        paragraph(frame(image{"odt/smiley.png"}).set_style("fr1"), span("", "nested")),
+    };
 
-    // doc.add(paragraph(text{"Hello"}, span(style_name{}, span(style_name{}, text("Hello")))));
-    //paragraph p("Hello", "Goodbye");
-    paragraph p;
-    span s(kids{text(""), text{"nested"}});
-    // span s2("", text{"nested2"});
-    // s.add(s2);
-    p.add(frame(image("odt/smiley.png")).set_style("fr1"));
-    p.add(s);
-    doc.add(p);
-
-    std::cout << "\n\n";
     io_writer w(std::cout);
-    // doc.accept(w);
-    std::cout << "\n\n";
+    w(doc);
 
     odt_file f("odt/basic_generated.odt");
     f.save(doc);
+}
+
+TEST(BASIC_USAGE, ValueSemantics)
+{
+    // Deep copy + structural equality come for free -- no clone(), no is_equal().
+    text_doc doc{heading(1, "Title"), paragraph("body")};
+    text_doc copy = doc;
+    EXPECT_EQ(copy, doc);
+
+    std::get<heading>(copy.body.front().v).level = 2;
+    EXPECT_NE(copy, doc);
+}
+
+TEST(BASIC_USAGE, ChainedAdd)
+{
+    // Children are added via .add() (chainable); nesting a same-type node uses
+    // .add() too, so there is no copy-vs-child ambiguity.
+    auto h = heading(2).set_style("H2").add("Title ").add(span("emphasis"));
+    auto nested = span("outer ").add(span("inner"));
+
+    EXPECT_EQ(h.level, 2);
+    EXPECT_EQ(h.children().size(), 2U);
+    EXPECT_EQ(nested.children().size(), 2U);
 }

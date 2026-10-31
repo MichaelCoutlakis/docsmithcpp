@@ -1,4 +1,4 @@
-﻿/******************************************************************************
+/******************************************************************************
  * Copyright 2025 Michael Coutlakis
  *
  * SPDX-License-Identifier: Apache-2.0
@@ -16,191 +16,57 @@
  * limitations under the License.
  *****************************************************************************/
 #pragma once
-#include <list>
-#include <map>
-#include <memory>
-#include <optional>
-#include <stdexcept>
-#include <string>
-#include <type_traits>
-#include <variant>
+
+// The document root, plus the umbrella include for the whole model and its
+// traversal helpers.
+
 #include <vector>
 
-#include "docsmithcpp/element.h"
-#include "docsmithcpp/forward_decl.h"
 #include "docsmithcpp/list.h"
-#include "docsmithcpp/named_registry.h"
 #include "docsmithcpp/nodes.h"
 #include "docsmithcpp/style.h"
-#include "docsmithcpp/text.h"
 #include "docsmithcpp/table.h"
+#include "docsmithcpp/visit.h"
 
 namespace docsmith
 {
 
-template <typename Derived, elem_t TagType>
-class elem_tagged_nodes_styled : public element_base<Derived>,
-                                 public nodes<Derived>,
-                                 public styled<Derived>,
-                                 public elem_tagged<Derived, TagType>
-{
-    using nodes<Derived>::nodes;
-};
-
-class bookmark : public element_base<bookmark>, public elem_tagged<bookmark, elem_t::bookmark>
-{
-public:
-    explicit bookmark(std::string name) :
-        m_name(name)
-    {
-    }
-    bool operator==(const bookmark &rhs) const { return m_name == rhs.m_name; }
-    std::string m_name;
-};
-
-
-
-class span : public elem_tagged_nodes_styled<span, elem_t::spn>
-{
-public:
-    using elem_tagged_nodes_styled::elem_tagged_nodes_styled;
-
-    bool operator==(const span &rhs) const
-    {
-        return m_style_name == rhs.m_style_name && compare_equality(m_children, rhs.m_children);
-    }
-
-private:
-    style_name m_style_name;
-};
-
-
-
-class hyperlink : public element_base<hyperlink>,
-                  public nodes<hyperlink>,
-                  public elem_tagged<hyperlink, elem_t::href>
-{
-public:
-    template <typename... Args>
-    hyperlink(std::string url, Args &&...args) :
-        nodes<hyperlink>(std::forward<Args>(args)...), m_url(url)
-    {
-    }
-
-    std::string get_url() const { return m_url; }
-
-    bool operator==(const hyperlink &rhs) const
-    {
-        return m_url == rhs.m_url && compare_equality(m_children, rhs.m_children);
-    }
-
-private:
-    std::string m_url;
-};
-
-
-
-class image : public element_base<image>, public elem_tagged<image, elem_t::img>
-{
-public:
-    explicit image(std::string uri) :
-        m_uri(uri)
-    {
-    }
-
-    std::string get_uri() const { return m_uri; }
-
-    bool operator==(const image &rhs) const
-    {
-        bool b = m_uri == rhs.m_uri;
-        return b;
-    }
-
-private:
-    std::string m_uri;
-};
-
-class frame : public elem_tagged_nodes_styled<frame, elem_t::fr>
-{
-public:
-    using elem_tagged_nodes_styled::elem_tagged_nodes_styled;
-
-    bool operator==(const frame &other) const
-    {
-        return get_style() == other.get_style() && compare_equality(m_children, other.m_children);
-    }
-};
-
-
-
-class paragraph : public elem_tagged_nodes_styled<paragraph, elem_t::p>
-{
-public:
-    using elem_tagged_nodes_styled::elem_tagged_nodes_styled;
-
-    bool operator==(const paragraph &other) const
-    {
-        return get_style() == other.get_style() && compare_equality(m_children, other.m_children);
-    }
-
-private:
-};
-
-
-
-class heading : public element_base<heading>,
-                public nodes<heading>,
-                public styled<heading>,
-                public elem_tagged<heading, elem_t::h>
-{
-public:
-    template <typename... Args>
-    heading(int level, Args &&...args) :
-        nodes<heading>(std::forward<Args>(args)...), m_level(level)
-    {
-    }
-
-    int level() const { return m_level; }
-
-    bool operator==(const heading &other) const
-    {
-        return m_level == other.m_level && compare_equality(this->m_children, other.m_children);
-    }
-
-private:
-    int m_level{1};
-};
-
-
-
-class text_doc : public element_base<text_doc>,
-                 public nodes<text_doc>,
-                 public elem_tagged<text_doc, elem_t::doc>
+class text_doc
 {
 public:
     text_doc() = default;
 
-    template <typename... Args>
+    template <typename... Args, typename = content_ctor_t<text_doc, Args...>>
     text_doc(Args &&...args) :
-        nodes<text_doc>(std::forward<Args>(args)...)
+        body{to_block(std::forward<Args>(args))...}
     {
     }
 
-    bool operator==(const text_doc &other) const
+    text_doc &add(block_node b)
     {
-        return compare_equality(m_children, other.m_children);
+        body.push_back(std::move(b));
+        return *this;
     }
+    template <typename T>
+    text_doc &add(T &&content)
+    {
+        body.push_back(to_block(std::forward<T>(content)));
+        return *this;
+    }
+
+    // Equality is about content; the style registries are metadata.
+    bool operator==(const text_doc &other) const { return body == other.body; }
 
     style_registry &styles() { return m_styles; }
     const style_registry &styles() const { return m_styles; }
     list_style_registry &list_styles() { return m_list_styles; }
     const list_style_registry &list_styles() const { return m_list_styles; }
 
+    std::vector<block_node> body;
+
 private:
     style_registry m_styles;
     list_style_registry m_list_styles;
 };
-
-
 
 } // namespace docsmith

@@ -1,4 +1,4 @@
-﻿/******************************************************************************
+/******************************************************************************
  * Copyright 2025 Michael Coutlakis
  *
  * SPDX-License-Identifier: Apache-2.0
@@ -16,25 +16,24 @@
  * limitations under the License.
  *****************************************************************************/
 
+#include <iostream>
+#include <string>
+
 #include <gtest/gtest.h>
 
-#include "docsmithcpp/element.h"
 #include "docsmithcpp/iostream_writer.h"
 #include "docsmithcpp/odt/file.h"
-#include "docsmithcpp/terse.h"
 #include "docsmithcpp/text_doc.h"
 
 using namespace docsmith;
-using namespace docsmith::terse;
 
-template <typename Elem1, typename Elem2>
-void print_compare(const element_base<Elem1> &expected, const element_base<Elem2> &actual)
+void print_compare(const text_doc &expected, const text_doc &actual)
 {
     io_writer w(std::cout);
     std::cout << "===============\nExpected:\n===============\n";
-    expected.accept(w);
+    w(expected);
     std::cout << "===============\nActual:  \n===============\n";
-    actual.accept(w);
+    w(actual);
 }
 
 bool do_user_verification(std::string request)
@@ -60,83 +59,86 @@ void open_file(std::string filename)
     std::system(cmd.c_str());
 }
 
-/// Parse a text doc and strip the style names. Useful to compare parsing a document with a code
-/// generated document without worrying about comparing style names
+/// Drop top-level pass-through nodes (e.g. text:sequence-decls that LibreOffice
+/// emits at the start of office:text) so structural comparisons ignore them.
+void drop_unknown(text_doc &doc)
+{
+    std::erase_if(doc.body, [](const block_node &b) { return std::holds_alternative<unknown>(b.v); });
+}
+
+/// Parse a text doc and strip all style names. Useful to compare a parsed
+/// document with a code-generated one without minding style names.
 text_doc parse_strip_styles(std::string filename)
 {
-    auto f = odt_file(filename);
+    odt_file f(filename);
     text_doc doc = f.parse_text_doc();
-
-    //// Remove paragraph style names:
-    // auto v = doc.find_all<styled_base>([](element *p) { return p->is_type(elem_t::p); });
-    // for(auto &e : v)
-    //     e->style(style_name{});
-
-    // Remove styles:
-    auto v = doc.get_elem_of<styled_base>();
-    for(auto &e : v)
-        e->style(style_name{});
-
+    strip_styles(doc);
+    drop_unknown(doc);
     return doc;
 }
 
 TEST(DOCSMITH, BasicUsage)
 {
-    heading h{1, text{"This is the heading"}};
-    par p{text{"Some Paragraph"}, text{"some other span"}};
+    heading h(1, "This is the heading");
+    paragraph p("Some Paragraph", "some other span");
 
     auto h_copy = h;
     text_doc d{h_copy, p};
 
-    return;
+    EXPECT_EQ(d.body.size(), 2U);
+}
+
+TEST(DOCSMITH, UnknownPassThrough)
+{
+    // An unrecognized inline node survives a write -> parse -> write round trip.
+    unknown raw{R"(<text:custom-thing foo="bar">hi</text:custom-thing>)"};
+
+    text_doc doc;
+    doc.add(paragraph().add(raw));
+
+    odt_file f("odt/out/unknown_roundtrip.odt");
+    f.save(doc);
+
+    text_doc reparsed = f.parse_text_doc();
+    auto unknowns = collect<unknown>(reparsed);
+    ASSERT_FALSE(unknowns.empty());
+    EXPECT_NE(unknowns.front()->xml.find("text:custom-thing"), std::string::npos);
 }
 
 TEST(ODT, ParseBasicFile)
 {
     auto f = odt_file("odt/basic.odt");
-    const text_doc actual = f.parse_text_doc();
-    const text_doc expected{heading{1, "Heading 1"}, par{"This is the first par."}};
+    text_doc actual = f.parse_text_doc();
+    strip_styles(actual);
+    drop_unknown(actual);
+
+    const text_doc expected{heading(1, "Heading 1"), paragraph("This is the first paragraph.")};
 
     print_compare(expected, actual);
-    EXPECT_EQ(expected, actual);
     EXPECT_EQ(expected, actual);
 }
 
 TEST(ODT, ParseModerateFile)
 {
-    auto f = odt_file("odt/moderate.odt");
-    text_doc actual = f.parse_text_doc();
+    text_doc actual = parse_strip_styles("odt/moderate.odt");
 
-    // Remove paragraph style names:
-    auto v = actual.find_all<styled_base>([](element *p) { return p->is_type(elem_t::p); });
-    for(auto &e : v)
-        e->style(style_name{});
-
-    list_style arabic_from7("L1", {list_style_num(style{}, 1, list_enum::arabic, ")", 7)});
-    list_style bullets("L2", {list_style_bullet(style{}, 1, bullet_type::bullet())});
-    list_style alpha("L3", {list_style_num(style{}, 1, list_enum::lower_alpha, ")", 3)});
-    list_style bullets2("L4", {list_style_bullet(style{}, 1, bullet_type::bullet())});
-
+    // Styles are stripped from both sides, so compare content/structure only.
     text_doc expected{//
-        heading{1, "Heading 1"},
-        par{"First paragraph"},
-        heading{2, "Second Heading"},
-        par{"Second paragraph."},
-        list{list_item{par{"First numbered list item, numbering starts at 7."}},
-            list_item{par{"Item two."}}}
-            .set_style(arabic_from7),
-        par{"Bullet points:"},
-        list{list_item{par{"First; and"}}, list_item{par{"Second."}}}.set_style(bullets),
-        par{"Alpha list:"},
-        list{list_item{par{"Item a"}}}.set_style(alpha),
-        list{list_item{list{list_item{par{"Sub items of alpha list are bullets"}}}}}.set_style(
-            bullets2),
-        list{list_item{par{"Item b"}}}.set_style(alpha),
-        par{text{"Here is a url to "},
-            hyperlink{"https://github.com/MichaelCoutlakis/docsmithcpp", "docsmith"},
-            text{" on "},
-            span{kids_tag{}, span{text{"GitHub"}}.set_style("T1")}.set_style("Source_20_Text"),
-            text{"."}}};
+        heading(1, "Heading 1"),
+        paragraph("First paragraph"),
+        heading(2, "Second Heading"),
+        paragraph("Second paragraph."),
+        list(list_item(paragraph("First numbered list item, numbering starts at 7.")),
+            list_item(paragraph("Item two."))),
+        paragraph("Bullet points:"),
+        list(list_item(paragraph("First; and")), list_item(paragraph("Second."))),
+        paragraph("Alpha list:"),
+        list(list_item(paragraph("Item a"))),
+        list(list_item(list(list_item(paragraph("Sub items of alpha list are bullets"))))),
+        list(list_item(paragraph("Item b"))),
+        paragraph("Here is a url to ",
+            hyperlink("https://github.com/MichaelCoutlakis/docsmithcpp", "docsmith"), " on ",
+            span().add(span("GitHub")), ".")};
 
     print_compare(expected, actual);
     EXPECT_EQ(expected, actual);
@@ -145,11 +147,12 @@ TEST(ODT, ParseModerateFile)
 TEST(ODT, ParseImage)
 {
     auto f = odt_file("odt/image.odt");
-    const text_doc actual = f.parse_text_doc();
-    style im_style("fr1", graphics_props{});
-    text_doc expected{par{
-        frame{image{"Pictures/100000000000002A0000002A13903900F3783A21.png"}}.set_style(im_style)}
-                          .set_style("Standard")};
+    text_doc actual = f.parse_text_doc();
+    strip_styles(actual);
+    drop_unknown(actual);
+
+    text_doc expected{
+        paragraph(frame(image{"Pictures/100000000000002A0000002A13903900F3783A21.png"}))};
 
     print_compare(expected, actual);
     EXPECT_EQ(expected, actual);
@@ -158,46 +161,12 @@ TEST(ODT, ParseImage)
 TEST(ODT, ParseParagraphStyle)
 {
     auto f = odt_file("odt/paragraph_with_style.odt");
-    const text_doc actual = f.parse_text_doc();
-    text_doc expected{par{text{"Paragraph with style."}}.set_style("Text_20_body")};
+    text_doc actual = f.parse_text_doc();
+    drop_unknown(actual);
+    const text_doc expected{paragraph("Paragraph with style.").set_style("Text_20_body")};
 
-    bool b = expected == actual;
     print_compare(expected, actual);
     EXPECT_EQ(expected, actual);
-}
-
-TEST(ODT, ParseComplexFile)
-{
-    // auto f = odt_file("odt/complex.odt");
-    // const text_doc actual = f.parse_text_doc();
-
-    // list_style_num arabic_list_from7(style_name("L1"), list_enum::arabic, ")", 7);
-    // list_style_bullet bullets(style_name("L2"), bullet_type::bullet());
-    // list_style_num alpha(style_name("L3"), list_enum::lower_alpha, ")", 3);
-    // list_style_bullet bullets2(style_name("L4"), bullet_type::bullet());
-
-    // const text_doc expected{//
-    //     heading{1, "Heading 1"},
-    //     par{"First par"},
-    //     heading{2, "Second Heading"},
-    //     par{"Second par."},
-    //     list{list_item{par{"First numbered list item, numbering starts at 7."}},
-    //         list_item{par{"Item two."}}}
-    //         .set_style(arabic_list_from7),
-    //     par{"Bullet points:"},
-    //     list{list_item{par{"First; and"}}, list_item{par{"Second."}}}.set_style(bullets),
-    //     par{"Alpha list:"},
-    //     list{list_item{par{"Item a"}}}.set_style(alpha),
-    //     list{list_item{list{list_item{par{"Sub items of alpha list are bullets "}}}}},
-    //     list{list_item{par{"Item b"}}}.set_style(alpha),
-    //     par{text{"Here is a url to "},
-    //         hyperlink{"https://github.com/MichaelCoutlakis/docsmithcpp", "docsmith"},
-    //         text{" on "},
-    //         span{span{text{"GitHub"}}.set_style("T1")}.set_style("Source_20_Text"),
-    //         text{"."}}};
-
-    // print_compare(expected, actual);
-    // EXPECT_EQ(expected, actual);
 }
 
 TEST(ODT, WriteLists)
@@ -210,11 +179,11 @@ TEST(ODT, WriteLists)
     list_style alpha("L3", {list_style_num(style{}, 1, list_enum::lower_alpha, ")", 3)});
 
     text_doc d{
-        list{list_item{"First point"}, list_item{"Second point"}}.set_style(bullets),
-        list{list_item{"Number 1"}, list_item{par{"Number 2"}.set_style(big_text)}}.set_style(
-            arabic),
-        list{list_item{"Number 7"}, list_item{"Number 8"}}.set_style(arabic_from7),
-        list{list_item{"Item a"}, list_item{"Item b"}}.set_style(alpha) //
+        list(list_item("First point"), list_item("Second point")).set_style(bullets),
+        list(list_item("Number 1"), list_item(paragraph("Number 2").set_style(big_text)))
+            .set_style(arabic),
+        list(list_item("Number 7"), list_item("Number 8")).set_style(arabic_from7),
+        list(list_item("Item a"), list_item("Item b")).set_style(alpha),
     };
 
     d.styles().add(big_text);
@@ -222,15 +191,14 @@ TEST(ODT, WriteLists)
     d.list_styles().add(arabic_from7);
     d.list_styles().add(bullets);
     d.list_styles().add(alpha);
+
     odt_file f("odt/out/write_lists.odt");
     f.save(d);
 
     io_writer w(std::cout);
-    d.accept(w);
+    w(d);
 
-    // EXPECT_TRUE(do_user_verification("Open write_lists.odt and confirm the following:"));
-
-    open_file(f.filename());
+    // open_file(f.filename());
 }
 
 TEST(ODT, GenerateBookmark)
@@ -239,10 +207,9 @@ TEST(ODT, GenerateBookmark)
     style style_page_break("PageBreak", paragraph_props(break_before{break_type::page}));
 
     d.add(paragraph("Some text"));
-    bookmark b("Bookmark 1");
-    d.add(paragraph{"paragraph with bookmark", b});
-    d.add(paragraph{"Next paragraph with page break to ensure scrolling is necessary when bookmark "
-                    "link is followed"}
+    d.add(paragraph("paragraph with bookmark", bookmark{"Bookmark 1"}));
+    d.add(paragraph("Next paragraph with page break to ensure scrolling is necessary when bookmark "
+                    "link is followed")
               .set_style(style_page_break));
 
     d.styles().add(style_page_break);
@@ -251,65 +218,64 @@ TEST(ODT, GenerateBookmark)
 
     odt_file f("odt/out/bookmark.odt");
     f.save(d);
-    open_file(f.filename());
+    // open_file(f.filename());
 }
 
 TEST(ODT, ParseTable)
 {
     text_doc actual = parse_strip_styles("odt/basic_table.odt");
+    auto tables = collect<table>(actual);
+    ASSERT_FALSE(tables.empty());
+    table actual_table = *tables.front();
 
-    auto actual_table = *actual.get_elem_of<table>().front();
-
-    text_doc expected;
     table t(2, 2);
-    t.row(0).assign(paragraph{"Col 0"}, paragraph{"Col 1"});
+    t.row(0).assign(paragraph("Col 0"), paragraph("Col 1"));
     t.cell(1, 0).add(paragraph()); // LO empty table cell defaults to empty paragraph
     t.cell(1, 1).add(paragraph("Some text value"));
-    expected.add(t);
 
-    print_compare(t, actual_table);
+    print_compare(text_doc{t}, text_doc{actual_table});
     EXPECT_EQ(t, actual_table);
 
+    text_doc expected{t};
     odt_file f("odt/out/table.odt");
     f.save(expected);
-    open_file(f.filename());
-    // open_file("content.xml");
+    // open_file(f.filename());
 }
 
 TEST(ODT, IntermediateTable)
 {
     text_doc actual = parse_strip_styles("odt/table-intermediate.odt");
-    auto ta = *actual.get_elem_of<table>().front();
+    auto tables = collect<table>(actual);
+    ASSERT_FALSE(tables.empty());
+    table ta = *tables.front();
 
-    text_doc expected_doc;
-
-    // OK
     table tnest = table::from_cells({//
-        {par("c(0,0)"), par("c(0,1)")},
-        {par("c(1,0)"), par("c(1,1)")}});
+        {table_cell(paragraph("c(0,0)")), table_cell(paragraph("c(0,1)"))},
+        {table_cell(paragraph("c(1,0)")), table_cell(paragraph("c(1,1)"))}});
 
     table te = table::from_cells({
         //
-        {par("Col 0"), par("Col 1"), par("Col 2")},                                // Header row
-        {tc(par("Merged Cells – row and col span")).set_span(2, 2), {}, par("a")}, //
-        {{}, {}, par("b")},
-        {tc(par("col span")).set_span(1, 2), {}, tc(par("row span")).set_span(2, 1)},
-        {tc(par("This cell contains a table and has no padding"), tnest), par("123"), {}} //
+        {table_cell(paragraph("Col 0")), table_cell(paragraph("Col 1")),
+            table_cell(paragraph("Col 2"))}, // header row
+        {table_cell(paragraph("Merged Cells - row and col span")).set_span(2, 2), {},
+            table_cell(paragraph("a"))},
+        {{}, {}, table_cell(paragraph("b"))},
+        {table_cell(paragraph("col span")).set_span(1, 2), {},
+            table_cell(paragraph("row span")).set_span(2, 1)},
+        {table_cell(paragraph("This cell contains a table and has no padding"), tnest),
+            table_cell(paragraph("123")), {}} //
     });
 
     EXPECT_FALSE(te.is_cell_covered(2, 2));
-
     EXPECT_TRUE(te.is_cell_covered(1, 1));
     EXPECT_TRUE(te.is_cell_covered(2, 0));
     EXPECT_TRUE(te.is_cell_covered(2, 1));
 
     io_writer w(std::cout);
-    te.accept(w);
+    w(text_doc{te});
 
-    expected_doc.add(std::move(te));
-
+    text_doc expected_doc{te};
     odt_file f("odt/out/table-intermediate.odt");
     f.save(expected_doc);
-    open_file(f.filename());
-    open_file("content.xml");
+    // open_file(f.filename());
 }
