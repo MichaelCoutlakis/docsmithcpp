@@ -1,0 +1,197 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Copyright 2025 Michael Coutlakis
+  SPDX-License-Identifier: Apache-2.0
+
+  Natvis visualisers for the DocSmith++ document model (Visual Studio, and VS
+  Code's cppvsdbg / cppdbg via "visualizerFile").
+
+  They hide the plumbing between a node and its content: the variant member `.v`
+  of inline_node / block_node, the has_children base and its box<> around the
+  child vector. A node shows its own fields (style, level, url) and then its
+  children as [0], [1], ...
+
+  The entries read the MSVC STL's layouts (std::variant's _Which / _Head /
+  _Tail, std::vector's _Myfirst / _Mylast). With another standard library the
+  node variants fall back to showing `.v`.
+-->
+<AutoVisualizer xmlns="http://schemas.microsoft.com/vstudio/debugger/natvis/2010">
+
+  <!-- box<T>: the held value, without m_ptr / m_vtable. -->
+  <Type Name="docsmith::box&lt;*&gt;">
+    <DisplayString Condition="m_ptr == 0">empty</DisplayString>
+    <DisplayString>{*m_ptr}</DisplayString>
+    <Expand>
+      <ExpandedItem Condition="m_ptr != 0">*m_ptr</ExpandedItem>
+    </Expand>
+  </Type>
+
+  <!-- inline_node / block_node: the active alternative, without `.v`. Both
+       variants have six alternatives (see inline_nodes.h and nodes.h). -->
+  <Type Name="docsmith::inline_node" Priority="High">
+    <DisplayString Condition="(int)v._Which == 0">{v._Head}</DisplayString>
+    <DisplayString Condition="(int)v._Which == 1">{v._Tail._Head}</DisplayString>
+    <DisplayString Condition="(int)v._Which == 2">{v._Tail._Tail._Head}</DisplayString>
+    <DisplayString Condition="(int)v._Which == 3">{v._Tail._Tail._Tail._Head}</DisplayString>
+    <DisplayString Condition="(int)v._Which == 4">{v._Tail._Tail._Tail._Tail._Head}</DisplayString>
+    <DisplayString Condition="(int)v._Which == 5">{v._Tail._Tail._Tail._Tail._Tail._Head}</DisplayString>
+    <DisplayString>valueless</DisplayString>
+    <Expand>
+      <ExpandedItem Condition="(int)v._Which == 0">v._Head</ExpandedItem>
+      <ExpandedItem Condition="(int)v._Which == 1">v._Tail._Head</ExpandedItem>
+      <ExpandedItem Condition="(int)v._Which == 2">v._Tail._Tail._Head</ExpandedItem>
+      <ExpandedItem Condition="(int)v._Which == 3">v._Tail._Tail._Tail._Head</ExpandedItem>
+      <ExpandedItem Condition="(int)v._Which == 4">v._Tail._Tail._Tail._Tail._Head</ExpandedItem>
+      <ExpandedItem Condition="(int)v._Which == 5">v._Tail._Tail._Tail._Tail._Tail._Head</ExpandedItem>
+    </Expand>
+  </Type>
+  <Type Name="docsmith::block_node" Priority="High">
+    <DisplayString Condition="(int)v._Which == 0">{v._Head}</DisplayString>
+    <DisplayString Condition="(int)v._Which == 1">{v._Tail._Head}</DisplayString>
+    <DisplayString Condition="(int)v._Which == 2">{v._Tail._Tail._Head}</DisplayString>
+    <DisplayString Condition="(int)v._Which == 3">{v._Tail._Tail._Tail._Head}</DisplayString>
+    <DisplayString Condition="(int)v._Which == 4">{v._Tail._Tail._Tail._Tail._Head}</DisplayString>
+    <DisplayString Condition="(int)v._Which == 5">{v._Tail._Tail._Tail._Tail._Tail._Head}</DisplayString>
+    <DisplayString>valueless</DisplayString>
+    <Expand>
+      <ExpandedItem Condition="(int)v._Which == 0">v._Head</ExpandedItem>
+      <ExpandedItem Condition="(int)v._Which == 1">v._Tail._Head</ExpandedItem>
+      <ExpandedItem Condition="(int)v._Which == 2">v._Tail._Tail._Head</ExpandedItem>
+      <ExpandedItem Condition="(int)v._Which == 3">v._Tail._Tail._Tail._Head</ExpandedItem>
+      <ExpandedItem Condition="(int)v._Which == 4">v._Tail._Tail._Tail._Tail._Head</ExpandedItem>
+      <ExpandedItem Condition="(int)v._Which == 5">v._Tail._Tail._Tail._Tail._Tail._Head</ExpandedItem>
+    </Expand>
+  </Type>
+  <!-- Fallback for other standard libraries: skip one level, keep `.v`. -->
+  <Type Name="docsmith::inline_node" Priority="Low">
+    <DisplayString>{v}</DisplayString>
+    <Expand>
+      <ExpandedItem>v</ExpandedItem>
+    </Expand>
+  </Type>
+  <Type Name="docsmith::block_node" Priority="Low">
+    <DisplayString>{v}</DisplayString>
+    <Expand>
+      <ExpandedItem>v</ExpandedItem>
+    </Expand>
+  </Type>
+
+  <!-- Leaves. -->
+  <Type Name="docsmith::style_name">
+    <DisplayString>{m_name}</DisplayString>
+  </Type>
+  <Type Name="docsmith::text">
+    <DisplayString>{content}</DisplayString>
+    <Expand />
+  </Type>
+  <Type Name="docsmith::bookmark">
+    <DisplayString>bookmark {name}</DisplayString>
+  </Type>
+
+  <!-- Nodes with children: own fields, then the children as [0], [1], ...
+       (has_children keeps a vector, boxed for the recursive nodes). The
+       summary shows the only child inline, else the child count. -->
+  <Type Name="docsmith::paragraph">
+    <DisplayString Condition="style.m_name._Mypair._Myval2._Mysize != 0 &amp;&amp; m_children._Mypair._Myval2._Mylast - m_children._Mypair._Myval2._Myfirst == 1">paragraph [{style.m_name,sb}] {*m_children._Mypair._Myval2._Myfirst}</DisplayString>
+    <DisplayString Condition="style.m_name._Mypair._Myval2._Mysize != 0">paragraph [{style.m_name,sb}] {m_children}</DisplayString>
+    <DisplayString Condition="m_children._Mypair._Myval2._Mylast - m_children._Mypair._Myval2._Myfirst == 1">paragraph {*m_children._Mypair._Myval2._Myfirst}</DisplayString>
+    <DisplayString>paragraph {m_children}</DisplayString>
+    <Expand>
+      <Item Name="style" Condition="style.m_name._Mypair._Myval2._Mysize != 0">style</Item>
+      <ArrayItems>
+        <Size>m_children._Mypair._Myval2._Mylast - m_children._Mypair._Myval2._Myfirst</Size>
+        <ValuePointer>m_children._Mypair._Myval2._Myfirst</ValuePointer>
+      </ArrayItems>
+    </Expand>
+  </Type>
+  <Type Name="docsmith::heading">
+    <DisplayString Condition="style.m_name._Mypair._Myval2._Mysize != 0 &amp;&amp; m_children._Mypair._Myval2._Mylast - m_children._Mypair._Myval2._Myfirst == 1">heading {level} [{style.m_name,sb}] {*m_children._Mypair._Myval2._Myfirst}</DisplayString>
+    <DisplayString Condition="style.m_name._Mypair._Myval2._Mysize != 0">heading {level} [{style.m_name,sb}] {m_children}</DisplayString>
+    <DisplayString Condition="m_children._Mypair._Myval2._Mylast - m_children._Mypair._Myval2._Myfirst == 1">heading {level} {*m_children._Mypair._Myval2._Myfirst}</DisplayString>
+    <DisplayString>heading {level} {m_children}</DisplayString>
+    <Expand>
+      <Item Name="style" Condition="style.m_name._Mypair._Myval2._Mysize != 0">style</Item>
+      <Item Name="level">level</Item>
+      <ArrayItems>
+        <Size>m_children._Mypair._Myval2._Mylast - m_children._Mypair._Myval2._Myfirst</Size>
+        <ValuePointer>m_children._Mypair._Myval2._Myfirst</ValuePointer>
+      </ArrayItems>
+    </Expand>
+  </Type>
+  <Type Name="docsmith::span">
+    <DisplayString Condition="style.m_name._Mypair._Myval2._Mysize != 0 &amp;&amp; (*m_children.m_ptr)._Mypair._Myval2._Mylast - (*m_children.m_ptr)._Mypair._Myval2._Myfirst == 1">span [{style.m_name,sb}] {*(*m_children.m_ptr)._Mypair._Myval2._Myfirst}</DisplayString>
+    <DisplayString Condition="style.m_name._Mypair._Myval2._Mysize != 0">span [{style.m_name,sb}] {(*m_children.m_ptr)}</DisplayString>
+    <DisplayString Condition="(*m_children.m_ptr)._Mypair._Myval2._Mylast - (*m_children.m_ptr)._Mypair._Myval2._Myfirst == 1">span {*(*m_children.m_ptr)._Mypair._Myval2._Myfirst}</DisplayString>
+    <DisplayString>span {(*m_children.m_ptr)}</DisplayString>
+    <Expand>
+      <Item Name="style" Condition="style.m_name._Mypair._Myval2._Mysize != 0">style</Item>
+      <ArrayItems>
+        <Size>(*m_children.m_ptr)._Mypair._Myval2._Mylast - (*m_children.m_ptr)._Mypair._Myval2._Myfirst</Size>
+        <ValuePointer>(*m_children.m_ptr)._Mypair._Myval2._Myfirst</ValuePointer>
+      </ArrayItems>
+    </Expand>
+  </Type>
+  <Type Name="docsmith::hyperlink">
+    <DisplayString Condition="(*m_children.m_ptr)._Mypair._Myval2._Mylast - (*m_children.m_ptr)._Mypair._Myval2._Myfirst == 1">hyperlink {url} {*(*m_children.m_ptr)._Mypair._Myval2._Myfirst}</DisplayString>
+    <DisplayString>hyperlink {url} {(*m_children.m_ptr)}</DisplayString>
+    <Expand>
+      <Item Name="url">url</Item>
+      <ArrayItems>
+        <Size>(*m_children.m_ptr)._Mypair._Myval2._Mylast - (*m_children.m_ptr)._Mypair._Myval2._Myfirst</Size>
+        <ValuePointer>(*m_children.m_ptr)._Mypair._Myval2._Myfirst</ValuePointer>
+      </ArrayItems>
+    </Expand>
+  </Type>
+  <Type Name="docsmith::list_item">
+    <DisplayString Condition="(*m_children.m_ptr)._Mypair._Myval2._Mylast - (*m_children.m_ptr)._Mypair._Myval2._Myfirst == 1">list_item {*(*m_children.m_ptr)._Mypair._Myval2._Myfirst}</DisplayString>
+    <DisplayString>list_item {(*m_children.m_ptr)}</DisplayString>
+    <Expand>
+      <ArrayItems>
+        <Size>(*m_children.m_ptr)._Mypair._Myval2._Mylast - (*m_children.m_ptr)._Mypair._Myval2._Myfirst</Size>
+        <ValuePointer>(*m_children.m_ptr)._Mypair._Myval2._Myfirst</ValuePointer>
+      </ArrayItems>
+    </Expand>
+  </Type>
+  <Type Name="docsmith::table_cell">
+    <DisplayString Condition="style.m_name._Mypair._Myval2._Mysize != 0 &amp;&amp; (*m_children.m_ptr)._Mypair._Myval2._Mylast - (*m_children.m_ptr)._Mypair._Myval2._Myfirst == 1">table_cell [{style.m_name,sb}] {*(*m_children.m_ptr)._Mypair._Myval2._Myfirst}</DisplayString>
+    <DisplayString Condition="style.m_name._Mypair._Myval2._Mysize != 0">table_cell [{style.m_name,sb}] {(*m_children.m_ptr)}</DisplayString>
+    <DisplayString Condition="(*m_children.m_ptr)._Mypair._Myval2._Mylast - (*m_children.m_ptr)._Mypair._Myval2._Myfirst == 1">table_cell {*(*m_children.m_ptr)._Mypair._Myval2._Myfirst}</DisplayString>
+    <DisplayString>table_cell {(*m_children.m_ptr)}</DisplayString>
+    <Expand>
+      <Item Name="style" Condition="style.m_name._Mypair._Myval2._Mysize != 0">style</Item>
+      <Item Name="rowspan" Condition="rowspan != 1">rowspan</Item>
+      <Item Name="colspan" Condition="colspan != 1">colspan</Item>
+      <ArrayItems>
+        <Size>(*m_children.m_ptr)._Mypair._Myval2._Mylast - (*m_children.m_ptr)._Mypair._Myval2._Myfirst</Size>
+        <ValuePointer>(*m_children.m_ptr)._Mypair._Myval2._Myfirst</ValuePointer>
+      </ArrayItems>
+    </Expand>
+  </Type>
+  <Type Name="docsmith::list">
+    <DisplayString Condition="style.m_name._Mypair._Myval2._Mysize != 0 &amp;&amp; m_items._Mypair._Myval2._Mylast - m_items._Mypair._Myval2._Myfirst == 1">list [{style.m_name,sb}] {*m_items._Mypair._Myval2._Myfirst}</DisplayString>
+    <DisplayString Condition="style.m_name._Mypair._Myval2._Mysize != 0">list [{style.m_name,sb}] {m_items}</DisplayString>
+    <DisplayString Condition="m_items._Mypair._Myval2._Mylast - m_items._Mypair._Myval2._Myfirst == 1">list {*m_items._Mypair._Myval2._Myfirst}</DisplayString>
+    <DisplayString>list {m_items}</DisplayString>
+    <Expand>
+      <Item Name="style" Condition="style.m_name._Mypair._Myval2._Mysize != 0">style</Item>
+      <ArrayItems>
+        <Size>m_items._Mypair._Myval2._Mylast - m_items._Mypair._Myval2._Myfirst</Size>
+        <ValuePointer>m_items._Mypair._Myval2._Myfirst</ValuePointer>
+      </ArrayItems>
+    </Expand>
+  </Type>
+  <Type Name="docsmith::table">
+    <DisplayString>table {rows._Mypair._Myval2._Mylast - rows._Mypair._Myval2._Myfirst} rows</DisplayString>
+    <Expand>
+      <ArrayItems>
+        <Size>rows._Mypair._Myval2._Mylast - rows._Mypair._Myval2._Myfirst</Size>
+        <ValuePointer>rows._Mypair._Myval2._Myfirst</ValuePointer>
+      </ArrayItems>
+    </Expand>
+  </Type>
+
+  <Type Name="docsmith::text_doc">
+    <DisplayString>text_doc body {body}</DisplayString>
+  </Type>
+
+</AutoVisualizer>

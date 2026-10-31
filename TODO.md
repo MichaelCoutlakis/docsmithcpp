@@ -103,21 +103,16 @@ ODT) works. Move `[Unreleased]` in `CHANGELOG.md` to `[0.1.0]` and tag it.
   arena or pool.
 
 ## Debugger display
-VS Code with clang (lldb/gdb) doesn't show a document's body usefully. Easy
-inspection should be one of the payoffs of value semantics.
+`box<T>` holds a typed `T *`, and `tools/debug/` has an lldb formatter and a natvis
+file (setup in CONTRIBUTING.md). Checked with lldb 23 and CodeLLDB's lldb 22
+(clang64, libc++) and cdb (MSVC). Not yet checked in the VSCodium UI.
 
-- Likely cause: `box<T>` stores `void *m_ptr`, so the debugger has no type to
-  dereference. Storing `T *m_ptr` should work with an incomplete `T` (a pointer
-  member and the `static_cast`s through `void *` don't need `T` complete). That
-  alone may make spans, list items and table cells expandable. Check on
-  libc++, libstdc++ and MSVC.
-- Then hide the plumbing (`box`, `variant` `.v`, the `has_children` vector) with
-  visualisers checked into the repo:
-  - `.natvis` for the VS debugger and for VS Code's `cppvsdbg` / `cppdbg`
-    (`"visualizerFile"` in `launch.json`).
-  - An lldb Python formatter for CodeLLDB (it doesn't read natvis), and possibly
-    gdb pretty printers.
-- Document the debugger setup in CONTRIBUTING.md.
+- Not checked with libstdc++ (no g++ toolchain here). The lldb formatter reads the
+  variant through lldb's own std::variant formatter, so it should work there too.
+- The natvis reads MSVC STL internals. With `cppdbg` (gdb or lldb-mi, other
+  standard libraries) the node variants fall back to showing `.v`, and the child
+  lists don't expand.
+- Possibly gdb pretty printers.
 
 ## Docs and project
 - Write a short spec of the generic document model in `DESIGN.md`: which nodes

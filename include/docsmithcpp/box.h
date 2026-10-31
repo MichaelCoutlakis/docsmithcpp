@@ -61,7 +61,7 @@ public:
     }
 
     box(const box &other) :
-        m_ptr(other.m_ptr ? other.m_vtable->clone(other.m_ptr) : nullptr),
+        m_ptr(other.m_ptr ? static_cast<T *>(other.m_vtable->clone(other.m_ptr)) : nullptr),
         m_vtable(other.m_vtable)
     {
     }
@@ -87,10 +87,10 @@ public:
             m_vtable->destroy(m_ptr);
     }
 
-    T &operator*() noexcept { return *static_cast<T *>(m_ptr); }
-    const T &operator*() const noexcept { return *static_cast<const T *>(m_ptr); }
-    T *operator->() noexcept { return static_cast<T *>(m_ptr); }
-    const T *operator->() const noexcept { return static_cast<const T *>(m_ptr); }
+    T &operator*() noexcept { return *m_ptr; }
+    const T &operator*() const noexcept { return *m_ptr; }
+    T *operator->() noexcept { return m_ptr; }
+    const T *operator->() const noexcept { return m_ptr; }
 
     bool operator==(const box &other) const
     {
@@ -148,7 +148,10 @@ private:
             return nullptr;
     }
 
-    void *m_ptr;
+    // Typed (not void *) so debuggers can follow it to the held value. A pointer
+    // to an incomplete T is fine, and converting it to and from void * for the
+    // vtable calls needs no complete type either.
+    T *m_ptr;
     const vtable *m_vtable;
 };
 

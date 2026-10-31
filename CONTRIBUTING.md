@@ -12,6 +12,7 @@ This is a compiled C++ library
 - source in ./src
 - tests under ./tests
 - examples under ./examples
+- debugger visualisers under ./tools/debug (see [Debugging](#debugging))
 
 ## Conventions
 
@@ -28,6 +29,61 @@ Further notes:
 - Formatting is governed by `.clang-format`;
 
 Choose names with brevity, meaning, and clarity.
+
+## Debugging
+
+A document is a tree of values, so the debugger can show all of it. Without
+help, though, each level sits under plumbing: the node variant's `.v`, the
+`has_children` base and the `box` around recursive children. The visualisers in
+`tools/debug/` hide that plumbing. A node shows its summary (`heading 1 "Hello
+World!"`, `paragraph [Note] "..."`), its own fields (style, level, url) and its
+children as `[0]`, `[1]`, ...
+
+- `docsmith_lldb.py`: lldb formatters for CodeLLDB, lldb-dap and the lldb
+  command line. Load it with
+  `command script import <repo>/tools/debug/docsmith_lldb.py`. It also fixes
+  `std::vector` display (shown as empty) when lldb is older than the libc++ it
+  debugs, as with CodeLLDB 1.12 (lldb 22) on msys2 clang64 (libc++ 23).
+- `docsmith.natvis`: Visual Studio, and VS Code's `cppvsdbg`, for MSVC builds.
+  It reads the MSVC STL's layouts, so with other standard libraries it shows
+  less.
+
+VS Code with clang (msys2 clang64, the `dev` preset) and CodeLLDB, in
+`.vscode/launch.json`:
+
+```json
+{
+    "type": "lldb",
+    "request": "launch",
+    "name": "Debug CMake Target",
+    "program": "${command:cmake.launchTargetPath}",
+    "cwd": "${workspaceFolder}",
+    "initCommands": ["command script import ${workspaceFolder}/tools/debug/docsmith_lldb.py"]
+}
+```
+
+For the CMake Tools debug button, put the same `initCommands` under
+`cmake.debugConfig` in `.vscode/settings.json`. lldb-dap (`"type": "lldb-dap"`)
+uses the same `initCommands`.
+
+VS Code with MSVC (`cppvsdbg`):
+
+```json
+{
+    "type": "cppvsdbg",
+    "request": "launch",
+    "name": "Debug (MSVC)",
+    "program": "${command:cmake.launchTargetPath}",
+    "cwd": "${workspaceFolder}",
+    "visualizerFile": "${workspaceFolder}/tools/debug/docsmith.natvis"
+}
+```
+
+In Visual Studio, add `docsmith.natvis` to the solution, or copy it to
+`%USERPROFILE%\Documents\Visual Studio 18\Visualizers`.
+
+In the lldb command line, a value's summary hides its children unless you ask
+for depth, for example `frame variable -D 8 doc.body`.
 
 ## Design process
 

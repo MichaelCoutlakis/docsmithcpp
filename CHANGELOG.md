@@ -60,7 +60,8 @@ held in `std::variant`. This is a breaking change to almost every public API.
   model and the writer re-emits it.
 - `box<T>`: a value-semantic heap holder with type-erased destroy / clone / compare. It
   breaks the recursion between the node variants, so the model compiles on libc++ as
-  well as the MSVC STL and libstdc++.
+  well as the MSVC STL and libstdc++. It holds a typed `T *`, so debuggers can follow
+  it to the held value.
 - `styled<Derived>` and `has_children<Child, Derived, Boxed>`: thin non-polymorphic
   CRTP mixins for the style name and the child sequence. `children()` hides the boxing.
 - The ODT writer emits `text:outline-level` on headings and `xlink:type` on hyperlinks.
@@ -97,6 +98,10 @@ held in `std::variant`. This is a breaking change to almost every public API.
 - `named_registry::find` has a `const` overload, and registries compare with `==`.
 - `docsmith::docsmithcpp` alias target, so in-tree and installed builds use the same
   target name. The package now installs a version file.
+- Debugger visualisers in `tools/debug/`: `docsmith_lldb.py` (CodeLLDB, lldb-dap, lldb)
+  and `docsmith.natvis` (Visual Studio, VS Code `cppvsdbg`). They show each node's
+  summary, fields and children without the variant, `has_children` and `box`
+  plumbing. Setup is in CONTRIBUTING.md.
 
 ### Removed
 - `element.h` (`element`, `element_base`, `elem_tagged`, `elem_t`, `element_visitor`),
