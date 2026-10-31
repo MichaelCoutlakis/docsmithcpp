@@ -1,13 +1,35 @@
 # DocSmith++ (⚠️ 🚧 Note: This is a work in progress 🚧)
 
 **DocSmith++** is a modern C++20 library for reading, modifying, and generating
-structured document formats like `.docx` and `.odt`. It aims to provide a clean,
+structured document formats like `.odt` and `.html`. It aims to provide a clean,
 idiomatic C++ API for working with rich-text documents, with future support for
-HTML, Markdown, and PDF.
+`.docx`, Markdown, and PDF.
 
 ## Typical use case scenarios
 
-asdf
+### Automatic report generation
+
+Test software written in C++ could use `docsmithcpp` to generate test reports.
+`docsmithcpp` provides an API to do this cleanly without:
+
+- cluttering the code with HTML/Markdown string processing, which can get messy
+  quickly, for example once sections need to be linked or strings escaped.
+- needing intermediate formats or further post processing tools which would be
+  needed if the report was exported as an intermediate format and then post-
+  processed.
+
+### Native document generation from C++
+
+- Document export from C++ application
+- Template based documents: Load a template, fill in data, and save
+
+## When not to use DocSmith++
+
+- Document processing from a native C++ application is not required. See the
+  [Bibliography](#bibliography) or search engine for document libraries in other
+  languages
+- Once-off conversions or formatting: `pandoc` is the appropriate tool here
+- Typesetting or maths-heavy documents: use `LaTeX`.
 
 ---
 
@@ -26,7 +48,8 @@ asdf
 
 - 📝 Read and write `.odt` (OpenDocument Text) files. Load, edit and save keeps
   the parts of the file the model doesn't represent (styles, metadata, images).
-- 🌐 Write HTML5 pages: styles become CSS classes, list styles pick `<ol>`/`<ul>`
+- 🌐 Write HTML5 pages: styles become CSS classes, list styles pick
+  `<ol>`/`<ul>`
 - 🔍 Query support: search paragraphs, headings, styles, etc.
 - ⚙️ Built with modern C++ idioms (the document tree is plain value types in
   `std::variant`, with `std::visit`-based traversal)
@@ -46,7 +69,8 @@ This project uses [CMake](https://cmake.org/) for building and configuring.
 - CMake ≥ 3.20
 - Dependencies (e.g. via [vcpkg](https://vcpkg.io/)):
   - [pugixml](https://pugixml.org/)
-  - [libzippp](https://github.com/ctabin/libzippp) (and [libzip](https://libzip.org/))
+  - [libzippp](https://github.com/ctabin/libzippp) (and
+    [libzip](https://libzip.org/))
   - [fmt](https://fmt.dev/)
   - [gtest](https://github.com/google/googletest) (tests only)
 
@@ -70,11 +94,11 @@ cmake --build build
 ctest --test-dir build
 ```
 
-| Option                       | Default            | Effect                                                     |
-| ---------------------------- | ------------------ | ---------------------------------------------------------- |
-| `DOCSMITHCPP_BUILD_TESTS`    | ON when top-level  | Build the GoogleTest suite                                 |
-| `DOCSMITHCPP_BUILD_EXAMPLES` | ON when top-level  | Build `examples/`                                          |
-| `DOCSMITHCPP_DEBUG_FILES`    | OFF (ON in `dev`)  | Also write `<name>.content.xml` next to each saved `.odt`  |
+| Option                       | Default           | Effect                                                    |
+| ---------------------------- | ----------------- | --------------------------------------------------------- |
+| `DOCSMITHCPP_BUILD_TESTS`    | ON when top-level | Build the GoogleTest suite                                |
+| `DOCSMITHCPP_BUILD_EXAMPLES` | ON when top-level | Build `examples/`                                         |
+| `DOCSMITHCPP_DEBUG_FILES`    | OFF (ON in `dev`) | Also write `<name>.content.xml` next to each saved `.odt` |
 
 ### 🧪 Testing
 
