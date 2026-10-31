@@ -124,6 +124,14 @@ void package::set(const std::string &name, std::string data, std::string media_t
     m_entries[name] = entry{std::move(data), std::move(media_type), true};
 }
 
+std::optional<package::entry> package::take(const std::string &name)
+{
+    auto node = m_entries.extract(name);
+    if(node.empty())
+        return std::nullopt;
+    return std::move(node.mapped());
+}
+
 std::string package::manifest_xml() const
 {
     pugi::xml_document xml;

@@ -6,8 +6,9 @@ Contributing notes for the `docsmithcpp` project for both human and AI agents.
 
 This is a compiled C++ library
 
-- [README](Readme.md)
-- headers in ./include/docsmith
+- [README](README.md)
+- [DESIGN](DESIGN.md): document model and design decisions
+- headers in ./include/docsmithcpp
 - source in ./src
 - tests under ./tests
 - examples under ./examples

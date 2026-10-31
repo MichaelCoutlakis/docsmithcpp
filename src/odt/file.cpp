@@ -226,6 +226,14 @@ file file::load(const std::filesystem::path &p)
     auto text_node =
         xml.child("office:document-content").child("office:body").child("office:text");
     f.doc.body = parse_block_children(text_node);
+
+    // Move the images the tree refers to out of the package into the document,
+    // so every format can reach them. Entries only unknown markup refers to
+    // stay in the package and are carried over.
+    for(const frame *fr : collect<frame>(f.doc))
+        if(auto e = f.m_impl->pkg.take(fr->img.uri))
+            f.doc.resources().add(
+                resource(fr->img.uri, std::move(e->data), std::move(e->media_type)));
     return f;
 }
 

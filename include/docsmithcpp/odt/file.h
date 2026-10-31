@@ -41,9 +41,11 @@ public:
     file();
     explicit file(text_doc doc);
 
+    /// Images the document refers to are moved from the package into
+    /// doc.resources().
     static file load(const std::filesystem::path &p);
 
-    /// Images whose uri names an entry in the package are written from it;
+    /// Images whose uri names one of doc.resources() are embedded from it;
     /// other image uris are read from disk and embedded under Pictures/.
     void save(const std::filesystem::path &p) const;
 

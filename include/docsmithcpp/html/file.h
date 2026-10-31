@@ -44,15 +44,23 @@ public:
     {
     }
 
+    /// The page as save() would write it, image srcs included. No files are
+    /// written.
     std::string to_string() const;
 
-    /// Writes the page. Image paths that exist on disk are made relative to the
-    /// page's folder so the page finds them.
+    /// Writes the page, and the images it needs under resource_dir: document
+    /// resources as resource_dir / name, and image files from disk copied to
+    /// resource_dir / Pictures/ (unless already inside resource_dir). Pages
+    /// saved with the same resource_dir share these files, so give pages in
+    /// one folder their own resource_dir if their images may differ.
     void save(const std::filesystem::path &p) const;
 
     text_doc doc;
     std::string title; //!< The <title>; defaults to the first heading's text
     std::string css;   //!< Extra CSS, embedded after the generated rules
+    /// Folder for the page's images, relative to the page. Empty puts them
+    /// next to it, e.g. an image from an .odt lands in Pictures/ there.
+    std::filesystem::path resource_dir;
 };
 
 } // namespace docsmith::html

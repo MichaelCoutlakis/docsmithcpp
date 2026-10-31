@@ -21,6 +21,7 @@
 
 #include <filesystem>
 #include <map>
+#include <optional>
 #include <string>
 
 namespace docsmith::odf
@@ -63,6 +64,9 @@ public:
 
     /// Add or replace an entry; it is listed in the manifest with media_type.
     void set(const std::string &name, std::string data, std::string media_type);
+
+    /// Remove an entry and return it, or nullopt if there is none.
+    std::optional<entry> take(const std::string &name);
 
 private:
     std::string manifest_xml() const;

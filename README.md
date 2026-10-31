@@ -49,7 +49,7 @@ Test software written in C++ could use `docsmithcpp` to generate test reports.
 - 📝 Read and write `.odt` (OpenDocument Text) files. Load, edit and save keeps
   the parts of the file the model doesn't represent (styles, metadata, images).
 - 🌐 Write HTML5 pages: styles become CSS classes, list styles pick
-  `<ol>`/`<ul>`
+  `<ol>`/`<ul>`, and images are written next to the page
 - 🔍 Query support: search paragraphs, headings, styles, etc.
 - ⚙️ Built with modern C++ idioms (the document tree is plain value types in
   `std::variant`, with `std::visit`-based traversal)
@@ -161,25 +161,7 @@ int main() {
 
 ## Design notes
 
-The document tree is a pair of value-type variants — `inline_node` (text-flow
-content: `text`, `span`, `hyperlink`, `frame`, `bookmark`, `unknown`) and
-`block_node` (`paragraph`, `heading`, `list`, `table`, `frame`, `unknown`). It
-is deliberately a _generic_, format-agnostic model: which group may go where is
-encoded by the child sequence's type, so there is no separate per-format
-validation layer. Copy and `operator==` are compiler-generated, and traversal is
-`std::visit`. Shared behaviour lives in thin, non-polymorphic CRTP mixins:
-`styled<Derived>` (a style name + `set_style`) and `has_children<…>`
-(`children()`/`add()`).
-
-An `unknown` node stores verbatim XML for anything the parser does not model, so
-foreign content survives a parse → write round trip. Note: this currently
-applies to block- and inline-level content only — unrecognized children _inside_
-a table or list, and unknown attributes on known elements, are not yet captured.
-
-The recursive edges (a `span` contains inline nodes, which contain spans…) are
-held through a small value-semantic wrapper, `box<T>`
-(`include/docsmithcpp/box.h`), which keeps the model portable across libstdc++,
-libc++ and the MSVC STL.
+See [DESIGN.md](DESIGN.md) for the document model and other design decisions.
 
 ## Bibliography
 

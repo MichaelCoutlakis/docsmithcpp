@@ -35,6 +35,8 @@ held in `std::variant`. This is a breaking change to almost every public API.
   settings, thumbnail, embedded images). Load → edit → save writes those parts back
   unchanged, along with the original fonts and automatic styles from `content.xml`.
   `content.xml` itself is regenerated from the model.
+- **`text_doc::operator==` compares everything**, the style, list style and resource
+  registries included. Compare `a.body == b.body` for content only.
 - **Dependencies are private**: `odt/writer.h` moved out of the public headers, so
   pugixml and libzippp are no longer exposed to users.
 - ODT entries other than `mimetype` are now deflated. Previously everything was
@@ -73,13 +75,26 @@ held in `std::variant`. This is a breaking change to almost every public API.
   CSS goes in `css`. A list becomes `<ol>` (with `type` and `start`) or `<ul>`,
   according to its list style at each nesting level. Covered table cells are left out
   and spans become `rowspan` / `colspan`. Bookmarks become ids that `#` links
-  resolve to. Image paths are made relative to the page.
+  resolve to.
 - `docsmith.h`: a convenience header for the whole public API.
 - `DOCSMITHCPP_DEBUG_FILES` CMake option (ON in the `dev` preset). When set, saving an
   `.odt` also writes `<name>.content.xml` next to it.
 - Examples `create_document` (build a document, save it as `.odt` and `.html`),
   `read_odt` (parse, print the tree, list the links) and `odt_to_html`.
-- `named_registry::find` has a `const` overload.
+- **Document resources**: `text_doc::resources()` holds the bytes and media type of
+  each image, by name (`resource`, `resource_registry`; the bytes are shared and
+  read-only, so copying a document stays cheap). `add_image(name, data, media_type)`
+  adds one and returns the `image`; `write_resources(dir)` writes the ones the body
+  refers to. An image `uri` is looked up in the resources, then on disk, then left as
+  is. `odt::file::load()` moves referenced images from the package into the
+  resources, and `save()` embeds them from there.
+- `html::file::resource_dir`: `save()` writes the page's images there (relative to
+  the page; empty means next to it). Images from an `.odt` land at
+  `resource_dir/Pictures/…`; image files from disk are copied to
+  `resource_dir/Pictures/` unless already inside `resource_dir`. `to_string()` writes
+  the same `src` values without writing files. Converting a parsed `.odt` to HTML now
+  shows its images.
+- `named_registry::find` has a `const` overload, and registries compare with `==`.
 - `docsmith::docsmithcpp` alias target, so in-tree and installed builds use the same
   target name. The package now installs a version file.
 

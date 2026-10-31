@@ -33,9 +33,10 @@ class package;
 namespace docsmith::odt
 {
 
-/// Serialise doc as an ODT content.xml. Images are resolved against pkg:
-/// entries it already holds are referenced in place, and files on disk are
-/// copied into it under Pictures/. If pkg holds an original content.xml (a
+/// Serialise doc as an ODT content.xml. Images are resolved in turn against
+/// doc.resources() (embedded into pkg under their name), entries pkg already
+/// holds (referenced in place), and files on disk (copied into pkg under
+/// Pictures/). If pkg holds an original content.xml (a
 /// loaded file), its namespace, font and automatic-style declarations are kept.
 std::string write_content(const text_doc &doc, odf::package &pkg);
 
@@ -78,6 +79,7 @@ private:
     void emit(pugi::xml_node parent, const table_cell &c);
 
     odf::package &m_pkg;
+    const text_doc *m_doc{nullptr}; //!< The document being written
     pugi::xml_document m_content; //!< content.xml; owns the node memory
     pugi::xml_node m_font_faces;  //!< office:font-face-decls
     pugi::xml_node m_styles;      //!< office:styles

@@ -24,22 +24,7 @@ bullets and emits classes with no CSS.
 - Common styles are written into `content.xml`'s `office:styles`. ODF puts them in
   `styles.xml`. LibreOffice accepts it, but it's not to spec.
 
-### 2. Decide where image data lives
-At the moment the image bytes live only in the ODT package (`odf::package`, inside
-`odt::file`). HTML needs them too: a page converted from a parsed `.odt` has
-`src="Pictures/..."`, a path inside a zip, so images don't show.
-
-- Option A: a resource registry on `text_doc` (name → bytes and media type), like
-  the style registries. `image::uri` names a resource. ODT load fills it, the ODT
-  writer embeds from it, and the HTML writer copies the images next to the page or
-  inlines them as `data:` URIs.
-- Option B: keep resources per format, and convert explicitly between formats.
-- This follows the rule used so far: anything more than one format needs goes in
-  `text_doc`. That points to A.
-- A planned `odt::file::add_resource()` was deliberately left out until this is
-  decided.
-
-### 3. Separate HTML serialisation from the document mapping
+### 2. Separate HTML serialisation from the document mapping
 `src/html/file.cpp` currently mixes two concerns. One is mapping nodes to
 elements. The other is HTML serialisation: escaping, void elements, attribute
 quoting, indentation, CSS identifier and id sanitising. Keep the second out of
@@ -67,7 +52,7 @@ Options:
 - Revisit the third-party route if HTML (or Markdown) *parsing* becomes a goal.
   Then one library covering both directions would earn its place.
 
-### 4. Tag 0.1.0
+### 3. Tag 0.1.0
 The minimal working version (build a document in C++, write ODT and HTML, parse
 ODT) works. Move `[Unreleased]` in `CHANGELOG.md` to `[0.1.0]` and tag it.
 
@@ -98,12 +83,12 @@ ODT) works. Move `[Unreleased]` in `CHANGELOG.md` to `[0.1.0]` and tag it.
 - `set_style(style)` keeps only the name; the definition must also be added to
   `text_doc::styles()`. This is easy to get wrong. Consider a helper on the
   document that does both.
-- When a loaded file is saved, images that are no longer referenced stay in the
-  package.
+- Package entries that no `image` referred to at load (e.g. pictures used only by
+  `unknown` markup) stay in the ODT package and are carried over on save, even if
+  nothing uses them any more. Resources whose image was removed are dropped.
 - `frame` holds only an image. ODF frames can also hold text boxes and objects.
-- `text_doc`: `body` is a public member, but the registries are private with
-  accessors. Make access consistent. `operator==` deliberately ignores the
-  registries; keep that documented.
+- HTML: images can only be written as files. A `data:` URI mode would give a
+  single self-contained page.
 - HTML: list number prefixes and suffixes, and parent styles, aren't reflected in
   the CSS.
 - Non-ASCII paths: libzippp gets `path::string()`, which on Windows is the ANSI
@@ -118,9 +103,9 @@ ODT) works. Move `[Unreleased]` in `CHANGELOG.md` to `[0.1.0]` and tag it.
   arena or pool.
 
 ## Docs and project
-- Write a short spec of the generic document model: which nodes exist and which may
-  contain which, independent of any one format. It would guide new nodes and new
-  formats.
+- Write a short spec of the generic document model in `DESIGN.md`: which nodes
+  exist and which may contain which, independent of any one format. It would
+  guide new nodes and new formats.
 - The README's "Typical use case scenarios" section is a placeholder.
 
 ## Verifying changes

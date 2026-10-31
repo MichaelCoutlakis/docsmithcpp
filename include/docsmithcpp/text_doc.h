@@ -20,10 +20,12 @@
 // The document root, plus the umbrella include for the whole model and its
 // traversal helpers.
 
+#include <filesystem>
 #include <vector>
 
 #include "docsmithcpp/list.h"
 #include "docsmithcpp/nodes.h"
+#include "docsmithcpp/resource.h"
 #include "docsmithcpp/style.h"
 #include "docsmithcpp/table.h"
 #include "docsmithcpp/visit.h"
@@ -54,19 +56,32 @@ public:
         return *this;
     }
 
-    // Equality is about content; the style registries are metadata.
-    bool operator==(const text_doc &other) const { return body == other.body; }
+    /// Compares everything, registries included. To compare content only,
+    /// compare the bodies: a.body == b.body.
+    bool operator==(const text_doc &) const = default;
 
     style_registry &styles() { return m_styles; }
     const style_registry &styles() const { return m_styles; }
     list_style_registry &list_styles() { return m_list_styles; }
     const list_style_registry &list_styles() const { return m_list_styles; }
+    resource_registry &resources() { return m_resources; }
+    const resource_registry &resources() const { return m_resources; }
+
+    /// Adds data as the resource name (a relative path, e.g. "Pictures/a.png")
+    /// and returns an image that refers to it.
+    image add_image(std::string name, std::string data, std::string media_type);
+
+    /// Writes each resource an image in body refers to as dir / name. Pages or
+    /// documents written to the same dir share these files, and a resource
+    /// with the same name overwrites the other's.
+    void write_resources(const std::filesystem::path &dir) const;
 
     std::vector<block_node> body;
 
 private:
     style_registry m_styles;
     list_style_registry m_list_styles;
+    resource_registry m_resources;
 };
 
 } // namespace docsmith

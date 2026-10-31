@@ -39,6 +39,8 @@ struct bookmark
     bool operator==(const bookmark &) const = default;
 };
 
+/// uri is resolved in this order: a resource of that name in the document's
+/// resources(), then a file on disk, then left as is (e.g. a URL in HTML).
 struct image
 {
     std::string uri;

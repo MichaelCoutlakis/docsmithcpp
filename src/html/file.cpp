@@ -20,7 +20,9 @@
 #include <algorithm>
 #include <cctype>
 #include <fstream>
+#include <map>
 #include <ostream>
+#include <set>
 #include <sstream>
 #include <stdexcept>
 #include <string_view>
@@ -187,13 +189,73 @@ const paragraph *sole_plain_paragraph(const std::vector<block_node> &blocks)
     return p && p->style.is_empty() ? p : nullptr;
 }
 
+/// Where each image goes and what its src is. Document resources go to
+/// resource_dir / name. Files on disk already inside resource_dir are referenced
+/// in place; other files are copied to resource_dir / Pictures/, renamed if
+/// another image already has that name. Other uris (URLs) are left as is.
+struct resource_plan
+{
+    std::map<std::string, std::string> src;          //!< image uri -> src attribute
+    std::vector<std::pair<fs::path, fs::path>> copy; //!< Files to copy: from, to
+
+    /// base: the folder of the page being saved, or null when writing to a
+    /// string (then src is what save() would write, but nothing is planned
+    /// for copying).
+    resource_plan(const text_doc &doc, const fs::path &resource_dir, const fs::path *base)
+    {
+        const fs::path dir = (base ? *base / resource_dir : resource_dir).lexically_normal();
+        auto src_of = [&](const fs::path &p)
+        { return (base ? p.lexically_relative(*base) : p).generic_string(); };
+
+        std::set<std::string> taken; // names used in dir
+        for(const frame *f : collect<frame>(doc))
+            if(doc.resources().find(f->img.uri))
+                taken.insert(f->img.uri);
+
+        for(const frame *f : collect<frame>(doc))
+        {
+            const std::string &uri = f->img.uri;
+            if(src.contains(uri))
+                continue;
+            std::error_code ec;
+            if(doc.resources().find(uri))
+            {
+                src[uri] = src_of(dir / uri);
+            }
+            else if(fs::is_regular_file(uri, ec))
+            {
+                const fs::path abs = fs::weakly_canonical(uri, ec);
+                const fs::path in_dir = abs.lexically_relative(fs::weakly_canonical(dir, ec));
+                if(base && !in_dir.empty() && *in_dir.begin() != "..")
+                {
+                    src[uri] = src_of(abs);
+                    continue;
+                }
+                const fs::path name = fs::path(uri).filename();
+                std::string rel = ("Pictures" / name).generic_string();
+                for(int i = 2; taken.contains(rel); ++i)
+                    rel = (fs::path("Pictures") /
+                        (name.stem().string() + "_" + std::to_string(i) +
+                            name.extension().string()))
+                              .generic_string();
+                taken.insert(rel);
+                src[uri] = src_of(dir / rel);
+                if(base)
+                    copy.emplace_back(abs, dir / rel);
+            }
+            else
+            {
+                src[uri] = uri;
+            }
+        }
+    }
+};
+
 class writer
 {
 public:
-    /// base: the folder of the page being saved (used to make image paths
-    /// relative), or null when writing to a string.
-    writer(std::ostream &os, const text_doc &doc, const fs::path *base) :
-        m_os(os), m_doc(doc), m_base(base)
+    writer(std::ostream &os, const text_doc &doc, const resource_plan &plan) :
+        m_os(os), m_doc(doc), m_plan(plan)
     {
     }
 
@@ -367,11 +429,8 @@ private:
 
     std::string src(const std::string &uri) const
     {
-        std::error_code ec;
-        if(!m_base || !fs::exists(uri, ec))
-            return uri;
-        const auto rel = fs::proximate(fs::absolute(uri, ec), *m_base, ec);
-        return ec ? uri : rel.generic_string();
+        auto it = m_plan.src.find(uri);
+        return it != m_plan.src.end() ? it->second : uri;
     }
 
     void open(std::string_view tag, const style_name &style)
@@ -392,7 +451,7 @@ private:
 
     std::ostream &m_os;
     const text_doc &m_doc;
-    const fs::path *m_base;
+    const resource_plan &m_plan;
     int m_depth{0};
     std::vector<const list_style *> m_lists; //!< Enclosing lists' styles, innermost last
 };
@@ -402,19 +461,28 @@ private:
 std::string file::to_string() const
 {
     std::ostringstream ss;
-    writer(ss, doc, nullptr).page(title.empty() ? default_title(doc) : title, css);
+    const resource_plan plan(doc, resource_dir, nullptr);
+    writer(ss, doc, plan).page(title.empty() ? default_title(doc) : title, css);
     return ss.str();
 }
 
 void file::save(const fs::path &p) const
 {
-    const fs::path base = fs::absolute(p).parent_path();
+    const fs::path base = fs::weakly_canonical(fs::absolute(p).parent_path());
     fs::create_directories(base);
+
+    const resource_plan plan(doc, resource_dir, &base);
+    doc.write_resources(base / resource_dir);
+    for(const auto &[from, to] : plan.copy)
+    {
+        fs::create_directories(to.parent_path());
+        fs::copy_file(from, to, fs::copy_options::overwrite_existing);
+    }
 
     std::ofstream out(p, std::ios::binary);
     if(!out)
         throw std::runtime_error("Could not write " + p.string());
-    writer(out, doc, &base).page(title.empty() ? default_title(doc) : title, css);
+    writer(out, doc, plan).page(title.empty() ? default_title(doc) : title, css);
 }
 
 } // namespace docsmith::html

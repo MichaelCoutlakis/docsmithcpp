@@ -56,6 +56,8 @@ public:
     std::size_t size() const noexcept { return m_data.size(); }
     bool empty() const noexcept { return m_data.empty(); }
 
+    bool operator==(const named_registry &) const = default;
+
 private:
     std::unordered_map<key_type, mapped_type> m_data;
 };

@@ -16,6 +16,7 @@
  * limitations under the License.
  *****************************************************************************/
 
+#include <filesystem>
 #include <fstream>
 #include <iterator>
 #include <string>
@@ -26,6 +27,7 @@
 #include "docsmithcpp/odt/file.h"
 
 using namespace docsmith;
+namespace fs = std::filesystem;
 
 namespace
 {
@@ -158,14 +160,81 @@ TEST(HTML, UnknownContentIsLeftOut)
     EXPECT_FALSE(has(html, "text:"));
 }
 
-TEST(HTML, ImagePathsAreRelativeToThePage)
+TEST(HTML, ImageFilesAreCopiedNextToThePage)
 {
     // The test runs in tests/; the page goes to tests/html/out/.
+    fs::remove_all("html/out/disk_image");
     text_doc doc{paragraph(frame(image{"odt/smiley.png"}))};
-    EXPECT_TRUE(has(html::file(doc).to_string(), R"(src="odt/smiley.png")"));
+    EXPECT_TRUE(has(html::file(doc).to_string(), R"(src="Pictures/smiley.png")"));
 
-    html::file(doc).save("html/out/image.html");
-    EXPECT_TRUE(has(read("html/out/image.html"), R"(<img src="../../odt/smiley.png" alt="">)"));
+    html::file(doc).save("html/out/disk_image/image.html");
+    EXPECT_TRUE(
+        has(read("html/out/disk_image/image.html"), R"(<img src="Pictures/smiley.png" alt="">)"));
+    EXPECT_EQ(read("html/out/disk_image/Pictures/smiley.png"), read("odt/smiley.png"));
+}
+
+TEST(HTML, ImageFileInsideResourceDirIsReferencedInPlace)
+{
+    fs::create_directories("html/out/in_place/img/sub");
+    fs::copy_file(
+        "odt/smiley.png", "html/out/in_place/img/sub/s.png", fs::copy_options::overwrite_existing);
+
+    html::file page(text_doc{paragraph(frame(image{"html/out/in_place/img/sub/s.png"}))});
+    page.resource_dir = "img";
+    page.save("html/out/in_place/page.html");
+
+    EXPECT_TRUE(has(read("html/out/in_place/page.html"), R"(src="img/sub/s.png")"));
+    EXPECT_FALSE(fs::exists("html/out/in_place/img/Pictures"));
+}
+
+TEST(HTML, SameFileNamesFromDifferentFoldersAreKeptApart)
+{
+    fs::create_directories("html/out/clash/src");
+    fs::copy_file(
+        "odt/smiley.png", "html/out/clash/src/smiley.png", fs::copy_options::overwrite_existing);
+
+    html::file page(text_doc{paragraph(frame(image{"odt/smiley.png"})),
+        paragraph(frame(image{"html/out/clash/src/smiley.png"}))});
+    page.resource_dir = "res";
+    page.save("html/out/clash/page.html");
+
+    const auto html = read("html/out/clash/page.html");
+    EXPECT_TRUE(has(html, R"(src="res/Pictures/smiley.png")"));
+    EXPECT_TRUE(has(html, R"(src="res/Pictures/smiley_2.png")"));
+    EXPECT_TRUE(fs::exists("html/out/clash/res/Pictures/smiley_2.png"));
+}
+
+TEST(HTML, ParsedOdtImagesLandUnderResourceDir)
+{
+    const text_doc doc = odt::file::load("odt/image.odt").doc;
+    const std::string name = "Pictures/100000000000002A0000002A13903900F3783A21.png";
+    const std::string bytes = doc.resources().find(name)->data();
+
+    fs::remove_all("html/out/odt_image");
+    html::file(doc).save("html/out/odt_image/default.html");
+    EXPECT_TRUE(has(read("html/out/odt_image/default.html"), "src=\"" + name + "\""));
+    EXPECT_EQ(read("html/out/odt_image/" + name), bytes);
+
+    html::file page(doc);
+    page.resource_dir = "default_files";
+    EXPECT_TRUE(has(page.to_string(), "src=\"default_files/" + name + "\""));
+    page.save("html/out/odt_image/other.html");
+    EXPECT_EQ(read("html/out/odt_image/default_files/" + name), bytes);
+}
+
+TEST(HTML, ResourceNamesCannotLeaveTheFolder)
+{
+    text_doc doc;
+    doc.add(paragraph(frame(doc.add_image("../escape.png", "x", "image/png"))));
+    EXPECT_THROW(html::file(doc).save("html/out/escape/page.html"), std::runtime_error);
+    EXPECT_FALSE(fs::exists("html/out/escape.png"));
+}
+
+TEST(HTML, UrlImagesAreLeftAsIs)
+{
+    const auto html =
+        html::file(text_doc{paragraph(frame(image{"https://example.com/a.png"}))}).to_string();
+    EXPECT_TRUE(has(html, R"(src="https://example.com/a.png")"));
 }
 
 TEST(HTML, ConvertsParsedOdt)

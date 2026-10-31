@@ -9,6 +9,7 @@ add_library(docsmithcpp
     "../include/docsmithcpp/list.h"
     "../include/docsmithcpp/table.h"
     "../include/docsmithcpp/iostream_writer.h"
+    "../include/docsmithcpp/resource.h"
     "../include/docsmithcpp/text_doc.h"
     "../include/docsmithcpp/odt/file.h"
     "../include/docsmithcpp/html/file.h"

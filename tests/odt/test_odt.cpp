@@ -88,7 +88,7 @@ TEST(ODT, ParseBasicFile)
     const text_doc expected{heading(1, "Heading 1"), paragraph("This is the first paragraph.")};
 
     print_compare(expected, actual);
-    EXPECT_EQ(expected, actual);
+    EXPECT_EQ(expected.body, actual.body);
 }
 
 TEST(ODT, ParseModerateFile)
@@ -114,7 +114,7 @@ TEST(ODT, ParseModerateFile)
             span().add(span("GitHub")), ".")};
 
     print_compare(expected, actual);
-    EXPECT_EQ(expected, actual);
+    EXPECT_EQ(expected.body, actual.body);
 }
 
 TEST(ODT, ParseImage)
@@ -127,7 +127,14 @@ TEST(ODT, ParseImage)
         paragraph(frame(image{"Pictures/100000000000002A0000002A13903900F3783A21.png"}))};
 
     print_compare(expected, actual);
-    EXPECT_EQ(expected, actual);
+    EXPECT_EQ(expected.body, actual.body);
+
+    // The image's bytes move from the package into the document.
+    const resource *r =
+        actual.resources().find("Pictures/100000000000002A0000002A13903900F3783A21.png");
+    ASSERT_NE(r, nullptr);
+    EXPECT_EQ(r->media_type(), "image/png");
+    EXPECT_EQ(r->data().substr(1, 3), "PNG");
 }
 
 TEST(ODT, ParseParagraphStyle)
@@ -137,7 +144,7 @@ TEST(ODT, ParseParagraphStyle)
     const text_doc expected{paragraph("Paragraph with style.").set_style("Text_20_body")};
 
     print_compare(expected, actual);
-    EXPECT_EQ(expected, actual);
+    EXPECT_EQ(expected.body, actual.body);
 }
 
 TEST(ODT, ResaveLoadedFile)
@@ -154,16 +161,25 @@ TEST(ODT, ResaveLoadedFile)
 
 TEST(ODT, ResaveLoadedImage)
 {
-    // The image lives in the loaded package (Pictures/...), not on disk, so
-    // saving must take it from the package.
+    // The image lives in the document's resources (Pictures/...), not on disk,
+    // so saving must embed it from there.
     const auto first = odt::file::load("odt/image.odt");
     ASSERT_NO_THROW(first.save("odt/out/image_resaved.odt"));
 
     const auto again = odt::file::load("odt/out/image_resaved.odt");
-    EXPECT_EQ(first.doc, again.doc);
+    EXPECT_EQ(first.doc, again.doc); // resources included
 
     // ...and the saved file can itself be saved again.
     EXPECT_NO_THROW(again.save("odt/out/image_resaved2.odt"));
+}
+
+TEST(ODT, AddedImageRoundTrips)
+{
+    text_doc doc;
+    doc.add(paragraph(frame(doc.add_image("Pictures/dot.png", "not really a png", "image/png"))));
+    odt::file(doc).save("odt/out/added_image.odt");
+
+    EXPECT_EQ(odt::file::load("odt/out/added_image.odt").doc.resources(), doc.resources());
 }
 
 TEST(ODT, EditLoadedFile)

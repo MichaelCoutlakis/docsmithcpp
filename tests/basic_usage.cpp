@@ -49,6 +49,23 @@ TEST(BASIC_USAGE, ValueSemantics)
     EXPECT_NE(copy, doc);
 }
 
+TEST(BASIC_USAGE, EqualityIncludesResources)
+{
+    text_doc a;
+    a.add(paragraph(frame(a.add_image("Pictures/a.png", "bytes", "image/png"))));
+    text_doc b = a;
+    EXPECT_EQ(a, b);
+
+    // Same name, same bytes, held separately: still equal.
+    text_doc c;
+    c.add(paragraph(frame(c.add_image("Pictures/a.png", "bytes", "image/png"))));
+    EXPECT_EQ(a, c);
+
+    c.add_image("Pictures/a.png", "other bytes", "image/png");
+    EXPECT_EQ(a.body, c.body);
+    EXPECT_NE(a, c);
+}
+
 TEST(BASIC_USAGE, ChainedAdd)
 {
     // Children are added via .add() (chainable); nesting a same-type node uses

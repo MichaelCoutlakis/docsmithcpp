@@ -108,6 +108,7 @@ writer::writer(odf::package &pkg) :
 
 std::string writer::write(const text_doc &doc)
 {
+    m_doc = &doc;
     write_doc(doc);
     std::ostringstream ss;
     m_content.save(ss, "  ");
@@ -137,11 +138,17 @@ void writer::carry_over()
         m_automatic_styles.append_copy(c);
 }
 
-// Archive path for an image. An entry the package already holds (e.g. from a
-// loaded file) is referenced in place; a file on disk is copied in under
-// Pictures/, renamed if a different image already has that name.
+// Archive path for an image. A document resource is embedded under its name; an
+// entry the package already holds is referenced in place; a file on disk is
+// copied in under Pictures/, renamed if a different image already has that name.
 std::string writer::resolve_image(const std::string &uri)
 {
+    if(const resource *r = m_doc->resources().find(uri))
+    {
+        if(const auto *e = m_pkg.find(uri); !e || e->data != r->data())
+            m_pkg.set(uri, r->data(), r->media_type());
+        return uri;
+    }
     if(m_pkg.contains(uri))
         return uri;
     if(!fs::is_regular_file(uri))
