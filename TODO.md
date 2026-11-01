@@ -3,13 +3,43 @@
 Outstanding work, roughly in priority order. Each item says why it matters and
 where to start. See `CHANGELOG.md` for what's done.
 
-## Next up
+The order follows what stops someone else from using the library. First they
+need to be able to get it and build against it. Then it has to be correct. Then
+the headline use case (a generated test report) has to look like a report.
+More formats come after that.
 
-### 1. Load style definitions when parsing ODT
+## 1. Usable by others (blocks 0.1.0)
+
+### Test `find_package(DocSmithCpp)` from a consumer project
+The install rules and `cmake/DocSmithCppConfig.cmake.in` exist but have never
+been tried. Add a small consumer project (e.g. `tests/consumer/`) that is
+configured against an installed build and links `docsmith::docsmithcpp`, and run
+it in CI. Also document the `add_subdirectory` / FetchContent route in the
+README.
+
+### CI
+GitHub Actions for msys2 clang64, MSVC, and **Linux GCC and Clang, which have
+never been built**. The README claims GCC ≥ 11 and libstdc++ support, and nothing
+checks either. Include a GCC 11 job so the stated minimum is tested, not just
+the newest compiler. Run the consumer test above in at least one job.
+
+### Tag 0.1.0
+Do this once the items above pass. Move `[Unreleased]` in `CHANGELOG.md` to
+`[0.1.0]` and tag it.
+
+## 2. Correctness
+
+### Style family on text styles
+The writer always uses `style:family="paragraph"` (FIXME in `write_xml(style)`
+in `src/odt/writer.cpp`). A style on a `span` needs `"text"`, so styled spans
+don't work in ODT. The style model needs to know its family.
+
+### Load style definitions when parsing ODT
 The parser keeps style *names* on nodes but not their *definitions*, so
 `text_doc::styles()` / `list_styles()` are empty after `odt::file::load()`. This is
 why `example_odt_to_html` on `tests/odt/moderate.odt` turns numbered lists into
-bullets and emits classes with no CSS.
+bullets and emits classes with no CSS. The template-based report (section 3)
+depends on this too.
 
 - Read common styles from `styles.xml` and automatic styles from `content.xml`
   (`office:automatic-styles`), including `text:list-style`, into the registries.
@@ -19,12 +49,142 @@ bullets and emits classes with no CSS.
   styles from the registry. Once the registries are populated by parsing, the
   definitions would be written twice. Decide whether parsed styles stop being
   carried over or are de-duplicated by name.
-- The writer always uses `style:family="paragraph"` (FIXME in `write_xml(style)`).
-  Text styles on spans need `"text"`, so the style model needs to know its family.
 - Common styles are written into `content.xml`'s `office:styles`. ODF puts them in
-  `styles.xml`. LibreOffice accepts it, but it's not to spec.
+  `styles.xml`. LibreOffice accepts it, but it's not to spec. Headers and footers
+  (section 3) live in `styles.xml` as well, so the writer needs to own that file
+  anyway.
 
-### 2. Separate HTML serialisation from the document mapping
+### Content lost inside tables and lists
+`unknown` round-trips only block- and inline-level content. Unrecognised children
+*inside* tables and lists, and unknown *attributes* on known elements, are
+dropped. So load, edit, save of a real-world file can silently lose content.
+
+### Non-ASCII paths
+libzippp gets `path::string()`, which on Windows is the ANSI code page, so
+Unicode file names may fail. Replacing the zip library (section 5) can fix this:
+read the file into memory through `std::filesystem::path` and hand the archive
+library bytes.
+
+## 3. Reports that look like reports
+
+`write_example_test_report()` in `examples/create_document.cpp` is the yardstick.
+
+### The test report example loads a template
+The example should load a template `.odt` (e.g. `examples/report_template.odt`)
+that already has basic styling: fonts, heading styles, a table style, and a
+header and footer. It then fills in the body and saves. This is the "load a
+template, fill in data, save" scenario from the README. It needs style
+definitions to be parsed (section 2) so that HTML output from the same document
+gets the template's look too.
+
+### Filling in a template
+There is no fill-in mechanism. Today, filling a template means searching `body`
+by hand. Options: replace a bookmark, or a paragraph with a placeholder style or
+text, with a sequence of nodes. Insert-after or replace helpers on `text_doc`
+would cover most of it.
+
+### Table and cell properties
+The style model covers only text, paragraph and graphics properties. It has no
+borders, column widths, cell shading or vertical alignment, so a results table
+in ODT has no borders at all. Add table, column and cell style properties.
+
+### Table header rows
+The parser flattens `table:table-header-rows` into ordinary rows, so header rows
+are lost: in ODT they don't repeat on each page, and HTML has no
+`<thead>`/`<th>`. Model them.
+
+### Line breaks, tabs and spaces
+ODT `text:s` (repeated spaces), `text:tab` and `text:line-break` become
+`unknown`, so extracting the plain text loses them, and there's no way to build
+them in code. You can't put a multi-line log excerpt in a cell. Model them as
+inline nodes.
+
+### Code / preformatted blocks
+Test reports need monospace blocks for logs and output. This could be a
+paragraph style plus the line-break and space nodes above. In HTML it would be
+`<pre>`.
+
+### Table of contents
+- ODT: `text:table-of-content`. LibreOffice shows the entries stored in the file
+  and doesn't regenerate them on load, so the writer has to write the entries
+  itself, built from the headings.
+- HTML: a `<nav>` list of links to the headings, which need ids or bookmarks.
+
+### Headers, footers and page numbers
+- ODT: headers and footers belong to a master page (`style:master-page` with
+  `style:header` / `style:footer`) in `styles.xml`. A template already has them,
+  so with carry-over they work today without a model. Creating them from code
+  needs a page / master-page model, and the writer needs to own `styles.xml`.
+- Page numbers are fields (`text:page-number`, `text:page-count`). They need a
+  small field node, which also suits dates and the document title.
+- HTML has no pages. Write an optional `<header>` / `<footer>` and leave page
+  numbers out, or use print CSS.
+
+## 4. Formats
+
+### Markdown output
+Writing Markdown is cheap and fits the test report case: CI job summaries and PR
+comments are Markdown. It's also the first format that isn't ODF or HTML, so it
+tests whether the model really is format-agnostic. Write it ourselves (GFM
+tables, links, bookmarks as anchors). Styles have no Markdown form, so decide
+which ones map to emphasis or code.
+
+### Markdown input
+Shape the API like the others, e.g. `md::parse(std::string_view) -> text_doc`
+and `md::file::load/save/to_string`, rather than `text_doc::from_md`, so the core
+stays format-agnostic. A parsed snippet can then be added with
+`text_doc::append()`.
+
+Use [md4c](https://github.com/mity/md4c) for parsing rather than our own parser.
+It's MIT, two C files with no dependencies, supports CommonMark and the GFM
+extensions (tables, strikethrough, task lists), and is in vcpkg. Its SAX-style
+callbacks (`enter_block`, `leave_block`, `text`) map directly to building the
+tree with a stack. Reasons not to write our own: CommonMark's edge cases
+(emphasis delimiter runs, lazy continuation lines, tight and loose lists, link
+reference definitions) are where hand-written parsers go wrong, and a subset
+parser would quietly define its own dialect.
+
+Link md4c privately, like pugixml, and put Markdown input behind an option,
+`DOCSMITHCPP_MARKDOWN`, so consumers who don't need it don't need md4c. Markdown
+output has no dependency and stays unconditional.
+
+### DOCX
+This is the format most users of a C++ document library will need. Output
+first, then input. DOCX is an OPC package, a zip like ODF with
+`[Content_Types].xml` in place of the manifest, so it should share the zip layer
+(section 5). Note that pugixml matches namespace *prefixes*, not URIs. That's
+fine for ODF as LibreOffice writes it, but DOCX reading should not assume `w:`.
+
+## 5. Dependencies
+
+The goal is a library a consumer can build without a package manager. The
+current dependencies are pugixml, libzippp and libzip (with zlib and, through
+vcpkg's default features, more compression and crypto backends).
+
+### Replace libzippp + libzip
+All zip access is in `src/odf/package.cpp` behind `odf::package`, so the swap
+is local. Move the raw archive part into a format-neutral private layer (e.g.
+`src/zip/`) that ODF and DOCX packages share.
+
+- **[miniz](https://github.com/richgel999/miniz)**: MIT, a single `.c`/`.h`
+  pair with its own deflate and a zip reader and writer that work in memory. It
+  needs no zlib and is in vcpkg, and it can be vendored. Recommended. It replaces
+  libzippp, libzip and zlib.
+- **zlib plus our own zip container**: zlib gives deflate and CRC-32 but not the
+  zip format. A writer is easy (local headers, central directory, end record). A
+  reader for foreign files has to handle data descriptors, stored and deflated
+  entries, and ZIP64. That's about 400 lines to own. Only worth it if zlib is
+  already a given for consumers.
+- The minimum step is to drop just libzippp and use libzip's C API directly.
+
+### Keep pugixml
+It's MIT, one `.cpp`, widely packaged, and private. Writing XML ourselves would
+be easy, but parsing (entities, namespaces, CDATA) isn't worth owning. Offer a
+vendored or FetchContent fallback alongside `find_package`.
+
+## 6. Internal quality
+
+### Separate HTML serialisation from the document mapping
 `src/html/file.cpp` currently mixes two concerns. One is mapping nodes to
 elements. The other is HTML serialisation: escaping, void elements, attribute
 quoting, indentation, CSS identifier and id sanitising. Keep the second out of
@@ -49,37 +209,13 @@ Options:
   - [lexbor](https://github.com/lexbor/lexbor) (Apache-2.0, C) is a full HTML5
     parser, DOM and serialiser. Heavier, but it would also cover HTML *import*.
   - Gumbo is parse-only, so it doesn't help with writing.
-- Revisit the third-party route if HTML (or Markdown) *parsing* becomes a goal.
-  Then one library covering both directions would earn its place.
+- Revisit the third-party route if HTML *parsing* becomes a goal. Then one
+  library covering both directions would earn its place.
 
-### 3. Tag 0.1.0
-The minimal working version (build a document in C++, write ODT and HTML, parse
-ODT) works. Move `[Unreleased]` in `CHANGELOG.md` to `[0.1.0]` and tag it.
-
-## Testing and CI
-- **Optional LibreOffice validation test.** Headless LibreOffice found a bug every
-  unit test missed (an `office:version` mismatch made it reject resaved files).
-  Add a ctest that runs only when `soffice` is found and converts every file in
-  `tests/odt/out/` (see *Verifying* below).
-- **CI** (e.g. GitHub Actions) for msys2 clang64 and MSVC. **Linux (GCC and Clang)
-  has never been built**, and should be part of CI.
-- **Fixtures:** the old experimental samples were deleted. Add small, targeted
-  `.odt` fixtures per feature (lists, figures, bookmarks, page breaks, nested
-  tables) as tests need them.
-- **Test `find_package(DocSmithCpp)`** from a separate consumer project, against an
-  installed build. It has never been tried.
-
-## Format and model gaps
-- `unknown` round-trips only block- and inline-level content. Unrecognised children
-  *inside* tables and lists, and unknown *attributes* on known elements, are
-  dropped.
+### Model gaps
 - `unknown` holds ODT XML but doesn't say which format it came from. Record the
-  source format so writers for other formats can decide what to do with it.
-- ODT inline helpers `text:s` (repeated spaces), `text:tab` and `text:line-break`
-  currently become `unknown`, so extracting the plain text loses them. Model them,
-  or map them to text.
-- The parser flattens `table:table-header-rows` into ordinary rows, so header rows
-  are lost (in both ODT output and HTML `<thead>`/`<th>`).
+  source format so writers for other formats (Markdown, DOCX) can decide what to
+  do with it.
 - `set_style(style)` keeps only the name. `text_doc::add_style()` registers a
   definition and returns its name, but nothing yet checks that every style a node
   names is defined.
@@ -91,8 +227,15 @@ ODT) works. Move `[Unreleased]` in `CHANGELOG.md` to `[0.1.0]` and tag it.
   single self-contained page.
 - HTML: list number prefixes and suffixes, and parent styles, aren't reflected in
   the CSS.
-- Non-ASCII paths: libzippp gets `path::string()`, which on Windows is the ANSI
-  code page, so Unicode file names may fail.
+
+## Testing
+- **Optional LibreOffice validation test.** Headless LibreOffice found a bug every
+  unit test missed (an `office:version` mismatch made it reject resaved files).
+  Add a ctest that runs only when `soffice` is found and converts every file in
+  `tests/odt/out/` (see *Verifying* below).
+- **Fixtures:** the old experimental samples were deleted. Add small, targeted
+  `.odt` fixtures per feature (lists, figures, bookmarks, page breaks, nested
+  tables, header rows, headers and footers) as tests need them.
 
 ## Performance (deferred)
 - `box<T>` costs one heap allocation per span, hyperlink, list item and table cell.
@@ -118,6 +261,8 @@ file (setup in CONTRIBUTING.md). Checked with lldb 23 and CodeLLDB's lldb 22
 - Write a short spec of the generic document model in `DESIGN.md`: which nodes
   exist and which may contain which, independent of any one format. It would
   guide new nodes and new formats.
+- Add a Doxygen target. The `///` comments are there, but nothing generates an
+  API reference.
 - The README's "Typical use case scenarios" section is a placeholder.
 
 ## Verifying changes
