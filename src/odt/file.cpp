@@ -316,6 +316,24 @@ void expand_page_breaks(
     blocks = std::move(out);
 }
 
+/// The header and footer of the master page the body uses: "Standard"
+/// (LibreOffice's Default Page Style), else the first one.
+page_style parse_page(const odf::package &pkg)
+{
+    page_style page;
+    const auto *e = pkg.find("styles.xml");
+    pugi::xml_document xml;
+    if(!e || !xml.load_buffer(e->data.data(), e->data.size(), pugi::parse_default | pugi::parse_ws_pcdata))
+        return page;
+    auto masters = xml.child("office:document-styles").child("office:master-styles");
+    auto master = masters.find_child_by_attribute("style:master-page", "style:name", "Standard");
+    if(!master)
+        master = masters.child("style:master-page");
+    page.header = parse_block_children(master.child("style:header"));
+    page.footer = parse_block_children(master.child("style:footer"));
+    return page;
+}
+
 constexpr const char *odt_mimetype = "application/vnd.oasis.opendocument.text";
 
 } // namespace
@@ -363,6 +381,7 @@ file file::load(const std::filesystem::path &p)
     if(!page_breaks.empty())
         expand_page_breaks(f.doc.body, page_breaks);
     read_styles(f.m_impl->pkg, f.doc);
+    f.doc.page = parse_page(f.m_impl->pkg);
     if(const auto *meta = f.m_impl->pkg.find("meta.xml"))
         f.doc.meta = odf::read_meta(meta->data);
 

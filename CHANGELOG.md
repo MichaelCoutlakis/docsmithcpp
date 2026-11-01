@@ -63,6 +63,11 @@ held in `std::variant`. This is a breaking change to almost every public API.
   directory. Generated test files go to `tests/odt/out/`.
 
 ### Added
+- **Headers and footers**: `text_doc::page` (`page_style`) holds the header and
+  footer as blocks, with `set_header()` / `set_footer()`. ODT reads and writes
+  them on the body's master page in `styles.xml`, creating one for a new document
+  that has them; HTML writes `<header>` and `<footer>`. `walk()`, `collect()` and
+  `find_all()` visit them after the body.
 - **Fields**: an inline `field` node for the page number, page count, date and
   document title. ODT writes and reads `text:page-number`, `text:page-count`,
   `text:date` and `text:title`; HTML writes the title and date, and leaves page

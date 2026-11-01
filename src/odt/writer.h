@@ -58,6 +58,7 @@ private:
     void load_styles_xml();
     void write_styles(const text_doc &doc);
     void write_doc(const text_doc &doc);
+    void write_page(const page_style &page);
     void write_blocks(pugi::xml_node parent, const std::vector<block_node> &blocks);
     void write_block(pugi::xml_node parent, const block_node &b);
     std::string page_break_style(const std::string &name, const style_name &base);

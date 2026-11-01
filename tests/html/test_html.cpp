@@ -383,3 +383,13 @@ TEST(HTML, Fields)
     EXPECT_TRUE(has(html::file(doc).to_string(), "<p>[Report] page  of </p>"))
         << "no pages, so no page numbers";
 }
+
+TEST(HTML, HeaderAndFooter)
+{
+    text_doc doc{paragraph("Body")};
+    doc.page.set_header(paragraph("Top"));
+    doc.page.set_footer(paragraph("Bottom"));
+    EXPECT_TRUE(has(html::file(doc).to_string(),
+        "<body>\n<header>\n  <p>Top</p>\n</header>\n<p>Body</p>\n<footer>\n  <p>Bottom</p>\n</footer>\n</body>"));
+    EXPECT_FALSE(has(html::file(text_doc{paragraph("x")}).to_string(), "<header>"));
+}

@@ -78,13 +78,15 @@ struct deep_visitor
 };
 } // namespace detail
 
-/// Apply f to every node in the document (depth first).
+/// Apply f to every node in the document (depth first): the body, then the
+/// page header and footer.
 template <typename Doc, typename F>
 void walk(Doc &doc, F f)
 {
     detail::deep_visitor<F> dv{f};
-    for(auto &b : doc.body)
-        std::visit([&dv](auto &alt) { dv.node(alt); }, b.v);
+    for(auto *blocks : {&doc.body, &doc.page.header, &doc.page.footer})
+        for(auto &b : *blocks)
+            std::visit([&dv](auto &alt) { dv.node(alt); }, b.v);
 }
 
 /// Collect pointers to every node of type T in the document.

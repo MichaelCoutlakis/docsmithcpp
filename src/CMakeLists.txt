@@ -4,6 +4,7 @@ add_library(docsmithcpp
     "../include/docsmithcpp/nodes_fwd.h"
     "../include/docsmithcpp/inline_nodes.h"
     "../include/docsmithcpp/nodes.h"
+    "../include/docsmithcpp/page.h"
     "../include/docsmithcpp/visit.h"
     "../include/docsmithcpp/style.h"
     "../include/docsmithcpp/list.h"

@@ -554,3 +554,28 @@ TEST(ODT, FieldsRoundTrip)
     odt::file(doc).save("odt/out/fields.odt");
     EXPECT_EQ(odt::file::load("odt/out/fields.odt").doc.body, doc.body);
 }
+
+TEST(ODT, HeaderAndFooterRoundTrip)
+{
+    text_doc doc{paragraph("Body")};
+    doc.meta.title = "Report";
+    doc.page.set_header(paragraph(field{field_type::title}));
+    doc.page.set_footer(paragraph("Page ", field{field_type::page_number}));
+    odt::file(doc).save("odt/out/header_footer.odt");
+
+    auto again = odt::file::load("odt/out/header_footer.odt");
+    EXPECT_EQ(again.doc.page, doc.page);
+    EXPECT_EQ(again.doc.body, doc.body);
+
+    // Edited and cleared on a loaded file.
+    again.doc.page.footer.push_back(to_block(paragraph("Confidential")));
+    again.doc.page.header.clear();
+    again.save("odt/out/header_footer_edited.odt");
+    EXPECT_EQ(odt::file::load("odt/out/header_footer_edited.odt").doc.page, again.doc.page);
+}
+
+TEST(ODT, NoHeaderNoMasterPage)
+{
+    odt::file(text_doc{paragraph("Body")}).save("odt/out/no_header.odt");
+    EXPECT_EQ(odt::file::load("odt/out/no_header.odt").doc.page, page_style{});
+}

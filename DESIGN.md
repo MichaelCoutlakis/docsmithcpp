@@ -33,7 +33,8 @@ What each node holds, independent of any one format. "Inline" is a sequence of
 
 | Node | Group | Holds | Notes |
 |---|---|---|---|
-| `text_doc` | root | blocks (`body`) | plus `meta` and the style, list style and resource registries |
+| `text_doc` | root | blocks (`body`) | plus `meta`, `page` and the style, list style and resource registries |
+| `page_style` | — | blocks (`header`, `footer`) | what each page repeats above and below the body |
 | `paragraph` | block | inline | styled |
 | `heading` | block | inline | styled; `level` |
 | `list` | block | `list_item`s | styled with a list style |
@@ -80,6 +81,32 @@ paragraph's style. HTML writes `<div style="break-after: page"></div>`.
 
 The properties `break_before` / `break_after` on a paragraph style still
 describe a break that belongs to a style, e.g. every chapter heading.
+
+### Pages, headers and footers
+
+The model has no pages: the body is one flow, and formats that have pages lay
+it out. What every page repeats is the document's `page`, a `page_style` with a
+`header` and a `footer`, each a sequence of blocks (empty for none). It is
+separate from the body because it isn't read in order with it, and a format
+without pages still has a place for it. `walk()` and the searches built on it
+visit the header and footer after the body.
+
+    doc.page.set_header(paragraph(field{field_type::title}));
+    doc.page.set_footer(paragraph("Page ", field{field_type::page_number}));
+
+There is one page style per document, which is what a test report needs.
+Several (a landscape page, a different first page) would be a registry of page
+styles and a way to start one in the body, as ODF's master pages and DOCX's
+sections do; page size and margins would go in `page_style` too.
+
+- **ODT**: the header and footer are `style:header` / `style:footer` on the
+  master page the body uses, "Standard" (LibreOffice's Default Page Style) if
+  there is one, else the first. The writer replaces their content in place and
+  keeps the rest of `styles.xml`: left and first-page headers, page layouts and
+  other master pages. A new document gets a master page (A4, 2cm margins) only
+  when it has a header or footer. Header text uses common styles, or the
+  automatic styles in `styles.xml`, not `content.xml`'s.
+- **HTML**: `<header>` before the body and `<footer>` after it, when not empty.
 
 ### Fields
 

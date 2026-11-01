@@ -26,6 +26,7 @@
 #include "docsmithcpp/list.h"
 #include "docsmithcpp/metadata.h"
 #include "docsmithcpp/nodes.h"
+#include "docsmithcpp/page.h"
 #include "docsmithcpp/resource.h"
 #include "docsmithcpp/style.h"
 #include "docsmithcpp/table.h"
@@ -100,6 +101,7 @@ public:
 
     metadata meta;
     std::vector<block_node> body;
+    page_style page; //!< The header and footer on the body's pages
 
 private:
     style_registry m_styles;

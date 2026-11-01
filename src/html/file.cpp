@@ -356,8 +356,10 @@ public:
             m_os << "<style>\n" << css << (css.ends_with('\n') ? "" : "\n") << "</style>\n";
 
         m_os << "</head>\n<body>\n";
+        section("header", m_doc.page.header);
         for(const auto &b : m_doc.body)
             block(b);
+        section("footer", m_doc.page.footer);
         m_os << "</body>\n</html>\n";
     }
 
@@ -369,6 +371,19 @@ private:
         m_os << "<meta name=\"" << name << "\" content=\"";
         escape(m_os, content, true);
         m_os << "\">\n";
+    }
+
+    /// <header> or <footer>, if there is one.
+    void section(std::string_view tag, const std::vector<block_node> &blocks)
+    {
+        if(blocks.empty())
+            return;
+        m_os << '<' << tag << ">\n";
+        ++m_depth;
+        for(const auto &b : blocks)
+            block(b);
+        --m_depth;
+        m_os << "</" << tag << ">\n";
     }
 
     void block(const block_node &b)

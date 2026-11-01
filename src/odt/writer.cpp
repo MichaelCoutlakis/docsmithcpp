@@ -239,6 +239,7 @@ void writer::write(const text_doc &doc)
     m_doc = &doc;
     write_styles(doc);
     write_doc(doc);
+    write_page(doc.page);
 
     // Unindented: indentation between inline elements would be read as spaces.
     auto save = [](const pugi::xml_document &xml)
@@ -366,6 +367,89 @@ void writer::write_doc(const text_doc &doc)
 {
     auto office_text = m_body.append_child("office:text");
     write_blocks(office_text, doc.body);
+}
+
+// The header and footer go on the master page the body uses (see
+// parse_page()). A new document only gets one if it has a header or footer:
+// A4 with 2cm margins, LibreOffice's default.
+void writer::write_page(const page_style &page)
+{
+    auto root = m_styles_xml.child("office:document-styles");
+    auto masters = root.child("office:master-styles");
+    auto master = masters.find_child_by_attribute("style:master-page", "style:name", "Standard");
+    if(!master)
+        master = masters.child("style:master-page");
+    if(!master && page.header.empty() && page.footer.empty())
+        return;
+
+    if(!masters)
+        masters = root.append_child("office:master-styles");
+    auto automatic = root.child("office:automatic-styles");
+    if(!automatic)
+        automatic = root.insert_child_before("office:automatic-styles", masters);
+    if(!master)
+    {
+        std::string name = "pm1";
+        for(int i = 2; automatic.find_child_by_attribute("style:page-layout", "style:name", name.c_str()); ++i)
+            name = "pm" + std::to_string(i);
+        auto layout = automatic.append_child("style:page-layout");
+        layout.append_attribute("style:name") = name.c_str();
+        auto props = layout.append_child("style:page-layout-properties");
+        for(auto [attr, value] : {std::pair{"fo:page-width", "21.001cm"}, {"fo:page-height", "29.7cm"},
+                {"style:print-orientation", "portrait"}, {"fo:margin-top", "2cm"},
+                {"fo:margin-bottom", "2cm"}, {"fo:margin-left", "2cm"}, {"fo:margin-right", "2cm"}})
+            props.append_attribute(attr) = value;
+        master = masters.append_child("style:master-page");
+        master.append_attribute("style:name") = "Standard";
+        master.append_attribute("style:page-layout-name") = name.c_str();
+    }
+
+    // Without spacing in its page layout, a header touches the body.
+    auto layout = automatic.find_child_by_attribute(
+        "style:page-layout", "style:name", master.attribute("style:page-layout-name").as_string());
+    auto spacing = [&](const char *style, const char *margin)
+    {
+        if(!layout)
+            return;
+        auto s = layout.child(style);
+        if(!s)
+            s = layout.append_child(style);
+        if(!s.child("style:header-footer-properties"))
+        {
+            auto props = s.append_child("style:header-footer-properties");
+            props.append_attribute("fo:min-height") = "0cm";
+            props.append_attribute(margin) = "0.5cm";
+        }
+    };
+
+    // The style:header / style:footer element is kept, with its attributes,
+    // and its content replaced.
+    auto write = [&](const char *tag, const std::vector<block_node> &blocks, pugi::xml_node after)
+    {
+        auto n = master.child(tag);
+        if(blocks.empty())
+        {
+            master.remove_child(n);
+            return;
+        }
+        if(!n)
+            n = after ? master.insert_child_after(tag, after) : master.prepend_child(tag);
+        while(n.first_child())
+            n.remove_child(n.first_child());
+        write_blocks(n, blocks);
+    };
+    write("style:header", page.header, {});
+    if(!page.header.empty())
+        spacing("style:header-style", "fo:margin-bottom");
+
+    // ODF orders them header, header-left, header-first, then the footers.
+    pugi::xml_node after;
+    for(auto c : master.children())
+        if(std::string_view(c.name()).starts_with("style:header"))
+            after = c;
+    write("style:footer", page.footer, after);
+    if(!page.footer.empty())
+        spacing("style:footer-style", "fo:margin-top");
 }
 
 void writer::write_blocks(pugi::xml_node parent, const std::vector<block_node> &blocks)

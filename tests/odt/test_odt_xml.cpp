@@ -246,3 +246,33 @@ TEST(ODT_XML, FieldElements)
     EXPECT_STREQ(p.child("text:title").text().as_string(), "Report") << "the value it shows";
     EXPECT_EQ(std::string(p.child("text:date").attribute("text:date-value").as_string()).size(), 10U);
 }
+
+TEST(ODT_XML, HeaderAndFooterGoOnTheMasterPage)
+{
+    text_doc doc{paragraph("Body")};
+    doc.page.set_header(paragraph("Top"));
+    doc.page.set_footer(paragraph("Bottom"));
+    odt::file(doc).save("odt/out/master_page.odt");
+
+    part styles("odt/out/master_page.odt", "styles.xml");
+    auto root = styles.xml.child("office:document-styles");
+    auto master = root.child("office:master-styles").child("style:master-page");
+    EXPECT_STREQ(master.attribute("style:name").as_string(), "Standard");
+    EXPECT_STREQ(master.first_child().name(), "style:header");
+    EXPECT_STREQ(master.child("style:footer").child("text:p").text().as_string(), "Bottom");
+    auto layout = root.child("office:automatic-styles")
+                      .find_child_by_attribute("style:page-layout", "style:name",
+                          master.attribute("style:page-layout-name").as_string());
+    ASSERT_TRUE(layout);
+    EXPECT_TRUE(layout.child("style:header-style").child("style:header-footer-properties"));
+
+    // Saved again: still one master page, the footer in place.
+    auto f = odt::file::load("odt/out/master_page.odt");
+    f.doc.page.set_footer(paragraph("New bottom"));
+    f.save("odt/out/master_page_resaved.odt");
+    part again("odt/out/master_page_resaved.odt", "styles.xml");
+    auto masters = again.xml.child("office:document-styles").child("office:master-styles");
+    EXPECT_EQ(masters.select_nodes("style:master-page").size(), 1U);
+    EXPECT_STREQ(masters.child("style:master-page").last_child().name(), "style:footer");
+    EXPECT_STREQ(masters.select_node("//style:footer/text:p").node().text().as_string(), "New bottom");
+}
