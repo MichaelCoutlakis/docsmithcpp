@@ -63,6 +63,12 @@ held in `std::variant`. This is a breaking change to almost every public API.
   directory. Generated test files go to `tests/odt/out/`.
 
 ### Added
+- **Filling in a template**: `text_doc::replace()`, `insert_after()` and
+  `insert_before()` put a document's body in place of, after or before a
+  `placeholder`: the first paragraph or heading holding a `bookmark`, with a
+  `style_name`, or with a given `text`. They search the body (lists and table
+  cells included), then the header and footer, and merge styles and resources as
+  `append()` does.
 - **Table of contents**: a `table_of_contents` block node (`title`, `levels`).
   The ODT writer writes `text:table-of-content` with entries made from the
   headings, linked to them (LibreOffice doesn't regenerate them on load); HTML

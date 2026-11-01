@@ -83,6 +83,27 @@ paragraph's style. HTML writes `<div style="break-after: page"></div>`.
 The properties `break_before` / `break_after` on a paragraph style still
 describe a break that belongs to a style, e.g. every chapter heading.
 
+### Filling in a template
+
+A template is a document with placeholders: blocks that stand for content
+filled in from code. `text_doc::replace()`, `insert_after()` and
+`insert_before()` find one and put another document's body there:
+
+    auto f = odt::file::load("report_template.odt");
+    f.doc.replace(text{"{{summary}}"}, {heading(1, "Summary"), results});
+    f.doc.insert_after(bookmark{"details"}, details);
+
+A `placeholder` is one of the node types it is made of, so there is nothing new
+to learn: a `bookmark` (a paragraph or heading holding it), a `style_name` (a
+paragraph or heading with that style) or a `text` (a paragraph or heading whose
+text is that, ignoring white space around it). The first match is used, looked
+for depth first in the body, including lists and table cells, then in the page
+header and footer. A placeholder is a whole block, because what replaces it is
+usually several blocks (a heading and a table); text within a paragraph is
+edited in place. The content is a `text_doc`, so a single node or a braced list
+of nodes converts to it, and its styles and resources come with it, as with
+`append()`.
+
 ### Pages, headers and footers
 
 The model has no pages: the body is one flow, and formats that have pages lay

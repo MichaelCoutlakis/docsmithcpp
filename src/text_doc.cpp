@@ -22,6 +22,8 @@
 #include <stdexcept>
 #include <utility>
 
+#include "outline.h"
+
 namespace docsmith
 {
 namespace fs = std::filesystem;
@@ -52,6 +54,78 @@ void add_all(Registry &to, const Registry &from)
             to.add(value);
 }
 
+bool has_bookmark(const std::vector<inline_node> &kids, const bookmark &b)
+{
+    for(const auto &k : kids)
+        if(std::visit(overloaded{
+                          [&](const bookmark &x) { return x == b; },
+                          [&](const span &s) { return has_bookmark(s.children(), b); },
+                          [&](const hyperlink &h) { return has_bookmark(h.children(), b); },
+                          [](const auto &) { return false; },
+                      },
+               k.v))
+            return true;
+    return false;
+}
+
+bool matches(const placeholder &p, const std::vector<inline_node> &kids, const style_name &style)
+{
+    return std::visit(
+        overloaded{
+            [&](const bookmark &b) { return has_bookmark(kids, b); },
+            [&](const style_name &sn) { return style == sn; },
+            [&](const text &t)
+            {
+                const std::string s = detail::plain_text(kids);
+                const auto first = s.find_first_not_of(" \t\n");
+                if(first == std::string::npos)
+                    return t.content.empty();
+                return s.substr(first, s.find_last_not_of(" \t\n") - first + 1) == t.content;
+            },
+        },
+        p);
+}
+
+struct found_block
+{
+    std::vector<block_node> *blocks{nullptr};
+    std::size_t index{0};
+};
+
+/// The first block in blocks, or in the lists and tables in them, that is the
+/// placeholder.
+found_block find_placeholder(std::vector<block_node> &blocks, const placeholder &p)
+{
+    for(std::size_t i = 0; i != blocks.size(); ++i)
+    {
+        found_block f = std::visit(
+            overloaded{
+                [&](paragraph &n) { return matches(p, n.children(), n.style) ? found_block{&blocks, i} : found_block{}; },
+                [&](heading &n) { return matches(p, n.children(), n.style) ? found_block{&blocks, i} : found_block{}; },
+                [&](list &l)
+                {
+                    for(auto &it : l.items())
+                        if(auto f = find_placeholder(it.children(), p); f.blocks)
+                            return f;
+                    return found_block{};
+                },
+                [&](table &t)
+                {
+                    for(auto &row : t.rows)
+                        for(auto &c : row)
+                            if(auto f = find_placeholder(c.children(), p); f.blocks)
+                                return f;
+                    return found_block{};
+                },
+                [](auto &) { return found_block{}; },
+            },
+            blocks[i].v);
+        if(f.blocks)
+            return f;
+    }
+    return {};
+}
+
 template <typename Registry, typename T>
 style_name add_checked(Registry &to, const T &value, const char *what)
 {
@@ -66,6 +140,13 @@ text_doc &text_doc::append(const text_doc &other)
     if(&other == this)
         return append(text_doc(other));
 
+    merge_registries(other);
+    body.insert(body.end(), other.body.begin(), other.body.end());
+    return *this;
+}
+
+void text_doc::merge_registries(const text_doc &other)
+{
     check_no_clash(m_styles, other.m_styles, "Style");
     check_no_clash(m_list_styles, other.m_list_styles, "List style");
     check_no_clash(m_resources, other.m_resources, "Resource");
@@ -73,8 +154,37 @@ text_doc &text_doc::append(const text_doc &other)
     add_all(m_styles, other.m_styles);
     add_all(m_list_styles, other.m_list_styles);
     add_all(m_resources, other.m_resources);
-    body.insert(body.end(), other.body.begin(), other.body.end());
-    return *this;
+}
+
+bool text_doc::replace(const placeholder &p, const text_doc &content)
+{ return fill(p, content, fill_mode::replace); }
+
+bool text_doc::insert_after(const placeholder &p, const text_doc &content)
+{ return fill(p, content, fill_mode::after); }
+
+bool text_doc::insert_before(const placeholder &p, const text_doc &content)
+{ return fill(p, content, fill_mode::before); }
+
+bool text_doc::fill(const placeholder &p, const text_doc &content, fill_mode mode)
+{
+    if(&content == this)
+        return fill(p, text_doc(content), mode);
+
+    found_block f;
+    for(auto *blocks : {&body, &page.header, &page.footer})
+        if(!f.blocks)
+            f = find_placeholder(*blocks, p);
+    if(!f.blocks)
+        return false;
+
+    merge_registries(content);
+    auto pos = f.blocks->begin() + static_cast<std::ptrdiff_t>(f.index);
+    if(mode == fill_mode::replace)
+        pos = f.blocks->erase(pos);
+    else if(mode == fill_mode::after)
+        ++pos;
+    f.blocks->insert(pos, content.body.begin(), content.body.end());
+    return true;
 }
 
 style_name text_doc::add_style(const style &s) { return add_checked(m_styles, s, "Style"); }

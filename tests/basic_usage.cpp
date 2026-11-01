@@ -164,3 +164,61 @@ TEST(BASIC_USAGE, AddRowChecksWidth)
     t.add_cell(paragraph("d"));
     EXPECT_FALSE(t.is_rectangular());
 }
+
+TEST(BASIC_USAGE, ReplacePlaceholders)
+{
+    text_doc doc{heading(1, "Report"), paragraph(" {{summary}} "),
+        paragraph(bookmark{"details"}, "Details go here"),
+        paragraph("Placeholder style").set_style("Placeholder")};
+
+    EXPECT_TRUE(doc.replace(text{"{{summary}}"}, {heading(2, "Summary"), table(1, 1)}));
+    EXPECT_TRUE(doc.replace(bookmark{"details"}, paragraph("details")));
+    EXPECT_TRUE(doc.replace(style_name("Placeholder"), text_doc{}));
+    EXPECT_FALSE(doc.replace(text{"{{summary}}"}, paragraph("again"))) << "already replaced";
+
+    const text_doc expected{heading(1, "Report"), heading(2, "Summary"), table(1, 1),
+        paragraph("details")};
+    EXPECT_EQ(doc.body, expected.body);
+}
+
+TEST(BASIC_USAGE, InsertAroundPlaceholder)
+{
+    text_doc doc{paragraph("a"), paragraph("{{x}}"), paragraph("b")};
+    EXPECT_TRUE(doc.insert_after(text{"{{x}}"}, {paragraph("after 1"), paragraph("after 2")}));
+    EXPECT_TRUE(doc.insert_before(text{"{{x}}"}, paragraph("before")));
+    const text_doc expected{paragraph("a"), paragraph("before"), paragraph("{{x}}"),
+        paragraph("after 1"), paragraph("after 2"), paragraph("b")};
+    EXPECT_EQ(doc.body, expected.body);
+}
+
+TEST(BASIC_USAGE, PlaceholderInCellsAndHeader)
+{
+    table t(1, 1);
+    t.cell(0, 0).add(paragraph("{{cell}}"));
+    text_doc doc{t};
+    doc.page.set_footer(paragraph("{{footer}}"));
+
+    EXPECT_TRUE(doc.replace(text{"{{cell}}"}, paragraph("in a cell")));
+    EXPECT_TRUE(doc.replace(text{"{{footer}}"}, paragraph("in the footer")));
+    EXPECT_EQ(collect<table>(doc).front()->cell(0, 0).children().front(),
+        to_block(paragraph("in a cell")));
+    EXPECT_EQ(doc.page.footer.front(), to_block(paragraph("in the footer")));
+}
+
+TEST(BASIC_USAGE, FillMergesRegistries)
+{
+    text_doc doc{paragraph("{{x}}")};
+    style bold("Bold", text_props(font_weight::bold));
+
+    text_doc part;
+    part.add(paragraph("bold").set_style(part.add_style(bold)));
+    EXPECT_TRUE(doc.replace(text{"{{x}}"}, part));
+    EXPECT_NE(doc.styles().find("Bold"), nullptr);
+
+    // A clash throws and leaves the document as it was.
+    text_doc clash{paragraph("y")};
+    clash.add_style(style("Bold", text_props(font_style::italic)));
+    const text_doc before = doc;
+    EXPECT_THROW(doc.insert_after(text{"bold"}, clash), std::invalid_argument);
+    EXPECT_EQ(doc, before);
+}

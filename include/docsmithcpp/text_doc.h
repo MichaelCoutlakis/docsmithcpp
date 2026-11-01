@@ -21,6 +21,7 @@
 // traversal helpers.
 
 #include <filesystem>
+#include <variant>
 #include <vector>
 
 #include "docsmithcpp/list.h"
@@ -34,6 +35,11 @@
 
 namespace docsmith
 {
+
+/// A template's placeholder, for text_doc::replace() and insert_*(): the first
+/// paragraph or heading that holds this bookmark, has this style, or whose text
+/// is this (ignoring white space around it).
+using placeholder = std::variant<bookmark, style_name, text>;
 
 class text_doc
 {
@@ -64,6 +70,19 @@ public:
     /// other.meta is not copied; a title paragraph in other's body is appended
     /// like any other paragraph.
     text_doc &append(const text_doc &other);
+
+    /// Filling in a template: puts content's body in place of, after or
+    /// before the placeholder, and adds content's styles, list styles and
+    /// resources as append() does. The placeholder is looked for depth first
+    /// in the body (lists and table cells included), then the page header and
+    /// footer. Returns false, leaving the document unchanged, if nothing
+    /// matches.
+    ///
+    ///     doc.replace(text{"{{summary}}"}, {heading(1, "Summary"), results});
+    ///     doc.insert_after(bookmark{"log"}, paragraph(log));
+    bool replace(const placeholder &p, const text_doc &content);
+    bool insert_after(const placeholder &p, const text_doc &content);
+    bool insert_before(const placeholder &p, const text_doc &content);
 
     /// Compares everything, registries included. To compare content only,
     /// compare the bodies: a.body == b.body.
@@ -104,6 +123,11 @@ public:
     page_style page; //!< The header and footer on the body's pages
 
 private:
+    enum class fill_mode { replace, after, before };
+    bool fill(const placeholder &p, const text_doc &content, fill_mode mode);
+    /// Adds other's registries, or throws (changing nothing) on a clash.
+    void merge_registries(const text_doc &other);
+
     style_registry m_styles;
     list_style_registry m_list_styles;
     resource_registry m_resources;
