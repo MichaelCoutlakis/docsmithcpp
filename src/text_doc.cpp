@@ -26,6 +26,62 @@ namespace docsmith
 {
 namespace fs = std::filesystem;
 
+namespace
+{
+template <typename Registry, typename T>
+void check_no_clash(const Registry &to, const std::string &name, const T &value, const char *what)
+{
+    if(const auto *existing = to.find(name); existing && !(*existing == value))
+        throw std::invalid_argument(
+            std::string(what) + " \"" + name + "\" is already defined differently");
+}
+
+/// Throws if from defines a name that to defines differently.
+template <typename Registry>
+void check_no_clash(const Registry &to, const Registry &from, const char *what)
+{
+    for(const auto &[name, value] : from)
+        check_no_clash(to, name, value, what);
+}
+
+template <typename Registry>
+void add_all(Registry &to, const Registry &from)
+{
+    for(const auto &[name, value] : from)
+        if(!to.find(name))
+            to.add(value);
+}
+
+template <typename Registry, typename T>
+style_name add_checked(Registry &to, const T &value, const char *what)
+{
+    check_no_clash(to, value.m_name.get_name(), value, what);
+    to.add(value);
+    return value.m_name;
+}
+} // namespace
+
+text_doc &text_doc::append(const text_doc &other)
+{
+    if(&other == this)
+        return append(text_doc(other));
+
+    check_no_clash(m_styles, other.m_styles, "Style");
+    check_no_clash(m_list_styles, other.m_list_styles, "List style");
+    check_no_clash(m_resources, other.m_resources, "Resource");
+
+    add_all(m_styles, other.m_styles);
+    add_all(m_list_styles, other.m_list_styles);
+    add_all(m_resources, other.m_resources);
+    body.insert(body.end(), other.body.begin(), other.body.end());
+    return *this;
+}
+
+style_name text_doc::add_style(const style &s) { return add_checked(m_styles, s, "Style"); }
+
+style_name text_doc::add_style(const list_style &ls)
+{ return add_checked(m_list_styles, ls, "List style"); }
+
 image text_doc::add_image(std::string name, std::string data, std::string media_type)
 {
     image img{name};

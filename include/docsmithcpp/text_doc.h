@@ -57,6 +57,13 @@ public:
         return *this;
     }
 
+    /// Appends other's body, and adds its styles, list styles and resources.
+    /// A name defined in both keeps one copy if the definitions are equal, and
+    /// throws std::invalid_argument (leaving this document unchanged) if not.
+    /// other.meta is not copied; a title paragraph in other's body is appended
+    /// like any other paragraph.
+    text_doc &append(const text_doc &other);
+
     /// Compares everything, registries included. To compare content only,
     /// compare the bodies: a.body == b.body.
     bool operator==(const text_doc &) const = default;
@@ -67,6 +74,12 @@ public:
     const list_style_registry &list_styles() const { return m_list_styles; }
     resource_registry &resources() { return m_resources; }
     const resource_registry &resources() const { return m_resources; }
+
+    /// Adds the style definition and returns its name, for set_style(). Adding
+    /// an equal definition again does nothing; a different definition under the
+    /// same name throws std::invalid_argument.
+    style_name add_style(const style &s);
+    style_name add_style(const list_style &ls);
 
     /// Adds data as the resource name (a relative path, e.g. "Pictures/a.png")
     /// and returns an image that refers to it.

@@ -84,6 +84,12 @@
     <DisplayString>{content}</DisplayString>
     <Expand />
   </Type>
+  <Type Name="docsmith::url_target">
+    <DisplayString>url {url}</DisplayString>
+  </Type>
+  <Type Name="docsmith::bookmark_target">
+    <DisplayString>to bookmark {name}</DisplayString>
+  </Type>
   <Type Name="docsmith::bookmark">
     <DisplayString>bookmark {name}</DisplayString>
   </Type>
@@ -132,10 +138,10 @@
     </Expand>
   </Type>
   <Type Name="docsmith::hyperlink">
-    <DisplayString Condition="(*m_children.m_ptr)._Mypair._Myval2._Mylast - (*m_children.m_ptr)._Mypair._Myval2._Myfirst == 1">hyperlink {url} {*(*m_children.m_ptr)._Mypair._Myval2._Myfirst}</DisplayString>
-    <DisplayString>hyperlink {url} {(*m_children.m_ptr)}</DisplayString>
+    <DisplayString Condition="(*m_children.m_ptr)._Mypair._Myval2._Mylast - (*m_children.m_ptr)._Mypair._Myval2._Myfirst == 1">hyperlink {target} {*(*m_children.m_ptr)._Mypair._Myval2._Myfirst}</DisplayString>
+    <DisplayString>hyperlink {target} {(*m_children.m_ptr)}</DisplayString>
     <Expand>
-      <Item Name="url">url</Item>
+      <Item Name="target">target</Item>
       <ArrayItems>
         <Size>(*m_children.m_ptr)._Mypair._Myval2._Mylast - (*m_children.m_ptr)._Mypair._Myval2._Myfirst</Size>
         <ValuePointer>(*m_children.m_ptr)._Mypair._Myval2._Myfirst</ValuePointer>

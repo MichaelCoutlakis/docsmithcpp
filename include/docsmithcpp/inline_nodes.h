@@ -75,19 +75,46 @@ public:
     bool operator==(const span &) const = default;
 };
 
+/// A link to a URL, used as is (e.g. "https://example.com", "mailto:a@b.org").
+struct url_target
+{
+    std::string url;
+    bool operator==(const url_target &) const = default;
+};
+
+/// A link to the bookmark of that name in the same document. Writers spell it
+/// in their format's own way (e.g. "#name" in ODT and HTML).
+struct bookmark_target
+{
+    std::string name;
+    bool operator==(const bookmark_target &) const = default;
+};
+
+using link_target = std::variant<url_target, bookmark_target>;
+
 class hyperlink : public has_children<inline_node, hyperlink, true>
 {
 public:
-    std::string url;
+    link_target target;
 
     hyperlink() = default;
-    explicit hyperlink(std::string u) :
-        url(std::move(u))
+    explicit hyperlink(link_target t) :
+        target(std::move(t))
     {
     }
-    template <typename... Args, typename = std::enable_if_t<(sizeof...(Args) >= 1)>>
-    hyperlink(std::string u, Args &&...content) :
-        url(std::move(u))
+    explicit hyperlink(std::string url) :
+        target(url_target{std::move(url)})
+    {
+    }
+    explicit hyperlink(const bookmark &b) :
+        target(bookmark_target{b.name})
+    {
+    }
+    /// A target (as for the one-argument constructors) followed by content.
+    template <typename Target, typename... Args,
+        typename = std::enable_if_t<(sizeof...(Args) >= 1)>>
+    hyperlink(Target &&t, Args &&...content) :
+        hyperlink(std::forward<Target>(t))
     {
         (this->add(std::forward<Args>(content)), ...);
     }

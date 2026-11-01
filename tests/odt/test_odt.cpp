@@ -241,7 +241,7 @@ TEST(ODT, GenerateBookmark)
 
     d.styles().add(style_page_break);
 
-    d.add(paragraph(hyperlink("#Bookmark 1", "Link back to the bookmark")));
+    d.add(paragraph(hyperlink(bookmark{"Bookmark 1"}, "Link back to the bookmark")));
 
     odt::file(d).save("odt/out/bookmark.odt");
 }
@@ -354,4 +354,17 @@ TEST(ODT, TitleStyleIsDefined)
     // Saved once, defined once.
     again.save("odt/out/title_resaved.odt");
     EXPECT_EQ(odt::file::load("odt/out/title_resaved.odt").doc, again.doc);
+}
+
+TEST(ODT, LinkTargetsRoundTrip)
+{
+    text_doc doc{paragraph("target", bookmark{"Bookmark 1"}),
+        paragraph(hyperlink(bookmark{"Bookmark 1"}, "back"), hyperlink("https://example.com", "out"))};
+    odt::file(doc).save("odt/out/link_targets.odt");
+
+    const auto loaded = odt::file::load("odt/out/link_targets.odt");
+    const auto links = collect<hyperlink>(loaded.doc);
+    ASSERT_EQ(links.size(), 2U);
+    EXPECT_EQ(links[0]->target, link_target(bookmark_target{"Bookmark 1"}));
+    EXPECT_EQ(links[1]->target, link_target(url_target{"https://example.com"}));
 }

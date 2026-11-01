@@ -16,6 +16,7 @@
  * limitations under the License.
  *****************************************************************************/
 #pragma once
+#include <cstdint>
 #include <optional>
 #include <string>
 
@@ -111,6 +112,18 @@ struct font_size
     float m_points;
 };
 
+/// An sRGB text colour.
+struct colour
+{
+    static constexpr colour rgb(std::uint8_t r, std::uint8_t g, std::uint8_t b)
+    { return {r, g, b}; }
+    bool operator==(const colour &rhs) const = default;
+
+    std::uint8_t m_r{};
+    std::uint8_t m_g{};
+    std::uint8_t m_b{};
+};
+
 struct dim
 {
     double m_num;
@@ -141,11 +154,23 @@ struct text_props
         m_font_name = fn;
         return *this;
     }
+    text_props &set(const font_weight &fw)
+    {
+        m_font_weight = fw;
+        return *this;
+    }
+    text_props &set(const colour &c)
+    {
+        m_colour = c;
+        return *this;
+    }
     bool operator==(const text_props &rhs) const = default;
 
     std::optional<font_size> m_font_size;
     std::optional<font_style> m_font_style;
     std::optional<font_name> m_font_name;
+    std::optional<font_weight> m_font_weight;
+    std::optional<colour> m_colour;
 };
 
 /// fo:text-align

@@ -96,6 +96,8 @@ const char *css_value(font_style fs)
     }
 }
 
+const char *css_value(font_weight fw) { return fw == font_weight::bold ? "bold" : "normal"; }
+
 const char *css_value(break_type b)
 {
     switch(b)
@@ -128,6 +130,10 @@ std::string generated_css(const text_doc &doc)
                 decls += fmt::format(" font-style: {};", css_value(*tp->m_font_style));
             if(tp->m_font_name)
                 decls += fmt::format(" font-family: \"{}\";", tp->m_font_name->get_name());
+            if(tp->m_font_weight)
+                decls += fmt::format(" font-weight: {};", css_value(*tp->m_font_weight));
+            if(const auto &c = tp->m_colour)
+                decls += fmt::format(" color: #{:02x}{:02x}{:02x};", c->m_r, c->m_g, c->m_b);
         }
         if(const auto &pp = s->m_paragraph_props)
         {
@@ -415,7 +421,11 @@ private:
     void emit_inline(const hyperlink &h)
     {
         m_os << "<a href=\"";
-        escape(m_os, h.url.starts_with('#') ? "#" + html_id(h.url.substr(1)) : h.url, true);
+        escape(m_os,
+            std::visit(overloaded{[](const url_target &u) { return u.url; },
+                           [](const bookmark_target &b) { return "#" + html_id(b.name); }},
+                h.target),
+            true);
         m_os << "\">";
         flow(h.children());
         m_os << "</a>";

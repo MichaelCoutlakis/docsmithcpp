@@ -142,7 +142,8 @@ int main() {
 
     // Find nodes by type (optionally with a predicate) -- no dynamic_cast.
     for (const hyperlink* a : collect<hyperlink>(doc))
-        std::cout << a->url << "\n";
+        if (const auto* u = std::get_if<url_target>(&a->target))
+            std::cout << u->url << "\n";
 
     auto body_paras = find_all<paragraph>(doc,
         [](const paragraph& p) { return p.style.get_name() == "Text_body"; });
@@ -169,13 +170,13 @@ Worthy mentions and related projects
 
 - [odfpy](https://github.com/eea/odfpy/wiki/Introduction) Is a python library
   (GPL) to read and write ODF text documents. It has an API similar to what I'm
-  trying to acheive with docsmithcpp, namely, in terms of generating and
+  trying to achieve with `docsmithcpp`, namely, in terms of generating and
   manipulating the document structure (e.g.
   `h=H(outlinelevel=1, stylename=h1style, text="My first text")`,
   `doc.getElementsByType`)
 - [python-docx](https://python-docx.readthedocs.io/en/latest/), a Python library
   for creating and updating .docx files. The document generation API is similar
-  to what I'm trying to acheive.
+  to what I'm trying to achieve.
 - [docx4j](https://www.docx4java.org/trac/docx4j) is a Java library for creating
   and manipulating docx adn other OOXML files. However, it looks to be on the
   heavier and more verbose side. E.g.

@@ -102,3 +102,65 @@ TEST(BASIC_USAGE, FindTitleAnywhere)
     EXPECT_EQ(doc.body.size(), 2U);
     EXPECT_EQ(doc.body.back(), to_block(paragraph("Renamed").set_style(builtin::title)));
 }
+
+TEST(BASIC_USAGE, AddStyle)
+{
+    text_doc doc;
+    const style bold("Bold", text_props(font_weight::bold));
+    EXPECT_EQ(doc.add_style(bold), style_name("Bold"));
+    EXPECT_EQ(*doc.styles().find("Bold"), bold);
+
+    EXPECT_NO_THROW(doc.add_style(bold)) << "an equal definition again is fine";
+    EXPECT_THROW(
+        doc.add_style(style("Bold", text_props(font_style::italic))), std::invalid_argument);
+    EXPECT_EQ(*doc.styles().find("Bold"), bold);
+}
+
+TEST(BASIC_USAGE, AppendCombinesBodiesAndRegistries)
+{
+    text_doc doc{paragraph("first")};
+    doc.add_style(style("Shared", text_props(font_weight::bold)));
+
+    text_doc part{paragraph("second")};
+    part.meta.title = "not copied";
+    part.add_style(style("Shared", text_props(font_weight::bold)));
+    part.add_style(style("Own", text_props(font_style::italic)));
+    part.add(paragraph(frame(part.add_image("Pictures/a.png", "bytes", "image/png"))));
+
+    doc.append(part);
+    EXPECT_EQ(doc.body.size(), 3U);
+    EXPECT_EQ(doc.body[1], to_block(paragraph("second")));
+    EXPECT_EQ(doc.styles().size(), 2U);
+    EXPECT_NE(doc.resources().find("Pictures/a.png"), nullptr);
+    EXPECT_TRUE(doc.meta.title.empty());
+
+    doc.append(doc);
+    EXPECT_EQ(doc.body.size(), 6U);
+}
+
+TEST(BASIC_USAGE, AppendClashLeavesDocumentUnchanged)
+{
+    text_doc doc{paragraph("first")};
+    doc.add_style(style("S", text_props(font_weight::bold)));
+    const text_doc before = doc;
+
+    text_doc part{paragraph("second")};
+    part.add_style(style("Other", text_props(font_style::italic)));
+    part.add_style(style("S", text_props(font_style::italic)));
+
+    EXPECT_THROW(doc.append(part), std::invalid_argument);
+    EXPECT_EQ(doc, before);
+}
+
+TEST(BASIC_USAGE, AddRowChecksWidth)
+{
+    table t;
+    t.add_row({paragraph("a"), paragraph("b")});
+    t.add_row({table_cell(paragraph("wide")).set_span(1, 2), {}});
+    EXPECT_THROW(t.add_row({paragraph("c")}), std::invalid_argument);
+    EXPECT_TRUE(t.is_rectangular());
+
+    t.add_row();
+    t.add_cell(paragraph("d"));
+    EXPECT_FALSE(t.is_rectangular());
+}

@@ -16,6 +16,7 @@
  * limitations under the License.
  *****************************************************************************/
 
+#include <algorithm>
 #include <stdexcept>
 
 #include "docsmithcpp/nodes.h"
@@ -43,6 +44,19 @@ table table::from_cells(std::vector<std::vector<table_cell>> cells)
     table t;
     t.rows = std::move(cells);
     return t;
+}
+
+void table::add_row(std::vector<table_cell> cells)
+{
+    if(!rows.empty() && cells.size() != num_cols())
+        throw std::invalid_argument("each row must have the same number of columns");
+    rows.push_back(std::move(cells));
+}
+
+bool table::is_rectangular() const
+{
+    return std::all_of(
+        rows.begin(), rows.end(), [this](const auto &row) { return row.size() == num_cols(); });
 }
 
 cell_view<table_cell> table::row(size_t row_idx)

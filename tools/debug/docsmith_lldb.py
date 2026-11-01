@@ -21,7 +21,7 @@ CONTAINERS = {
     "paragraph": [],
     "heading": ["level"],
     "span": [],
-    "hyperlink": ["url"],
+    "hyperlink": ["target"],
     "list_item": [],
     "table_cell": ["rowspan", "colspan"],
 }
@@ -52,6 +52,18 @@ def _style(valobj):
     if not style.IsValid():
         return ""
     return _string(style.GetNonSyntheticValue().GetChildMemberWithName("m_name"))
+
+
+def _link_target(target):
+    """A hyperlink's target variant: the URL, or "#" + the bookmark's name."""
+    v = _synthetic(target)
+    if v.GetNumChildren() == 0:
+        return ""
+    alt = v.GetChildAtIndex(0)
+    url = alt.GetChildMemberWithName("url")
+    if url.IsValid():
+        return _string(url)
+    return "#" + _string(alt.GetChildMemberWithName("name"))
 
 
 def _alternative(node):
@@ -118,7 +130,7 @@ def container_summary(valobj, internal_dict):
     if style:
         parts.append("[" + style + "]")
     if name == "hyperlink":
-        parts.append("<" + _string(valobj.GetChildMemberWithName("url")) + ">")
+        parts.append("<" + _link_target(valobj.GetChildMemberWithName("target")) + ">")
     parts.append(_preview(valobj))
     return " ".join(parts)
 
@@ -140,6 +152,14 @@ def table_summary(valobj, internal_dict):
 
 def text_summary(valobj, internal_dict):
     return valobj.GetChildMemberWithName("content").GetSummary()
+
+
+def url_target_summary(valobj, internal_dict):
+    return "url " + (valobj.GetChildMemberWithName("url").GetSummary() or "")
+
+
+def bookmark_target_summary(valobj, internal_dict):
+    return "to bookmark " + (valobj.GetChildMemberWithName("name").GetSummary() or "")
 
 
 def bookmark_summary(valobj, internal_dict):
@@ -309,6 +329,8 @@ def __lldb_init_module(debugger, internal_dict):
         f'type summary add -e -w docsmith "docsmith::table" -F {m}.table_summary',
         f'type summary add -w docsmith "docsmith::text" -F {m}.text_summary',
         f'type summary add -w docsmith "docsmith::bookmark" -F {m}.bookmark_summary',
+        f'type summary add -w docsmith "docsmith::url_target" -F {m}.url_target_summary',
+        f'type summary add -w docsmith "docsmith::bookmark_target" -F {m}.bookmark_target_summary',
         f'type summary add -w docsmith "docsmith::style_name" -F {m}.style_name_summary',
         f'type summary add -e -w docsmith "docsmith::text_doc" -F {m}.text_doc_summary',
         f'type summary add -e -w docsmith -x "^docsmith::box<.+>$" -F {m}.box_summary',

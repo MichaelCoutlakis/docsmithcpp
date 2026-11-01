@@ -78,7 +78,9 @@ inline_node parse_inline(const pugi::xml_node &node)
     }
     if(tag == "text:a")
     {
-        hyperlink h(node.attribute("xlink:href").as_string());
+        const std::string href = node.attribute("xlink:href").as_string();
+        hyperlink h = href.starts_with('#') ? hyperlink(bookmark_target{href.substr(1)})
+                                            : hyperlink(url_target{href});
         h.children() = parse_inline_children(node);
         return inline_node{std::move(h)};
     }

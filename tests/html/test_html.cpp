@@ -96,6 +96,16 @@ TEST(HTML, StylesBecomeClassesAndCss)
     EXPECT_TRUE(has(html, R"(<p><span class="Big_Text">y</span></p>)"));
 }
 
+TEST(HTML, BoldAndColourBecomeCss)
+{
+    text_doc doc;
+    const auto pass =
+        doc.add_style(style("Pass", text_props(font_weight::bold, colour::rgb(0, 128, 255))));
+    doc.add(paragraph("ok").set_style(pass));
+
+    EXPECT_TRUE(has(html::file(doc).to_string(), ".Pass { font-weight: bold; color: #0080ff; }"));
+}
+
 TEST(HTML, ListsFollowListStyles)
 {
     list_style alpha("L1", {list_style_num(style{}, 1, list_enum::lower_alpha, ")", 3)});
@@ -142,7 +152,7 @@ TEST(HTML, TableSpansAndCoveredCells)
 TEST(HTML, InternalLinksMatchBookmarkIds)
 {
     text_doc doc{paragraph("target", bookmark{"Bookmark 1"}),
-        paragraph(hyperlink("#Bookmark 1", "back"))};
+        paragraph(hyperlink(bookmark{"Bookmark 1"}, "back"))};
     const auto html = html::file(doc).to_string();
 
     EXPECT_TRUE(has(html, R"(<a id="Bookmark_1"></a>)"));
@@ -284,4 +294,11 @@ TEST(HTML, TitleParagraph)
     EXPECT_TRUE(has(html, "<title>Report</title>")) << "the title paragraph before the heading";
     EXPECT_TRUE(has(html, R"(<p class="Title">Report</p>)"));
     EXPECT_FALSE(has(html, ".Title {")) << "styling is left to html::file::css";
+}
+
+TEST(HTML, UrlTargetsAreLeftAsIs)
+{
+    // A URL that starts with "#" is not a bookmark target, so its id isn't sanitised.
+    const auto html = html::file(text_doc{paragraph(hyperlink("#a b", "x"))}).to_string();
+    EXPECT_TRUE(has(html, R"(<a href="#a b">x</a>)"));
 }

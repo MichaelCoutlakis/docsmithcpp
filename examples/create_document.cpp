@@ -15,14 +15,55 @@
 void write_example_test_report()
 {
     using namespace docsmith;
+
+    struct test_case_doc
+    {
+        std::string name;
+        bool passed;
+        text_doc detail;
+    };
+
+    std::vector<test_case_doc> records{
+        {.name = "test case a", .passed = true, .detail = paragraph("some details on test case a")},
+        {.name = "test case b",
+            .passed = false,
+            .detail = paragraph("some details on test case b")}};
+
     text_doc doc;
     doc.meta.title = "DocSmith++ Test Report (meta data title)";
     doc.meta.author = "Example Test Application";
     doc.set_title("DocSmith++ Test Report");
-    doc.add(paragraph("Hello world"));
+    doc.add(heading(1, "Test Case Summary"));
+
+    auto pass_style =
+        doc.add_style(style("pass-style", text_props(font_weight::bold, colour::rgb(0, 128, 0))));
+    auto fail_style =
+        doc.add_style(style("fail-style", text_props(font_weight::bold, colour::rgb(192, 0, 0))));
+
+    auto pass_summary = paragraph("Passed").set_style(pass_style);
+    auto fail_summary = paragraph("Failed").set_style(fail_style);
+    auto summary_table = table::from_cells({{{"Test Case"}, {"Result"}}});
+    for(auto &r : records)
+    {
+        summary_table.add_row(
+            // Test case with link to detail section
+            {paragraph(hyperlink(bookmark{r.name}, r.name)),
+                // Pass or Fail
+                {r.passed ? pass_summary : fail_summary}});
+    }
+
+    doc.add(summary_table);
+    doc.add(heading(1, "Test Case Detail"));
+
+    for(auto &r : records)
+    {
+        // Heading with link target from summary table
+        doc.add(heading(2, span(r.name, bookmark(r.name))));
+        doc.append(r.detail);
+    }
 
     if(auto t = doc.find_title(); t)
-        *t = paragraph("replaced title").set_style(builtin::title);
+        t->add(" - Updated");
 
     odt::file(doc).save("Example DocSmith++ Test Report.odt");
 }
@@ -45,8 +86,8 @@ int main(int argc, char **argv)
             hyperlink("https://github.com/MichaelCoutlakis/docsmithcpp", "link"),
             "."),
         paragraph("Styles carry over to both formats.").set_style(note),
-        // A link to a bookmark in a later section: "#" + the bookmark's name.
-        paragraph("The results are in ", hyperlink("#results", "the table"), " below."),
+        // A link to a bookmark in a later section.
+        paragraph("The results are in ", hyperlink(bookmark{"results"}, "the table"), " below."),
         heading(2, "A list"),
         list(list_item("Build the document"), list_item("Save it")).set_style(steps),
     };

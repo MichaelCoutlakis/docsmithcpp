@@ -56,6 +56,16 @@ held in `std::variant`. This is a breaking change to almost every public API.
   directory. Generated test files go to `tests/odt/out/`.
 
 ### Added
+- `hyperlink::target` is a `link_target` variant: `url_target` (used as is) or
+  `bookmark_target` (a bookmark in the same document). `hyperlink(bookmark{"x"}, ...)`
+  links to a bookmark; writers add the `#`, and the ODT parser turns `#x` back into a
+  bookmark target. This replaces `hyperlink::url`.
+- `text_doc::add_style()` registers a style (or list style) and returns its name in one
+  step; `text_doc::append()` appends another document's body, styles and resources and
+  throws on a name defined differently in both.
+- Text properties `font_weight` and `colour` (`fo:font-weight` / `fo:color` in ODT,
+  `font-weight` / `color` in CSS).
+- `table::add_row(cells)` checks the row width; `table::is_rectangular()`.
 - `unknown` pass-through node. The parser stores verbatim XML for elements it does not
   model and the writer re-emits it.
 - `box<T>`: a value-semantic heap holder with type-erased destroy / clone / compare. It

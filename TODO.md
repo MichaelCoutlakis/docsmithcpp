@@ -80,9 +80,9 @@ ODT) works. Move `[Unreleased]` in `CHANGELOG.md` to `[0.1.0]` and tag it.
   or map them to text.
 - The parser flattens `table:table-header-rows` into ordinary rows, so header rows
   are lost (in both ODT output and HTML `<thead>`/`<th>`).
-- `set_style(style)` keeps only the name; the definition must also be added to
-  `text_doc::styles()`. This is easy to get wrong. Consider a helper on the
-  document that does both.
+- `set_style(style)` keeps only the name. `text_doc::add_style()` registers a
+  definition and returns its name, but nothing yet checks that every style a node
+  names is defined.
 - Package entries that no `image` referred to at load (e.g. pictures used only by
   `unknown` markup) stay in the ODT package and are carried over on save, even if
   nothing uses them any more. Resources whose image was removed are dropped.

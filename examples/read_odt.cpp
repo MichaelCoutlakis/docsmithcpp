@@ -29,6 +29,8 @@ int main(int argc, char **argv)
 
     std::cout << "\nLinks:\n";
     for(const hyperlink *a : collect<hyperlink>(doc))
-        std::cout << "  " << a->url << "\n";
+        std::visit(overloaded{[](const url_target &u) { std::cout << "  " << u.url << "\n"; },
+                       [](const bookmark_target &b) { std::cout << "  bookmark " << b.name << "\n"; }},
+            a->target);
     return 0;
 }

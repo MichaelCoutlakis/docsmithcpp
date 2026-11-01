@@ -248,7 +248,10 @@ void writer::emit(pugi::xml_node parent, const hyperlink &h)
 {
     auto n = parent.append_child("text:a");
     n.append_attribute("xlink:type").set_value("simple");
-    n.append_attribute("xlink:href").set_value(h.url.c_str());
+    const std::string href = std::visit(overloaded{[](const url_target &u) { return u.url; },
+                                            [](const bookmark_target &b) { return "#" + b.name; }},
+        h.target);
+    n.append_attribute("xlink:href").set_value(href.c_str());
     for(const auto &c : h.children())
         write_inline(n, c);
 }
@@ -418,6 +421,15 @@ void write_xml(pugi::xml_node &n, const text_props &tp)
 
     if(tp.m_font_name)
         text_props_node.append_attribute("style:font-name") = tp.m_font_name->get_name().c_str();
+
+    if(tp.m_font_weight)
+        text_props_node.append_attribute("fo:font-weight") =
+            to_string(tp.m_font_weight.value()).c_str();
+
+    if(tp.m_colour)
+        text_props_node.append_attribute("fo:color") =
+            fmt::format("#{:02x}{:02x}{:02x}", tp.m_colour->m_r, tp.m_colour->m_g, tp.m_colour->m_b)
+                .c_str();
 }
 void write_xml(pugi::xml_node &n, const paragraph_props &props)
 {

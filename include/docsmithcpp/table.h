@@ -84,6 +84,8 @@ private:
 class table
 {
 public:
+    /// Every row has num_cols() cells. A slot spanned over by an earlier cell
+    /// still holds a (placeholder) cell; writers skip it (is_cell_covered()).
     std::vector<std::vector<table_cell>> rows;
 
     table() = default;
@@ -102,9 +104,16 @@ public:
     cell_view<const table_cell> col(size_t col_idx) const;
 
     void add_row() { rows.push_back({}); }
+    /// Throws std::invalid_argument unless cells has num_cols() cells (any
+    /// number for the first row).
+    void add_row(std::vector<table_cell> cells);
     void add_cell(table_cell c) { rows.back().push_back(std::move(c)); }
 
     bool is_cell_covered(size_t row, size_t col) const;
+
+    /// Whether every row has num_cols() cells. add_row() and add_cell() build
+    /// a row a cell at a time, so they can't check this as they go.
+    bool is_rectangular() const;
 
     bool operator==(const table &) const = default;
 };
