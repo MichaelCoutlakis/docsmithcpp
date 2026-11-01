@@ -5,9 +5,11 @@ structured document formats like `.odt`, `.docx`, `.html` and Markdown. It aims
 to provide a clean, idiomatic C++ API for working with rich-text documents, with
 future support for PDF.
 
-## Typical use case scenarios
+## 💻 Typical use case scenarios
 
-### Automatic report generation
+These are the main use case scenarios `DocSmith++` is designed to serve:
+
+### 📋 Automatic report generation
 
 Test software written in C++ could use `docsmithcpp` to generate test reports.
 `docsmithcpp` provides an API to do this cleanly without:
@@ -18,12 +20,12 @@ Test software written in C++ could use `docsmithcpp` to generate test reports.
   needed if the report was exported as an intermediate format and then post-
   processed.
 
-### Native document generation from C++
+### 📜 Native document generation from C++
 
 - Document export from C++ application
 - Template based documents: Load a template, fill in data, and save
 
-## When not to use DocSmith++
+## 📵 When not to use DocSmith++ 🚫
 
 - Document processing from a native C++ application is not required. See the
   [Bibliography](#bibliography) or search engine for document libraries in other
@@ -33,20 +35,21 @@ Test software written in C++ could use `docsmithcpp` to generate test reports.
 
 ---
 
-### 🚧 Roadmap
+## 📊 Feature summary and roadmap
 
 | Status             | Feature                               |
 | ------------------ | ------------------------------------- |
-| :white_check_mark: | Basic .docx read support              |
-| :white_check_mark: | Basic .odt read support               |
+| :white_check_mark: | C++ abstract document tree            |
 | :white_check_mark: | Manipulate the abstract document tree |
+| :white_check_mark: | Basic .odt read support               |
 | :white_check_mark: | Basic .odt output                     |
+| :white_check_mark: | Basic .docx read support              |
 | :white_check_mark: | Basic .docx output                    |
 | :white_check_mark: | HTML output                           |
 | :white_check_mark: | Markdown output                       |
 | :white_check_mark: | Markdown input (optional, md4c)       |
 
-## Features
+## 🧩 Features
 
 - 📝 Read and write `.odt` (OpenDocument Text) files. Load, edit and save keeps
   the parts of the file the model doesn't represent (styles, metadata, images).
@@ -153,33 +156,33 @@ the last two don't build them.
 ### 🧪 Testing
 
 The tests are unit and integration tests for parsing, writing and transforming
-documents. They use small `.odt` fixtures in `tests/odt/` and `.docx` ones,
-made by LibreOffice, in `tests/docx/`. Files the tests generate go to
+documents. They use small `.odt` fixtures in `tests/odt/` and `.docx` ones, made
+by LibreOffice, in `tests/docx/`. Files the tests generate go to
 `tests/odt/out/` and `tests/docx/out/`.
 
 When LibreOffice is installed (`soffice` on the `PATH` or in its usual place),
-the `libreoffice_opens_output` test runs the tests and has LibreOffice open every
-file they wrote. Skip it with `ctest -LE libreoffice`.
+the `libreoffice_opens_output` test runs the tests and has LibreOffice open
+every file they wrote. Skip it with `ctest -LE libreoffice`.
 
 The `consumer` test installs the library into the build directory and builds
 `tests/consumer/` against it with `find_package`, using the same toolchain. It
 configures a project from scratch, so skip it with `ctest -LE consumer` when
 iterating.
 
-### Examples
+### 🤔 Examples
 
 - `example_create_document [name]`: build a document in code and save it as
-  `<name>.odt`, `<name>.docx` and `<name>.html`. It also fills in the test report
-  template, `examples/report_template.odt`, and saves the report as `.odt`,
-  `.docx` and `.html`.
+  `<name>.odt`, `<name>.docx` and `<name>.html`. It also fills in the test
+  report template, `examples/report_template.odt`, and saves the report as
+  `.odt`, `.docx` and `.html`.
 - `example_fill_template`: replace and insert on the report template.
 - `example_make_report_template [out.odt]`: build the report template (styles,
   header and footer with page numbers, table of contents, placeholders).
 - `example_read_odt <in.odt>`: parse a file, print its tree and list its links.
 - `example_odt_to_html <in.odt> [out.html]`: convert through the document model.
 - `example_docx_to_html <in.docx> [out.html]`: the same for a Word file.
-- `example_md [in.odt|in.md] [out]`: with no arguments, build a small test report
-  and save `report.md`; convert an `.odt` to `.md`, or (with
+- `example_md [in.odt|in.md] [out]`: with no arguments, build a small test
+  report and save `report.md`; convert an `.odt` to `.md`, or (with
   `DOCSMITHCPP_MARKDOWN`) an `.md` to `.odt` and `.html`.
 
 📚 Example Usage
@@ -242,11 +245,15 @@ int main() {
 }
 ```
 
-## Design notes
+## ✏️ Design notes
 
 See [DESIGN.md](DESIGN.md) for the document model and other design decisions.
 
-## Bibliography
+## 🚧 Roadmap 🏗️
+
+See [TODO.md](TODO.md) for identified future attention.
+
+## 🏛️📖 Bibliography
 
 Worthy mentions and related projects
 
