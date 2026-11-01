@@ -32,18 +32,11 @@
 
 #include "format.h"
 #include "odf/package.h"
+#include "odt/styles.h"
 
 namespace docsmith::odt
 {
 namespace fs = std::filesystem;
-
-std::string to_string(align_horiz a);
-std::string to_string(align_vert a);
-std::string to_string(font_style fs);
-std::string to_string(font_weight fw);
-std::string to_string(text_align ta);
-std::string to_string(break_type b);
-std::string to_string(style_family f);
 
 namespace
 {
@@ -87,10 +80,28 @@ constexpr const char *base_content = R"~~(<?xml version="1.0" encoding="UTF-8"?>
     xmlns:loext="urn:org:documentfoundation:names:experimental:office:xmlns:loext:1.0"
     office:version="1.2">
     <office:font-face-decls/>
-    <office:styles/>
     <office:automatic-styles/>
     <office:body/>
 </office:document-content>
+)~~";
+
+constexpr const char *base_styles = R"~~(<?xml version="1.0" encoding="UTF-8"?>
+<office:document-styles
+    xmlns:draw="urn:oasis:names:tc:opendocument:xmlns:drawing:1.0"
+    xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+    xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0"
+    xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"
+    xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0"
+    xmlns:svg="urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0"
+    xmlns:fo="urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0"
+    xmlns:xlink="http://www.w3.org/1999/xlink"
+    xmlns:loext="urn:org:documentfoundation:names:experimental:office:xmlns:loext:1.0"
+    office:version="1.2">
+    <office:font-face-decls/>
+    <office:styles/>
+    <office:automatic-styles/>
+    <office:master-styles/>
+</office:document-styles>
 )~~";
 
 // LibreOffice's Title, its Heading parent's properties included.
@@ -136,21 +147,60 @@ std::set<style_family> families_of(
     return {style_family::paragraph};
 }
 
-/// Whether the package's styles.xml (a loaded file's) defines the style.
-bool defines_style(const odf::package &pkg, const style_name &name)
+/// Declares on dst the namespaces src declares and dst doesn't.
+void add_namespaces(pugi::xml_node dst, const pugi::xml_node &src)
 {
-    const auto *styles = pkg.find("styles.xml");
-    pugi::xml_document xml;
-    if(!styles || !xml.load_buffer(styles->data.data(), styles->data.size()))
-        return false;
-    for(auto s : xml.child("office:document-styles").child("office:styles").children("style:style"))
-        if(name.get_name() == s.attribute("style:name").as_string())
-            return true;
-    return false;
+    for(auto a : src.attributes())
+        if(std::string_view(a.name()).starts_with("xmlns:") && !dst.attribute(a.name()))
+            dst.append_attribute(a.name()) = a.value();
+}
+
+/// The style:style in container with that name and family.
+pugi::xml_node find_style(const pugi::xml_node &container, const std::string &name, style_family f)
+{
+    for(auto c : container.children("style:style"))
+        if(name == c.attribute("style:name").as_string())
+            if(auto s = read_style(c); s && s->m_family == f)
+                return c;
+    return {};
+}
+
+pugi::xml_node find_list_style(const pugi::xml_node &container, const std::string &name)
+{ return container.find_child_by_attribute("text:list-style", "style:name", name.c_str()); }
+
+/// Writes def in place of existing, or appends it to fallback if there's no
+/// existing definition. An unchanged definition is left as it was, so the
+/// properties the model doesn't hold survive.
+template <typename Def>
+void replace_or_add(
+    pugi::xml_node existing, pugi::xml_node fallback, const Def &def, bool unchanged)
+{
+    if(existing && unchanged)
+        return;
+    pugi::xml_node parent = existing ? existing.parent() : fallback;
+    write_xml(parent, def);
+    if(existing)
+    {
+        parent.insert_move_before(parent.last_child(), existing);
+        parent.remove_child(existing);
+    }
+}
+
+/// A registry's definitions in name order, so the output is stable.
+template <typename Registry>
+auto sorted(const Registry &r)
+{
+    std::vector<const typename Registry::mapped_type *> out;
+    for(const auto &[name, def] : r)
+        out.push_back(&def);
+    std::sort(out.begin(),
+        out.end(),
+        [](const auto *a, const auto *b) { return a->m_name.get_name() < b->m_name.get_name(); });
+    return out;
 }
 } // namespace
 
-std::string write_content(const text_doc &doc, odf::package &pkg) { return writer(pkg).write(doc); }
+void write_document(const text_doc &doc, odf::package &pkg) { writer(pkg).write(doc); }
 
 writer::writer(odf::package &pkg) :
     m_pkg(pkg)
@@ -159,19 +209,26 @@ writer::writer(odf::package &pkg) :
     auto root = m_content.child("office:document-content");
     root.attribute("office:version").set_value(m_pkg.version().c_str());
     m_font_faces = root.child("office:font-face-decls");
-    m_styles = root.child("office:styles");
     m_automatic_styles = root.child("office:automatic-styles");
     m_body = root.child("office:body");
     carry_over();
+    load_styles_xml();
 }
 
-std::string writer::write(const text_doc &doc)
+void writer::write(const text_doc &doc)
 {
     m_doc = &doc;
+    write_styles(doc);
     write_doc(doc);
-    std::ostringstream ss;
-    m_content.save(ss, "  ");
-    return ss.str();
+
+    auto save = [](const pugi::xml_document &xml)
+    {
+        std::ostringstream ss;
+        xml.save(ss, "  ");
+        return ss.str();
+    };
+    m_pkg.set("content.xml", save(m_content), "text/xml");
+    m_pkg.set("styles.xml", save(m_styles_xml), "text/xml");
 }
 
 // A loaded document's content.xml declares things the model doesn't hold: the
@@ -186,15 +243,74 @@ void writer::carry_over()
         return;
 
     auto src = xml.child("office:document-content");
-    auto dst = m_content.child("office:document-content");
-    for(auto a : src.attributes())
-        if(std::string_view(a.name()).starts_with("xmlns:") && !dst.attribute(a.name()))
-            dst.append_attribute(a.name()) = a.value();
+    add_namespaces(m_content.child("office:document-content"), src);
 
     for(auto c : src.child("office:font-face-decls").children())
         m_font_faces.append_copy(c);
     for(auto c : src.child("office:automatic-styles").children())
         m_automatic_styles.append_copy(c);
+}
+
+// The writer owns styles.xml. A loaded one is kept and updated in place, so its
+// default styles, page layouts and master pages (headers, footers) survive.
+void writer::load_styles_xml()
+{
+    pugi::xml_document base;
+    base.load_string(base_styles);
+    auto base_root = base.child("office:document-styles");
+
+    const auto *original = m_pkg.find("styles.xml");
+    if(original && m_styles_xml.load_buffer(original->data.data(), original->data.size()) &&
+        m_styles_xml.child("office:document-styles"))
+    {
+        auto root = m_styles_xml.child("office:document-styles");
+        add_namespaces(root, base_root);
+        m_styles = root.child("office:styles");
+        if(!m_styles)
+        {
+            auto fonts = root.child("office:font-face-decls");
+            m_styles = fonts ? root.insert_child_after("office:styles", fonts)
+                             : root.prepend_child("office:styles");
+        }
+        return;
+    }
+
+    m_styles_xml.reset(base);
+    auto root = m_styles_xml.child("office:document-styles");
+    root.attribute("office:version").set_value(m_pkg.version().c_str());
+    m_styles = root.child("office:styles");
+}
+
+// Each definition in the registries is written where the loaded file had it,
+// or, if it's new, common styles to styles.xml and list styles to content.xml's
+// automatic styles. One that is unchanged since loading keeps its original XML.
+void writer::write_styles(const text_doc &doc)
+{
+    const auto used = used_families(doc);
+    for(const style *s : sorted(doc.styles()))
+        for(style_family f : families_of(*s, used))
+        {
+            style def = *s;
+            def.m_family = f;
+            auto existing = find_style(m_automatic_styles, def.m_name.get_name(), f);
+            if(!existing)
+                existing = find_style(m_styles, def.m_name.get_name(), f);
+            replace_or_add(existing, m_styles, def, existing && read_style(existing) == def);
+        }
+
+    for(const list_style *ls : sorted(doc.list_styles()))
+    {
+        auto existing = find_list_style(m_automatic_styles, ls->m_name.get_name());
+        if(!existing)
+            existing = find_list_style(m_styles, ls->m_name.get_name());
+        replace_or_add(
+            existing, m_automatic_styles, *ls, existing && read_list_style(existing) == *ls);
+    }
+
+    // LibreOffice knows Title without a definition; other readers may not.
+    if(doc.find_title() &&
+        !find_style(m_styles, builtin::title.get_name(), style_family::paragraph))
+        m_styles.append_buffer(title_style, std::strlen(title_style));
 }
 
 // Archive path for an image. A document resource is embedded under its name; an
@@ -229,20 +345,6 @@ std::string writer::resolve_image(const std::string &uri)
 void writer::write_doc(const text_doc &doc)
 {
     auto office_text = m_body.append_child("office:text");
-
-    // Add any list / automatic styles:
-    for(auto &[name, s] : doc.list_styles())
-        write_xml(m_automatic_styles, s);
-    // Add any text styles:
-    const auto used = used_families(doc);
-    for(auto &[name, s] : doc.styles())
-        for(style_family f : families_of(s, used))
-            write_xml(m_styles, s, f);
-    // LibreOffice knows Title without a definition; other readers may not.
-    if(doc.find_title() && !doc.styles().find(builtin::title.get_name()) &&
-        !defines_style(m_pkg, builtin::title))
-        m_styles.append_buffer(title_style, std::strlen(title_style));
-
     for(const auto &b : doc.body)
         write_block(office_text, b);
 }
@@ -389,188 +491,4 @@ void writer::emit(pugi::xml_node parent, const table_cell &c)
         write_block(n, b);
 }
 
-void write_xml(pugi::xml_node &n, const style_name &sn)
-{
-    n.append_attribute("style:name").set_value(sn.get_name().c_str());
-}
-
-void write_xml(pugi::xml_node &n, const style &s)
-{
-    write_xml(n, s, s.m_family.value_or(style_family::paragraph));
-}
-
-void write_xml(pugi::xml_node &n, const style &s, style_family family)
-{
-    auto style_node = n.append_child("style:style");
-    write_xml(style_node, s.m_name);
-    style_node.append_attribute("style:family") = to_string(family).c_str();
-
-    if(!s.m_parent_style.is_empty())
-        style_node.append_attribute("style:parent-style-name") =
-            s.m_parent_style.get_name().c_str();
-
-    if(s.m_text_props)
-        write_xml(style_node, s.m_text_props.value());
-
-    if(s.m_paragraph_props)
-        write_xml(style_node, s.m_paragraph_props.value());
-
-    // TODO: Other properties if present...
-}
-void write_xml(pugi::xml_node &n, const list_style &ls)
-{
-    auto ls_node = n.append_child("text:list-style");
-    write_xml(ls_node, ls.m_name);
-
-    for(const auto &level_style : ls.m_level_styles)
-        std::visit([&](const auto &s) { write_xml(ls_node, s); }, level_style);
-}
-
-void write_xml(pugi::xml_node &n, const list_style_bullet &lsb)
-{
-    auto bullet_node = n.append_child("text:list-level-style-bullet");
-    if(!lsb.m_style_name.is_empty())
-        n.append_attribute("text:style-name").set_value(lsb.m_style_name.get_name().c_str());
-    bullet_node.append_attribute("text:level") = lsb.m_level;
-    bullet_node.append_attribute("text:bullet-char") = lsb.m_bullet_char.c_str();
-    // TODO: serialize optional props
-}
-
-void write_xml(pugi::xml_node &n, const list_style_num &s)
-{
-    auto num_node = n.append_child("text:list-level-style-number");
-    if(!s.m_style_name.is_empty())
-        n.append_attribute("text:style-name").set_value(s.m_style_name.get_name().c_str());
-
-    num_node.append_attribute("text:level") = s.m_level;
-    num_node.append_attribute("loext:num-list-format") = ("%" + std::to_string(s.m_level) + "%.").c_str();
-    num_node.append_attribute("style:num-format") =
-        std::string(1, static_cast<char>(s.m_format)).c_str();
-    num_node.append_attribute("text:start-value") = s.m_start_from;
-    num_node.append_attribute("style:num-suffix") = s.m_num_suffix.c_str();
-    num_node.append_attribute("style:num-prefix") = s.m_num_prefix.c_str();
-    // TODO: serialize optional props
-}
-void write_xml(pugi::xml_node &n, const text_props &tp)
-{
-    auto text_props_node = n.append_child("style:text-properties");
-
-    if(tp.m_font_size)
-        text_props_node.append_attribute("fo:font-size") =
-            (detail::to_string(tp.m_font_size->m_points) + "pt").c_str();
-
-    if(tp.m_font_style)
-        text_props_node.append_attribute("fo:font-style") =
-            to_string(tp.m_font_style.value()).c_str();
-
-    if(tp.m_font_name)
-        text_props_node.append_attribute("style:font-name") = tp.m_font_name->get_name().c_str();
-
-    if(tp.m_font_weight)
-        text_props_node.append_attribute("fo:font-weight") =
-            to_string(tp.m_font_weight.value()).c_str();
-
-    if(tp.m_colour)
-        text_props_node.append_attribute("fo:color") =
-            detail::to_hex(*tp.m_colour).c_str();
-}
-void write_xml(pugi::xml_node &n, const paragraph_props &props)
-{
-    auto para_props_node = n.append_child("style:paragraph-properties");
-
-    if(props.m_break_after)
-        para_props_node.append_attribute("fo:break-after") =
-            to_string(props.m_break_after->m_break_type).c_str();
-    if(props.m_break_before)
-        para_props_node.append_attribute("fo:break-before") =
-            to_string(props.m_break_before->m_break_type).c_str();
-}
-
-std::string to_string(align_horiz a)
-{
-    switch(a)
-    {
-    case align_horiz::left: return "left";
-    case align_horiz::centre: return "center";
-    case align_horiz::right: return "right";
-    case align_horiz::from_inside: return "from-inside";
-    case align_horiz::from_left: return "from-left";
-    case align_horiz::inside: return "inside";
-    case align_horiz::outside: return "outside";
-    default: return {};
-    }
-}
-std::string to_string(align_vert a)
-{
-    switch(a)
-    {
-    case align_vert::top: return "top";
-    case align_vert::middle: return "middle";
-    case align_vert::bottom: return "bottom";
-    case align_vert::from_top: return "from-top";
-    case align_vert::below: return "below";
-    default: return {};
-    }
-}
-
-std::string to_string(font_style fs)
-{
-    switch(fs)
-    {
-    case font_style::normal: return "normal";
-    case font_style::italic: return "italic";
-    case font_style::oblique: return "oblique";
-    default: return {};
-    }
-}
-std::string to_string(font_weight fw)
-{
-    switch(fw)
-    {
-    case font_weight::normal: return "normal";
-    case font_weight::bold: return "bold";
-    default: return {};
-    }
-}
-std::string to_string(text_align ta)
-{
-    switch(ta)
-    {
-    case text_align::start: return "start";
-    case text_align::end: return "end";
-    case text_align::left: return "left";
-    case text_align::right: return "right";
-    case text_align::centre: return "center";
-    case text_align::justify: return "justify";
-    default: return {};
-    }
-}
-
-std::string to_string(break_type b)
-{
-    switch(b)
-    {
-    case break_type::automatic: return "auto";
-    case break_type::column: return "column";
-    case break_type::page: return "page";
-    case break_type::even_page: return "even-page";
-    case break_type::odd_page: return "odd-page";
-    default: return {};
-    }
-}
-
-std::string to_string(style_family f)
-{
-    switch(f)
-    {
-    case style_family::paragraph: return "paragraph";
-    case style_family::text: return "text";
-    case style_family::graphic: return "graphic";
-    case style_family::table: return "table";
-    case style_family::table_column: return "table-column";
-    case style_family::table_row: return "table-row";
-    case style_family::table_cell: return "table-cell";
-    default: return {};
-    }
-}
 } // namespace docsmith::odt

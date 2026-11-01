@@ -25,6 +25,8 @@ add_library(docsmithcpp
     "odf/package.cpp"
     "odf/meta.h"
     "odf/meta.cpp"
+    "odt/styles.h"
+    "odt/styles.cpp"
     "odt/writer.h"
     "odt/writer.cpp"
     "odt/file.cpp"

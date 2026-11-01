@@ -21,6 +21,7 @@
 #include <cctype>
 #include <fstream>
 #include <map>
+#include <optional>
 #include <ostream>
 #include <set>
 #include <sstream>
@@ -108,6 +109,43 @@ const char *css_value(break_type b)
     }
 }
 
+template <typename T>
+void fill(std::optional<T> &into, const std::optional<T> &from)
+{
+    if(!into)
+        into = from;
+}
+
+/// s with the properties it inherits from its parent styles filled in, since
+/// a CSS class doesn't inherit from another.
+style resolved(const style &s, const style_registry &styles)
+{
+    style out = s;
+    const style *parent = styles.find(s.m_parent_style.get_name());
+    for(int depth = 0; parent && depth != 32; ++depth) // guards against a cycle
+    {
+        if(parent->m_text_props)
+        {
+            auto &tp = out.m_text_props ? *out.m_text_props : out.m_text_props.emplace();
+            const auto &from = *parent->m_text_props;
+            fill(tp.m_font_size, from.m_font_size);
+            fill(tp.m_font_style, from.m_font_style);
+            fill(tp.m_font_name, from.m_font_name);
+            fill(tp.m_font_weight, from.m_font_weight);
+            fill(tp.m_colour, from.m_colour);
+        }
+        if(parent->m_paragraph_props)
+        {
+            auto &pp =
+                out.m_paragraph_props ? *out.m_paragraph_props : out.m_paragraph_props.emplace();
+            fill(pp.m_break_before, parent->m_paragraph_props->m_break_before);
+            fill(pp.m_break_after, parent->m_paragraph_props->m_break_after);
+        }
+        parent = styles.find(parent->m_parent_style.get_name());
+    }
+    return out;
+}
+
 /// CSS rules for the style definitions in the document, sorted by name so the
 /// output is stable.
 std::string generated_css(const text_doc &doc)
@@ -119,8 +157,10 @@ std::string generated_css(const text_doc &doc)
         [](const style *a, const style *b) { return a->m_name.get_name() < b->m_name.get_name(); });
 
     std::string css;
-    for(const style *s : styles)
+    for(const style *unresolved : styles)
     {
+        const style r = resolved(*unresolved, doc.styles());
+        const style *s = &r;
         std::string decls;
         if(const auto &tp = s->m_text_props)
         {

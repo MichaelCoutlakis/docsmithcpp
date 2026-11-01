@@ -302,3 +302,26 @@ TEST(HTML, UrlTargetsAreLeftAsIs)
     const auto html = html::file(text_doc{paragraph(hyperlink("#a b", "x"))}).to_string();
     EXPECT_TRUE(has(html, R"(<a href="#a b">x</a>)"));
 }
+
+TEST(HTML, ParsedOdtHasStylesAndNumbering)
+{
+    const auto html = html::file(odt::file::load("odt/moderate.odt").doc).to_string();
+
+    EXPECT_TRUE(has(html, R"(<ol class="L1" start="7">)"));
+    EXPECT_TRUE(has(html, R"(<ul class="L2">)"));
+    EXPECT_TRUE(has(html, R"(<ol class="L3" type="a" start="3">)"));
+    // P3's own definition only sets rsids; the rest comes from its parents.
+    EXPECT_TRUE(has(
+        html, R"(.P3 { font-size: 18pt; font-family: "Liberation Sans"; font-weight: bold; })"));
+}
+
+TEST(HTML, CssIncludesInheritedProperties)
+{
+    text_doc doc;
+    doc.add_style(style("Base", text_props(font_style::italic, font_size(10))));
+    style child("Child", text_props(font_size(12)));
+    child.m_parent_style = "Base";
+    doc.add_style(child);
+    const auto html = html::file(doc).to_string();
+    EXPECT_TRUE(has(html, ".Child { font-size: 12pt; font-style: italic; }"));
+}

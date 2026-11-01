@@ -29,7 +29,9 @@ namespace docsmith::odt
 /// (styles.xml, meta.xml, embedded images, ...). Parts the model doesn't
 /// represent are kept from load() and written back by save(), so load, edit,
 /// save doesn't lose them. doc.meta is read from meta.xml and written back
-/// into it, keeping the properties the model doesn't hold.
+/// into it, keeping the properties the model doesn't hold. Style definitions
+/// are read into doc.styles() / list_styles(); unchanged ones are written back
+/// as they were.
 ///
 ///     auto f = odt::file::load("in.odt");
 ///     f.doc.add(paragraph("appended"));

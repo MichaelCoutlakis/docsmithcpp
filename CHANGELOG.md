@@ -63,6 +63,12 @@ held in `std::variant`. This is a breaking change to almost every public API.
   directory. Generated test files go to `tests/odt/out/`.
 
 ### Added
+- **Loading style definitions**: `odt::file::load()` reads the styles and list styles
+  of `styles.xml` and `content.xml` (common and automatic) into `text_doc::styles()` /
+  `list_styles()`, as far as the model holds their properties. HTML from a parsed
+  `.odt` now gets numbered lists and CSS for its classes.
+- The HTML CSS rule for a style includes the properties it inherits from its parent
+  styles.
 - **Style families**: `style::m_family` (`style_family`: paragraph, text, graphic,
   table, table column, row and cell), set like the other parts:
   `style("Code", style_family::text, ...)`. When it's empty, the ODT writer works it
@@ -155,6 +161,16 @@ held in `std::variant`. This is a breaking change to almost every public API.
 - The empty placeholder tests in `test_main.cpp`, and the `architecture/` sketches.
 
 ### Fixed
+- The ODT writer now owns `styles.xml`. Common styles go there, as ODF requires,
+  instead of into `content.xml`; a loaded `styles.xml` is updated in place, so its
+  page layouts and master pages survive. Saving a loaded file writes each style
+  once: a definition that is unchanged since loading keeps its original XML, one
+  that was edited replaces it, and a new one is added.
+- Common styles in a file saved by an earlier version (in `content.xml`) were lost
+  when it was saved again.
+- List levels' `text:style-name` was written on the list style instead of the level,
+  and `loext:num-list-format` ignored the number's prefix and suffix.
+- `graphics_props` (frame position) were never written.
 - The parser now reads heading outline levels and style names.
 - `odt/file.h` was missing `#pragma once`.
 - The installed `DocSmithCppConfig.cmake` now finds its dependencies (pugixml,
@@ -171,20 +187,18 @@ held in `std::variant`. This is a breaking change to almost every public API.
 - The writer used the `loext:` namespace without declaring it.
 
 ### Known limitations
-- HTML from a *parsed* `.odt` is plainer than the original. Style definitions aren't
-  loaded (see below), so its classes have no CSS and numbered lists come out as
-  bullets. Images embedded in the `.odt` aren't extracted, so they don't show.
+- HTML from a *parsed* `.odt` is plainer than the original: the CSS covers only the
+  properties the style model holds (font, weight, size, colour, page breaks), not
+  margins, indents or borders.
 - HTML leaves out `unknown` nodes, which hold another format's markup. List number
-  prefixes and suffixes, and parent styles, aren't reflected in the CSS.
+  prefixes and suffixes aren't reflected in the CSS.
+- Font sizes in units other than points (e.g. `130%`) aren't read into the model.
+- Editing a loaded style rewrites its definition from the model, so the properties
+  the model doesn't hold (margins, display name, ...) are dropped from that style.
 - `unknown` round-trips only block- and inline-level content. Unrecognized children
   inside tables and lists, and unknown attributes on known elements, are dropped.
-- Parsing does not load style definitions into the model, so a parsed document's style
-  registries are empty. Style *names* on nodes are kept, and saving a loaded file
-  keeps its original definitions, so formatting survives.
 - Images that are no longer referenced stay in the package when a loaded file is
   saved.
-- Common styles from `text_doc::styles()` are written into `content.xml`. ODF puts
-  them in `styles.xml`; LibreOffice accepts this.
 - `set_style(style)` keeps only the name. The definition must also be added to
   `text_doc::styles()`.
 

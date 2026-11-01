@@ -34,7 +34,17 @@ and DOCX require: paragraph (`paragraph`, `heading`), text (`span`), graphic
 built in code may leave the family empty: the ODT writer then works it out from
 the nodes that use it, and writes it once for each family it's used with, so
 the same style can be set on a span and on a paragraph. HTML has no families: a
-style is a CSS class either way.
+style is a CSS class either way, and its rule includes what it inherits from its
+parent styles.
+
+- **ODT**: loading reads the definitions in `styles.xml` and `content.xml` into
+  the registries, as far as the model holds their properties. On save, the writer
+  starts from the loaded `styles.xml` and `content.xml` style containers. A
+  definition that is unchanged since loading keeps its original XML, so the
+  properties the model doesn't hold survive; an edited one replaces it in place;
+  a new one is added (styles to `styles.xml`, list styles to `content.xml`'s
+  automatic styles). Removing a definition from the registry doesn't remove it
+  from the file, since nodes or `unknown` markup may still use it.
 
 ## Resources
 

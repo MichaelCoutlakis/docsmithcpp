@@ -28,6 +28,7 @@
 
 #include "odf/meta.h"
 #include "odf/package.h"
+#include "odt/styles.h"
 #include "odt/writer.h"
 
 namespace docsmith
@@ -229,6 +230,7 @@ file file::load(const std::filesystem::path &p)
     auto text_node =
         xml.child("office:document-content").child("office:body").child("office:text");
     f.doc.body = parse_block_children(text_node);
+    read_styles(f.m_impl->pkg, f.doc);
     if(const auto *meta = f.m_impl->pkg.find("meta.xml"))
         f.doc.meta = odf::read_meta(meta->data);
 
@@ -248,16 +250,17 @@ void file::save(const std::filesystem::path &p) const
     odf::package out = m_impl->pkg;
     out.set_mimetype(odt_mimetype);
 
-    // Written before content.xml is replaced: the writer reads the original.
-    std::string content = write_content(doc, out);
-    out.set("content.xml", std::move(content), "text/xml");
+    write_document(doc, out);
     odf::write_meta(doc.meta, out);
     out.write(p);
 
 #ifdef DOCSMITHCPP_DEBUG_FILES
-    // Debug aid: content.xml next to the archive, as <name>.content.xml.
-    std::ofstream(std::filesystem::path(p).replace_extension(".content.xml"), std::ios::binary)
-        << out.find("content.xml")->data;
+    // Debug aid: content.xml and styles.xml next to the archive, as
+    // <name>.content.xml and <name>.styles.xml.
+    for(const char *part : {"content", "styles"})
+        std::ofstream(std::filesystem::path(p).replace_extension(std::string(".") + part + ".xml"),
+            std::ios::binary)
+            << out.find(std::string(part) + ".xml")->data;
 #endif
 }
 

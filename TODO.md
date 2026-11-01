@@ -23,26 +23,6 @@ Do this once the items above pass. Move `[Unreleased]` in `CHANGELOG.md` to
 
 ## 2. Correctness
 
-### Load style definitions when parsing ODT
-The parser keeps style *names* on nodes but not their *definitions*, so
-`text_doc::styles()` / `list_styles()` are empty after `odt::file::load()`. This is
-why `example_odt_to_html` on `tests/odt/moderate.odt` turns numbered lists into
-bullets and emits classes with no CSS. The template-based report (section 3)
-depends on this too.
-
-- Read common styles from `styles.xml` and automatic styles from `content.xml`
-  (`office:automatic-styles`), including `text:list-style`, into the registries.
-  It's the inverse of the `write_xml(...)` functions in `src/odt/writer.cpp`.
-- **Watch out for duplicates.** On save, `writer::carry_over()` copies the original
-  automatic styles into the new `content.xml`, *and* `write_doc()` writes the list
-  styles from the registry. Once the registries are populated by parsing, the
-  definitions would be written twice. Decide whether parsed styles stop being
-  carried over or are de-duplicated by name.
-- Common styles are written into `content.xml`'s `office:styles`. ODF puts them in
-  `styles.xml`. LibreOffice accepts it, but it's not to spec. Headers and footers
-  (section 3) live in `styles.xml` as well, so the writer needs to own that file
-  anyway.
-
 ### Content lost inside tables and lists
 `unknown` round-trips only block- and inline-level content. Unrecognised children
 *inside* tables and lists, and unknown *attributes* on known elements, are
@@ -96,8 +76,9 @@ paragraph style plus the line-break and space nodes above. In HTML it would be
 ### Headers, footers and page numbers
 - ODT: headers and footers belong to a master page (`style:master-page` with
   `style:header` / `style:footer`) in `styles.xml`. A template already has them,
-  so with carry-over they work today without a model. Creating them from code
-  needs a page / master-page model, and the writer needs to own `styles.xml`.
+  and the writer keeps a loaded `styles.xml`, so they work today without a model.
+  Creating them from code needs a page / master-page model; the writer already
+  owns `styles.xml` (`writer::load_styles_xml()` in `src/odt/writer.cpp`).
 - Page numbers are fields (`text:page-number`, `text:page-count`). They need a
   small field node, which also suits dates and the document title.
 - HTML has no pages. Write an optional `<header>` / `<footer>` and leave page
@@ -195,8 +176,10 @@ Options:
 - `frame` holds only an image. ODF frames can also hold text boxes and objects.
 - HTML: images can only be written as files. A `data:` URI mode would give a
   single self-contained page.
-- HTML: list number prefixes and suffixes, and parent styles, aren't reflected in
-  the CSS.
+- HTML: list number prefixes and suffixes aren't reflected in the CSS.
+- Font sizes are points only, so a parsed `130%` is dropped. Editing a loaded
+  style rewrites it from the model and drops what the model doesn't hold;
+  updating only the modelled attributes in place would keep the rest.
 
 ## Testing
 - **Optional LibreOffice validation test.** Headless LibreOffice found a bug every

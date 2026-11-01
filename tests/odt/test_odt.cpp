@@ -379,4 +379,70 @@ TEST(ODT, StyleFamilies)
     doc.add(paragraph("Some ", span("red").set_style(red), " text.").set_style(note));
     doc.add(paragraph("Bold ", span("span").set_style(both)).set_style(both));
     odt::file(doc).save("odt/out/style_families.odt");
+
+    const auto again = odt::file::load("odt/out/style_families.odt").doc;
+    EXPECT_EQ(again.body, doc.body);
+    EXPECT_EQ(again.styles().find("Red")->m_family, style_family::text);
+    EXPECT_EQ(*again.styles().find("Note"), *doc.styles().find("Note"));
+}
+
+TEST(ODT, LoadStyleDefinitions)
+{
+    const text_doc doc = odt::file::load("odt/moderate.odt").doc;
+
+    // Common styles from styles.xml.
+    const style *h1 = doc.styles().find("Heading_20_1");
+    ASSERT_NE(h1, nullptr);
+    EXPECT_EQ(h1->m_family, style_family::paragraph);
+    EXPECT_EQ(h1->m_parent_style, style_name("Heading"));
+    EXPECT_EQ(h1->m_text_props->m_font_size, font_size(18));
+    EXPECT_EQ(h1->m_text_props->m_font_weight, font_weight::bold);
+    EXPECT_EQ(doc.styles().find("Source_20_Text")->m_family, style_family::text);
+    EXPECT_EQ(
+        doc.styles().find("Internet_20_link")->m_text_props->m_colour, colour::rgb(0, 0, 0x80));
+
+    // Automatic styles from content.xml.
+    EXPECT_EQ(doc.styles().find("P3")->m_parent_style, style_name("Heading_20_1"));
+    EXPECT_EQ(doc.styles().find("T1")->m_text_props->m_font_weight, font_weight::normal);
+
+    const list_style *l1 = doc.list_styles().find("L1");
+    ASSERT_NE(l1, nullptr);
+    const auto &first = std::get<list_style_num>(l1->m_level_styles.front());
+    EXPECT_EQ(first.m_level, 1);
+    EXPECT_EQ(first.m_format, list_enum::arabic);
+    EXPECT_EQ(first.m_start_from, 7);
+    EXPECT_EQ(first.m_num_suffix, ".");
+    EXPECT_EQ(first.m_style_name, style_name("Numbering_20_Symbols"));
+    EXPECT_TRUE(std::holds_alternative<list_style_bullet>(
+        doc.list_styles().find("L2")->m_level_styles.front()));
+    EXPECT_EQ(
+        std::get<list_style_num>(doc.list_styles().find("L3")->m_level_styles.front()).m_format,
+        list_enum::lower_alpha);
+}
+
+TEST(ODT, CodeBuiltStylesRoundTrip)
+{
+    text_doc doc;
+    auto big = doc.add_style(style("Big",
+        text_props(font_size(20.5f),
+            font_name("Liberation Mono"),
+            font_style::italic,
+            colour::rgb(1, 2, 3)),
+        paragraph_props(break_before{break_type::page}, break_after{break_type::column})));
+    auto pic = doc.add_style(
+        style("Pic", style_family::graphic, graphics_props(align_horiz::centre, align_vert::top)));
+    auto steps = doc.add_style(list_style("Steps",
+        {list_style_num(style{}, 1, list_enum::upper_roman, ")", 2, "("),
+            list_style_bullet(style("Bullet_20_Symbols"), 2, bullet_type::right_arrow())}));
+    doc.add(paragraph("Big").set_style(big));
+    doc.add(list(list_item("one")).set_style(steps));
+    (void)pic;
+    odt::file(doc).save("odt/out/code_built_styles.odt");
+
+    const auto again = odt::file::load("odt/out/code_built_styles.odt").doc;
+    style expected_big = *doc.styles().find("Big");
+    expected_big.m_family = style_family::paragraph; // worked out from its use
+    EXPECT_EQ(*again.styles().find("Big"), expected_big);
+    EXPECT_EQ(*again.styles().find("Pic"), *doc.styles().find("Pic"));
+    EXPECT_EQ(*again.list_styles().find("Steps"), *doc.list_styles().find("Steps"));
 }

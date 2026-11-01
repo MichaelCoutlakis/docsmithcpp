@@ -17,7 +17,7 @@
  *****************************************************************************/
 #pragma once
 
-// Private: serialises the document model to an ODT content.xml.
+// Private: serialises the document model to an ODT's content.xml and styles.xml.
 
 #include <string>
 
@@ -33,22 +33,13 @@ class package;
 namespace docsmith::odt
 {
 
-/// Serialise doc as an ODT content.xml. Images are resolved in turn against
-/// doc.resources() (embedded into pkg under their name), entries pkg already
-/// holds (referenced in place), and files on disk (copied into pkg under
-/// Pictures/). If pkg holds an original content.xml (a
-/// loaded file), its namespace, font and automatic-style declarations are kept.
-std::string write_content(const text_doc &doc, odf::package &pkg);
-
-void write_xml(pugi::xml_node &n, const style_name &sn);
-/// Writes s in its own family, or paragraph if it has none.
-void write_xml(pugi::xml_node &n, const style &s);
-void write_xml(pugi::xml_node &n, const style &s, style_family family);
-void write_xml(pugi::xml_node &n, const list_style &ls);
-void write_xml(pugi::xml_node &n, const list_style_bullet &b);
-void write_xml(pugi::xml_node &n, const list_style_num &b);
-void write_xml(pugi::xml_node &n, const text_props &props);
-void write_xml(pugi::xml_node &n, const paragraph_props &props);
+/// Writes doc into pkg as content.xml and styles.xml. Images are resolved in
+/// turn against doc.resources() (embedded into pkg under their name), entries
+/// pkg already holds (referenced in place), and files on disk (copied into pkg
+/// under Pictures/). If pkg holds a loaded file's content.xml and styles.xml,
+/// their namespaces, fonts and styles are kept, and the style definitions in
+/// doc replace theirs by name and family where they differ.
+void write_document(const text_doc &doc, odf::package &pkg);
 
 /// Traversal is plain recursion over the node variants (std::visit): each
 /// emit() appends to the parent XML node it is handed and recurses into the
@@ -57,10 +48,13 @@ class writer
 {
 public:
     explicit writer(odf::package &pkg);
-    std::string write(const text_doc &doc);
+    /// Sets content.xml and styles.xml in the package.
+    void write(const text_doc &doc);
 
 private:
     void carry_over();
+    void load_styles_xml();
+    void write_styles(const text_doc &doc);
     void write_doc(const text_doc &doc);
     void write_block(pugi::xml_node parent, const block_node &b);
     void write_inline(pugi::xml_node parent, const inline_node &i);
@@ -83,9 +77,10 @@ private:
     odf::package &m_pkg;
     const text_doc *m_doc{nullptr}; //!< The document being written
     pugi::xml_document m_content; //!< content.xml; owns the node memory
-    pugi::xml_node m_font_faces;  //!< office:font-face-decls
-    pugi::xml_node m_styles;      //!< office:styles
-    pugi::xml_node m_automatic_styles;
+    pugi::xml_document m_styles_xml;   //!< styles.xml
+    pugi::xml_node m_font_faces;       //!< content.xml's office:font-face-decls
+    pugi::xml_node m_styles;           //!< styles.xml's office:styles
+    pugi::xml_node m_automatic_styles; //!< content.xml's office:automatic-styles
     pugi::xml_node m_body;        //!< office:body
 };
 
