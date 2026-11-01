@@ -10,6 +10,7 @@ add_executable(docsmithcpp_tests
     html/test_html.cpp
     md/test_md.cpp
     docx/test_docx_write.cpp
+    docx/test_docx_read.cpp
     docx/test_ooxml.cpp)
 target_link_libraries(docsmithcpp_tests PRIVATE docsmithcpp GTest::gtest pugixml::pugixml)
 

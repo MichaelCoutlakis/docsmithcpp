@@ -53,6 +53,8 @@ add_library(docsmithcpp
     "docx/meta.cpp"
     "docx/writer.h"
     "docx/writer.cpp"
+    "docx/reader.h"
+    "docx/reader.cpp"
     "docx/file.cpp"
 
     "text_doc.cpp"

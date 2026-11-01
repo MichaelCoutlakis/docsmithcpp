@@ -28,7 +28,14 @@ namespace docsmith::docx
 /// A .docx file (Office Open XML WordprocessingML): the document model plus
 /// the rest of the package. Styles are written to styles.xml, list styles to
 /// numbering.xml, doc.meta to docProps/core.xml, and the page header and
-/// footer to header and footer parts.
+/// footer to header and footer parts. Parts the model doesn't represent are
+/// kept from load() and written back by save(), so load, edit, save doesn't
+/// lose them; so is formatting set directly on runs and paragraphs, which
+/// the model holds as styles T1, P1, ...
+///
+///     auto f = docx::file::load("in.docx");
+///     f.doc.add(paragraph("appended"));
+///     f.save("out.docx");
 ///
 ///     docx::file(text_doc{heading(1, "New")}).save("new.docx");
 class file
@@ -36,6 +43,10 @@ class file
 public:
     file();
     explicit file(text_doc doc);
+
+    /// Images the document shows are moved from the package into
+    /// doc.resources(), named by their part ("word/media/image1.png").
+    static file load(const std::filesystem::path &p);
 
     /// Images whose uri names one of doc.resources() are embedded from it;
     /// other image uris are read from disk. Both go under word/media/.

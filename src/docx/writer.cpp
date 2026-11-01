@@ -336,8 +336,11 @@ private:
                     else if(name == "wp:docPr")
                         m_drawing_id = std::max(m_drawing_id, e.attribute("id").as_int() + 1);
                 });
-            if(auto s = body.last_child(); std::string_view(s.name()) == "w:sectPr")
-                m_sect_pr.append_copy(s);
+            pugi::xml_node sect;
+            for(auto c : body.children("w:sectPr"))
+                sect = c;
+            if(sect)
+                m_sect_pr.append_copy(sect);
             if(!body)
                 body = m_document.child("w:document").append_child("w:body");
             while(body.first_child())
@@ -398,8 +401,7 @@ private:
     // others (first page, even pages) are kept as they are.
     void write_page()
     {
-        auto body = m_document.document_element().child("w:body");
-        auto sect = body.last_child();
+        auto sect = m_document.document_element().child("w:body").child("w:sectPr");
         auto write = [&](const char *ref,
                          const char *type,
                          const char *root,

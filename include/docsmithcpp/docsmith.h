@@ -20,7 +20,7 @@
 // Convenience header for the whole public API. Include individual headers
 // instead if compile time matters.
 
-#include "docsmithcpp/docx/file.h"       // DOCX write
+#include "docsmithcpp/docx/file.h"       // DOCX read / write
 #include "docsmithcpp/html/file.h"       // HTML output
 #include "docsmithcpp/iostream_writer.h" // io_writer: debug tree printer
 #include "docsmithcpp/md/file.h"         // Markdown output (and input)

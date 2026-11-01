@@ -17,6 +17,10 @@
  *****************************************************************************/
 #include "docsmithcpp/docx/file.h"
 
+#include <stdexcept>
+
+#include "docx/ooxml.h"
+#include "docx/reader.h"
 #include "docx/state.h"
 #include "docx/writer.h"
 
@@ -36,6 +40,21 @@ file::file() :
 file::file(text_doc d) :
     doc(std::move(d)), m_impl(impl{})
 {
+}
+
+file file::load(const std::filesystem::path &p)
+{
+    file f;
+    auto &st = f.m_impl->st;
+    st.pkg = opc::package::read(p);
+    const auto *main = st.pkg.find_rel_by_type("", rel::office_document);
+    const auto *part = main ? st.pkg.find(opc::package::resolve("", main->target)) : nullptr;
+    // Documents and their relatives (.dotx templates, .docm) are all WordprocessingML.
+    if(!part || part->content_type.find("wordprocessingml") == std::string::npos)
+        throw std::runtime_error("Not a Word document: " + p.string());
+    st.main_part = opc::package::resolve("", main->target);
+    read_document(st, f.doc);
+    return f;
 }
 
 void file::save(const std::filesystem::path &p) const
