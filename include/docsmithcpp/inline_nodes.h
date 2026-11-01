@@ -125,6 +125,22 @@ public:
     bool operator==(const hyperlink &) const = default;
 };
 
+enum class field_type
+{
+    page_number, //!< The number of the page it's on
+    page_count,  //!< The number of pages
+    date,        //!< The date the file is written
+    title,       //!< The document's title, meta.title
+};
+
+/// A value writers fill in, e.g. a page number in a footer. A format that has
+/// no pages (HTML) leaves page numbers out.
+struct field
+{
+    field_type type{field_type::page_number};
+    bool operator==(const field &) const = default;
+};
+
 // Pass-through for content the parser does not model: verbatim serialized XML,
 // re-emitted unchanged by the writer. NOTE: only block- and inline-level foreign
 // content round-trips this way; unrecognized children *inside* a table or list,
@@ -137,7 +153,7 @@ struct unknown
 
 struct inline_node
 {
-    std::variant<text, span, hyperlink, frame, bookmark, unknown> v;
+    std::variant<text, span, hyperlink, frame, bookmark, field, unknown> v;
     bool operator==(const inline_node &) const = default;
 };
 

@@ -544,3 +544,13 @@ TEST(ODT, PreformattedRoundTrips)
     EXPECT_EQ(
         again.doc.styles().find(builtin::source_text.get_name())->m_family, style_family::text);
 }
+
+TEST(ODT, FieldsRoundTrip)
+{
+    text_doc doc{paragraph("Page ", field{field_type::page_number}, " of ",
+        field{field_type::page_count}, ", ", field{field_type::title}, ", ",
+        field{field_type::date})};
+    doc.meta.title = "Report";
+    odt::file(doc).save("odt/out/fields.odt");
+    EXPECT_EQ(odt::file::load("odt/out/fields.odt").doc.body, doc.body);
+}

@@ -74,6 +74,7 @@ private:
     void emit(pugi::xml_node parent, const frame &f);
     void emit(pugi::xml_node parent, const image &i);
     void emit(pugi::xml_node parent, const bookmark &b);
+    void emit(pugi::xml_node parent, const field &f);
     void emit(pugi::xml_node parent, const page_break &);
     void emit(pugi::xml_node parent, const unknown &u);
     void emit(pugi::xml_node parent, const list &l);

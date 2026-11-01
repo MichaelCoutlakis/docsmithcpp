@@ -568,6 +568,34 @@ void writer::emit(pugi::xml_node parent, const bookmark &b)
     n.append_attribute("text:name").set_value(b.name.c_str());
 }
 
+// The text in a field element is its value when the file was written, which
+// readers show until they update it. Page numbers aren't known without laying
+// the document out, so they are written as 1.
+void writer::emit(pugi::xml_node parent, const field &f)
+{
+    pugi::xml_node n;
+    std::string value = "1";
+    switch(f.type)
+    {
+    case field_type::page_number:
+        n = parent.append_child("text:page-number");
+        n.append_attribute("text:select-page") = "current";
+        break;
+    case field_type::page_count: n = parent.append_child("text:page-count"); break;
+    case field_type::date:
+        value = detail::today();
+        n = parent.append_child("text:date");
+        n.append_attribute("text:date-value") = value.c_str();
+        break;
+    case field_type::title:
+        n = parent.append_child("text:title");
+        value = m_doc->meta.title;
+        break;
+    }
+    if(!value.empty())
+        n.append_child(pugi::node_pcdata).set_value(value.c_str());
+}
+
 void writer::emit(pugi::xml_node parent, const page_break &)
 {
     flush_page_break(parent); // two in a row: the first gets its own paragraph

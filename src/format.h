@@ -21,6 +21,7 @@
 // library.
 
 #include <charconv>
+#include <chrono>
 #include <string>
 
 #include "docsmithcpp/style.h"
@@ -56,6 +57,16 @@ inline std::string to_hex(const colour &c)
         s += digits[v & 0xf];
     }
     return s;
+}
+
+/// Today's date in UTC as YYYY-MM-DD.
+inline std::string today()
+{
+    using namespace std::chrono;
+    const year_month_day ymd{floor<days>(system_clock::now())};
+    return zero_pad(static_cast<int>(ymd.year()), 4) + "-" +
+        zero_pad(static_cast<unsigned>(ymd.month()), 2) + "-" +
+        zero_pad(static_cast<unsigned>(ymd.day()), 2);
 }
 
 } // namespace docsmith::detail

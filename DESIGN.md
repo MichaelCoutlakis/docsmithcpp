@@ -3,7 +3,7 @@
 ## Document model
 
 The document tree is a pair of value-type variants — `inline_node` (text-flow
-content: `text`, `span`, `hyperlink`, `frame`, `bookmark`, `unknown`) and
+content: `text`, `span`, `hyperlink`, `frame`, `bookmark`, `field`, `unknown`) and
 `block_node` (`paragraph`, `heading`, `list`, `table`, `frame`, `page_break`,
 `unknown`). It
 is deliberately a _generic_, format-agnostic model: which group may go where is
@@ -46,6 +46,7 @@ What each node holds, independent of any one format. "Inline" is a sequence of
 | `span` | inline | inline | styled |
 | `hyperlink` | inline | inline | `target`: a URL or a bookmark |
 | `bookmark` | inline | — | `name` |
+| `field` | inline | — | `type`: page number, page count, date or title |
 | `unknown` | block, inline | verbatim XML | another format's markup, passed through |
 
 ### White space and breaks
@@ -79,6 +80,20 @@ paragraph's style. HTML writes `<div style="break-after: page"></div>`.
 
 The properties `break_before` / `break_after` on a paragraph style still
 describe a break that belongs to a style, e.g. every chapter heading.
+
+### Fields
+
+A `field` is a value the writer or reader fills in: the page number, the page
+count, the date, or the document's title (`meta.title`). It goes anywhere text
+goes, most usefully in a header or footer:
+`paragraph("Page ", field{field_type::page_number}, " of ", field{field_type::page_count})`.
+
+- **ODT**: `text:page-number`, `text:page-count`, `text:date` and `text:title`,
+  each holding the value it shows until the reader updates it: `1` for page
+  numbers (the writer doesn't lay out pages), today's date and the title. Read
+  back from the same elements; other ODF fields stay `unknown`.
+- **HTML**: the title and today's date are written as text. HTML has no pages,
+  so page numbers and counts are left out.
 
 ## Styles
 

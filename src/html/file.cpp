@@ -556,6 +556,14 @@ private:
         escape(m_os, html_id(b.name), true);
         m_os << "\"></a>";
     }
+    // HTML has no pages, so a page number or count is left out.
+    void emit_inline(const field &f)
+    {
+        if(f.type == field_type::title)
+            escape(m_os, m_doc.meta.title);
+        else if(f.type == field_type::date)
+            m_os << detail::today();
+    }
     void emit_inline(const unknown &) {}
 
     /// <li> or <td>: tight when it holds one plain paragraph, else block layout.

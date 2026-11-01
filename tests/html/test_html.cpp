@@ -374,3 +374,12 @@ TEST(HTML, Preformatted)
     EXPECT_TRUE(has(html, "<p>Run <code class=\"Source_20_Text\">make</code>.</p>"));
     EXPECT_TRUE(has(html, "<pre class=\"Log\">x  y</pre>")) << "a style based on it";
 }
+
+TEST(HTML, Fields)
+{
+    text_doc doc{paragraph("[", field{field_type::title}, "] page ",
+        field{field_type::page_number}, " of ", field{field_type::page_count})};
+    doc.meta.title = "Report";
+    EXPECT_TRUE(has(html::file(doc).to_string(), "<p>[Report] page  of </p>"))
+        << "no pages, so no page numbers";
+}

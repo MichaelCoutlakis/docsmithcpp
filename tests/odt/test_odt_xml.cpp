@@ -231,3 +231,18 @@ TEST(ODT_XML, BuiltinStylesDefinedOnce)
                       .at({"Source_20_Text", "text"})),
         1);
 }
+
+TEST(ODT_XML, FieldElements)
+{
+    text_doc doc{paragraph(field{field_type::page_number}, field{field_type::page_count},
+        field{field_type::title}, field{field_type::date})};
+    doc.meta.title = "Report";
+    odt::file(doc).save("odt/out/field_elements.odt");
+
+    part content("odt/out/field_elements.odt", "content.xml");
+    auto p = content.xml.select_node("//text:p").node();
+    EXPECT_STREQ(p.child("text:page-number").attribute("text:select-page").as_string(), "current");
+    EXPECT_STREQ(p.child("text:page-count").text().as_string(), "1");
+    EXPECT_STREQ(p.child("text:title").text().as_string(), "Report") << "the value it shows";
+    EXPECT_EQ(std::string(p.child("text:date").attribute("text:date-value").as_string()).size(), 10U);
+}

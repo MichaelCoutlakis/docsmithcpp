@@ -63,6 +63,10 @@ held in `std::variant`. This is a breaking change to almost every public API.
   directory. Generated test files go to `tests/odt/out/`.
 
 ### Added
+- **Fields**: an inline `field` node for the page number, page count, date and
+  document title. ODT writes and reads `text:page-number`, `text:page-count`,
+  `text:date` and `text:title`; HTML writes the title and date, and leaves page
+  numbers out.
 - **Code blocks**: `builtin::preformatted` (LibreOffice's Preformatted Text) styles a
   monospace paragraph for code and logs, with lines separated by `'\n'`, and
   `builtin::source_text` (Source Text) monospace text in a line. ODT defines them as

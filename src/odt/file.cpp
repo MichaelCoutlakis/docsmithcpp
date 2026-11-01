@@ -92,6 +92,14 @@ inline_node parse_inline(const pugi::xml_node &node)
         return inline_node{parse_frame(node)};
     if(tag == "text:bookmark" || tag == "text:bookmark-start")
         return inline_node{bookmark{node.attribute("text:name").as_string()}};
+    if(tag == "text:page-number")
+        return inline_node{field{field_type::page_number}};
+    if(tag == "text:page-count")
+        return inline_node{field{field_type::page_count}};
+    if(tag == "text:date")
+        return inline_node{field{field_type::date}};
+    if(tag == "text:title")
+        return inline_node{field{field_type::title}};
 
     return inline_node{unknown{serialize(node)}};
 }
