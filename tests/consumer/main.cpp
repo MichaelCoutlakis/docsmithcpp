@@ -17,7 +17,8 @@
  *****************************************************************************/
 
 // Builds against an installed DocSmith++ (see run.cmake): a document saved as
-// .odt and .html, and the .odt read back.
+// .odt, .html and .md, and the .odt (and, with Markdown input, the .md) read
+// back.
 
 #include <iostream>
 
@@ -35,6 +36,8 @@ int main()
     };
     odt::file(doc).save("consumer.odt");
     html::file(doc).save("consumer.html");
+
+    md::file(doc).save("consumer.md");
 
     if(odt::file::load("consumer.odt").doc.body != doc.body)
     {

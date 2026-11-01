@@ -22,5 +22,6 @@
 
 #include "docsmithcpp/html/file.h"       // HTML output
 #include "docsmithcpp/iostream_writer.h" // io_writer: debug tree printer
+#include "docsmithcpp/md/file.h"         // Markdown output (and input)
 #include "docsmithcpp/odt/file.h"        // ODT read / write
 #include "docsmithcpp/text_doc.h"        // document model, traversal and search

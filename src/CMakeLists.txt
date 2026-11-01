@@ -15,6 +15,7 @@ add_library(docsmithcpp
     "../include/docsmithcpp/text_doc.h"
     "../include/docsmithcpp/odt/file.h"
     "../include/docsmithcpp/html/file.h"
+    "../include/docsmithcpp/md/file.h"
 
     # Private: the archive and XML details stay out of the public headers.
     "bytes.h"
@@ -33,6 +34,10 @@ add_library(docsmithcpp
     "odt/writer.cpp"
     "odt/file.cpp"
     "html/file.cpp"
+    "resource_plan.h"
+    "resource_plan.cpp"
+    "md/names.h"
+    "md/file.cpp"
 
     "text_doc.cpp"
     "table.cpp")

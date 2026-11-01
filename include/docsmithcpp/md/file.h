@@ -1,0 +1,62 @@
+/******************************************************************************
+ * Copyright 2025 Michael Coutlakis
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *****************************************************************************/
+#pragma once
+
+#include <filesystem>
+#include <string>
+#include <string_view>
+
+#include "docsmithcpp/text_doc.h"
+
+namespace docsmith::md
+{
+
+/// A Markdown (GitHub Flavored Markdown) file generated from a document.
+///
+/// Styles have no Markdown form. A span whose style is bold is **strong**, one
+/// that is italic is *emphasis*, and one based on builtin::source_text is a
+/// `code span`. A paragraph based on builtin::preformatted is a fenced code
+/// block, and one based on "Quotations" a block quote. Other styles are left
+/// out, keeping the content. Lists are ordered or not as their list style
+/// says, tables are GFM tables, bookmarks are <a id> anchors, and a
+/// page_break is a thematic break. unknown (pass-through) nodes are left out.
+///
+///     md::file(doc).save("summary.md");
+class file
+{
+public:
+    file() = default;
+    explicit file(text_doc doc) :
+        doc(std::move(doc))
+    {
+    }
+
+    /// The Markdown as save() would write it, image paths included. No files
+    /// are written.
+    std::string to_string() const;
+
+    /// Writes the file, and the images it needs under resource_dir, as
+    /// html::file::save() does.
+    void save(const std::filesystem::path &p) const;
+
+    text_doc doc;
+    /// Folder for the images, relative to the file. Empty puts them next to it.
+    std::filesystem::path resource_dir;
+};
+
+} // namespace docsmith::md

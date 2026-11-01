@@ -7,7 +7,8 @@ add_executable(docsmithcpp_tests
     odt/test_odt_xml.cpp
     odt/test_package.cpp
     zip/test_zip.cpp
-    html/test_html.cpp)
+    html/test_html.cpp
+    md/test_md.cpp)
 target_link_libraries(docsmithcpp_tests PRIVATE docsmithcpp GTest::gtest pugixml::pugixml)
 
 # White-box tests (odt/test_odt_xml.cpp, the zip and package tests) read the
