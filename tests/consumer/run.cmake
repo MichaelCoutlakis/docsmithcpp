@@ -18,6 +18,12 @@ set(args -G "${GENERATOR}" "-DCMAKE_PREFIX_PATH=${PREFIX}")
 if(PLATFORM)
     list(APPEND args -A "${PLATFORM}")
 endif()
+# Only CONFIG is installed. A multi-config generator would also generate the
+# others, and fail when vcpkg's mappings (e.g. MinSizeRel to Release) find no
+# library for them.
+if(GENERATOR MATCHES "^Visual Studio|^Xcode|Multi-Config$")
+    list(APPEND args "-DCMAKE_CONFIGURATION_TYPES=${CONFIG}")
+endif()
 string(REPLACE "," ";" FORWARD "${FORWARD}")
 foreach(var IN LISTS FORWARD)
     if(DEFINED ${var} AND NOT "${${var}}" STREQUAL "")
