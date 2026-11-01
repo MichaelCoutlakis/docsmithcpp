@@ -1,5 +1,11 @@
 # Design
 
+DocSmith++ reads documents into one format-agnostic tree, lets C++ code build,
+search and edit it, and writes it to any format. Each format is a reader and/or
+a writer of that tree; nothing format-specific lives in it, except the
+pass-through `unknown` node and the loaded file kept by a format's `file` class
+(see *Formats*).
+
 ## Document model
 
 The document tree is a pair of value-type variants — `inline_node` (text-flow
@@ -14,9 +20,9 @@ validation layer. Copy and `operator==` are compiler-generated, and traversal is
 (`children()`/`add()`).
 
 An `unknown` node stores verbatim XML for anything the parser does not model, so
-foreign content survives a parse → write round trip. Note: this currently
-applies to block- and inline-level content only — unrecognized children _inside_
-a table or list, and unknown attributes on known elements, are not yet captured.
+foreign content survives a parse → write round trip. Only block- and inline-level
+content is kept this way: unrecognised children _inside_ a table or list, and
+unknown attributes on known elements, are dropped (TODO.md, *Correctness*).
 
 The recursive edges (a `span` contains inline nodes, which contain spans…) are
 held through a small value-semantic wrapper, `box<T>`
@@ -50,6 +56,50 @@ What each node holds, independent of any one format. "Inline" is a sequence of
 | `bookmark` | inline | — | `name` |
 | `field` | inline | — | `type`: page number, page count, date or title |
 | `unknown` | block, inline | verbatim XML | another format's markup, passed through |
+
+### Rules
+
+The types enforce what may contain what; the rest are rules that writers rely
+on.
+
+- **Containment.** A paragraph or heading holds only inline content, so it
+  can't hold a table or another paragraph. Blocks nest only through
+  `list_item`, `table_cell` and the page header and footer, so a list in a list
+  item, or a table in a table cell, is fine. Inline content nests through
+  `span` and `hyperlink`. A `frame` is a block when it stands on its own and
+  inline when it sits in a line of text.
+- **Tables are rectangular.** Every row has `num_cols()` cells. A cell with a
+  `rowspan` or `colspan` covers the slots to its right and below, which still
+  hold placeholder cells that writers skip (`is_cell_covered()`).
+  `table::add_row()` checks the width, and `is_rectangular()` checks the whole
+  table. `header_rows` counts rows from the top.
+- **Heading levels** start at 1. A format with fewer levels clamps them (HTML
+  and Markdown stop at 6).
+- **Styles are referred to by name.** A node's style names a definition in
+  `text_doc::styles()` or `list_styles()`, or a `builtin` style. Nothing checks
+  that the name is defined (TODO.md, *Model gaps*). Writers write the name as
+  given, so an undefined one gets whatever the output format gives it: an ODT
+  application's own style of that name, or an HTML class with no rule.
+- **Values.** Copying a node copies its whole subtree, and `==` compares
+  structure. Image bytes in `resources()` are shared and read-only, so copying a
+  document doesn't copy them.
+- **What belongs where.** Anything more than one format needs (styles, images,
+  metadata, the page header and footer) lives in `text_doc`. A format's `file`
+  class holds only what is specific to that format: for ODT, the rest of the
+  loaded package.
+
+### Traversal
+
+- **One level:** `std::visit` on a node's `v`, with the `overloaded` helper
+  for one lambda per node type.
+- **The whole tree:** `walk(doc, f)` calls `f` on every node, depth first, as
+  `const` or not as `doc` is: the body first, then the page header and footer.
+  On top of it, `collect<T>(doc)` returns pointers to every `T`, and
+  `find_all<T>(doc, pred)` those that match. `strip_styles(doc)` clears every
+  style name (`include/docsmithcpp/visit.h`).
+- **Printing:** `io_writer` prints the tree (`include/docsmithcpp/iostream_writer.h`).
+  The debugger visualisers in `tools/debug/` show a node's summary and children
+  (see CONTRIBUTING.md, *Debugging*).
 
 ### White space and breaks
 
@@ -184,6 +234,23 @@ parent styles.
   automatic styles). Removing a definition from the registry doesn't remove it
   from the file, since nodes or `unknown` markup may still use it.
 
+### Builtin styles and code blocks
+
+Names in `builtin` are styles writers know without a definition in
+`text_doc::styles()`: `title`, `preformatted` (a monospace paragraph for code
+and logs) and `source_text` (monospace text within a line). They are
+LibreOffice's own Title, Preformatted Text and Source Text, so ODT defines each
+as LibreOffice does when the document uses it and neither the document nor the
+loaded file defines it. HTML writes the class and leaves its look to
+`html::file::css`, except that a preformatted paragraph is `<pre>` and a source
+text span `<code>`, as is anything styled with a style based on them.
+
+A code block is a paragraph, not a node of its own: its lines are separated by
+`'\n'` in the text, and its white space is kept like any other text's (see
+*White space and breaks*). So `paragraph(log).set_style(builtin::preformatted)`
+is the whole of it, and a format without code blocks still gets a monospace
+paragraph.
+
 ## Resources
 
 Anything more than one format needs lives in `text_doc`, not in a format's file
@@ -228,21 +295,6 @@ one title or put it first: a logo may come before it, and reading then saving a
 file must keep it where it was. `find_title()` returns the first one, wherever
 it is.
 
-Names in `builtin` are styles writers know without a definition in
-`text_doc::styles()`: `title`, `preformatted` (a monospace paragraph for code
-and logs) and `source_text` (monospace text within a line). They are
-LibreOffice's own Title, Preformatted Text and Source Text, so ODT defines each
-as LibreOffice does when the document uses it and neither the document nor the
-loaded file defines it. HTML writes the class and leaves its look to
-`html::file::css`, except that a preformatted paragraph is `<pre>` and a source
-text span `<code>`, as is anything styled with a style based on them.
-
-A code block is a paragraph, not a node of its own: its lines are separated by
-`'\n'` in the text, and its white space is kept like any other text's (see
-*White space and breaks*). So `paragraph(log).set_style(builtin::preformatted)`
-is the whole of it, and a format without code blocks still gets a monospace
-paragraph.
-
 - `author` is one string, since only Markdown front matter holds a list; several
   authors go in it as e.g. `"A; B"`.
 - Dates are `std::chrono::sys_seconds`, in UTC. ODT dates without a time zone
@@ -257,6 +309,79 @@ paragraph.
 - **HTML**: `<html lang>`, `<title>` (`html::file::title`, else `meta.title`,
   else the first heading) and `author`, `description` and `keywords` meta tags.
 - **Markdown**: not written. Front matter isn't part of CommonMark or GFM.
+
+## Formats
+
+Each format is a namespace with a `file` class: the document as its public
+`doc` member, the format's own options, a static `load()` if it can be read,
+and `save()` (plus `to_string()` for text formats).
+
+| Format | Read | Write | Kept from a loaded file |
+|---|---|---|---|
+| ODT | `odt::file::load()` | `odt::file::save()` | the rest of the package: `styles.xml` and `meta.xml` are updated in place, settings, the thumbnail and pictures only `unknown` uses are carried over; `content.xml` is regenerated |
+| HTML | — | `html::file::save()`, `to_string()` | — |
+| Markdown | `md::parse()`, `md::file::load()`, with `DOCSMITHCPP_MARKDOWN` | `md::file::save()`, `to_string()` | — |
+
+- **Writers** are recursive `std::visit` emitters with one overload per node
+  type and no catch-all, so a new node doesn't compile until every writer
+  handles it. Writing never changes `doc`.
+- **Readers** build the tree top-down and put anything they don't model in
+  `unknown`, or drop it where `unknown` can't hold it (see *Document model*).
+- **Round trips** go through the model: reading then writing the same format
+  keeps what the model holds, plus what the `file` class carries over. Going
+  to another format keeps only what the model holds.
+
+## Source layout
+
+Public headers are in `include/docsmithcpp/`. The model is `nodes_fwd.h` (forward
+declarations and mixins), `inline_nodes.h`, `list.h`, `table.h`, `nodes.h`,
+`page.h`, `style.h`, `resource.h`, `metadata.h` and `text_doc.h`. Traversal is in
+`visit.h`, and each format's `file` class in `<format>/file.h`. `docsmith.h`
+includes all of it. No public header includes a dependency's header.
+
+Everything under `src/` is private:
+
+| Path | What |
+|---|---|
+| `zip/` | a zip archive read from and written to bytes (miniz), knowing nothing of its contents |
+| `odf/` | the ODF package (manifest, mimetype) and `meta.xml`, shared by the ODF formats |
+| `odt/` | the ODT parser (`file.cpp`), writer and style XML |
+| `html/`, `md/` | the HTML writer, and the Markdown writer and md4c parser |
+| `outline.h` | plain text of inline content, the body's headings, and heading ids for a table of contents |
+| `format.h` | number, colour and date formatting without a formatting library |
+| `bytes.h` | whole files as bytes, through `std::filesystem::path` so non-ASCII names work on Windows |
+| `resource_plan.h` | where a text format's images go when it is saved with its images next to it |
+
+## Extending
+
+**A new node** touches every format, which is why the node list is short.
+
+1. Define it in the header for its group and add it to `inline_node` or
+   `block_node`. If it has children, `detail::deep_visitor` in `visit.h` has
+   to recurse into them.
+2. Handle it in every writer (`src/odt/writer.cpp`, `src/html/file.cpp`,
+   `src/md/file.cpp`) and every reader that can produce it (`src/odt/file.cpp`,
+   `src/md/parser.cpp`). The compiler finds the writers.
+3. Show it in `io_writer`, `tools/debug/docsmith_lldb.py` and
+   `tools/debug/docsmith.natvis`.
+4. Add it to the table in *Nodes*, with a section here if its mapping to a
+   format isn't obvious. Add tests for each format and a CHANGELOG entry.
+
+Before adding a node, check whether text, a style or an existing node already
+says it. A tab, a line break and a code block are all text and styles, not
+nodes (see *White space and breaks*).
+
+**A new format**:
+
+- Add `include/docsmithcpp/<format>/file.h` and `src/<format>/`, with the
+  `file` class shape above.
+- Build zip-based formats on `src/zip/`. Read and write files through
+  `src/bytes.h`, and share helpers through `src/outline.h` and `src/format.h`.
+- Keep dependencies private, and optional where they can be
+  (CONTRIBUTING.md, *Adding a dependency*).
+- Give the format a section here with a mapping table like *Markdown*'s, and
+  tests in `tests/<format>/`. Add it to the README's roadmap and to *Formats*
+  above.
 
 ## Markdown
 
