@@ -74,7 +74,7 @@ void write_example_test_report()
     for(auto &r : records)
     {
         // Heading with link target from summary table
-        details.add(heading(2, span(r.name, bookmark(r.name))).set_style("Heading_20_2"));
+        details.add(heading(2, span(r.name, bookmark{r.name})).set_style("Heading_20_2"));
         details.append(r.detail);
     }
     doc.replace(bookmark{"details"}, details);
