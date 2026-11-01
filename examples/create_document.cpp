@@ -52,11 +52,12 @@ void write_example_test_report()
     auto summary_table = table::from_cells({{{"Test Case"}, {"Result"}}});
     for(auto &r : records)
     {
-        summary_table.add_row(
+        summary_table.add_row({
             // Test case with link to detail section
-            {paragraph(hyperlink(bookmark{r.name}, r.name)),
-                // Pass or Fail
-                {r.passed ? pass_summary : fail_summary}});
+            paragraph(hyperlink(bookmark{r.name}, r.name)),
+            // Pass or Fail
+            {r.passed ? pass_summary : fail_summary},
+        });
     }
 
     doc.add(summary_table);
