@@ -33,6 +33,7 @@
 #include "format.h"
 #include "odf/package.h"
 #include "odt/styles.h"
+#include "outline.h"
 
 namespace docsmith::odt
 {
@@ -95,6 +96,7 @@ constexpr const char *base_styles = R"~~(<?xml version="1.0" encoding="UTF-8"?>
     xmlns:svg="urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0"
     xmlns:fo="urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0"
     xmlns:xlink="http://www.w3.org/1999/xlink"
+    xmlns:number="urn:oasis:names:tc:opendocument:xmlns:datastyle:1.0"
     xmlns:loext="urn:org:documentfoundation:names:experimental:office:xmlns:loext:1.0"
     office:version="1.2">
     <office:font-face-decls/>
@@ -113,6 +115,28 @@ constexpr const char *preformatted_style =
     R"~~(<style:style style:name="Preformatted_20_Text" style:display-name="Preformatted Text" style:family="paragraph" style:class="html"><style:paragraph-properties fo:margin-top="0cm" fo:margin-bottom="0cm"/><style:text-properties fo:font-family="'Liberation Mono'" style:font-family-generic="modern" style:font-pitch="fixed" fo:font-size="10pt" style:font-size-asian="10pt" style:font-size-complex="10pt"/></style:style>)~~";
 constexpr const char *source_text_style =
     R"~~(<style:style style:name="Source_20_Text" style:display-name="Source Text" style:family="text"><style:text-properties fo:font-family="'Liberation Mono'" style:font-family-generic="modern" style:font-pitch="fixed"/></style:style>)~~";
+
+// YYYY-MM-DD, for date fields. A common style, so fields in content.xml and
+// in styles.xml (headers, footers) can both use it.
+constexpr const char *date_style_name = "docsmith_iso_date";
+constexpr const char *date_style =
+    R"~~(<number:date-style style:name="docsmith_iso_date"><number:year number:style="long"/><number:text>-</number:text><number:month number:style="long"/><number:text>-</number:text><number:day number:style="long"/></number:date-style>)~~";
+
+// LibreOffice's Contents Heading and Contents 1-10: a right tab with dots for
+// the page number, and each level indented by 0.5cm.
+constexpr const char *contents_heading_style =
+    R"~~(<style:style style:name="Contents_20_Heading" style:display-name="Contents Heading" style:family="paragraph" style:class="index"><style:paragraph-properties fo:margin-top="0.423cm" fo:margin-bottom="0.212cm" fo:keep-with-next="always"/><style:text-properties fo:font-size="16pt" fo:font-weight="bold" style:font-size-asian="16pt" style:font-weight-asian="bold" style:font-size-complex="16pt" style:font-weight-complex="bold"/></style:style>)~~";
+
+std::string contents_style(int level)
+{
+    const std::string n = std::to_string(level);
+    return R"~~(<style:style style:name="Contents_20_)~~" + n +
+        R"~~(" style:display-name="Contents )~~" + n +
+        R"~~(" style:family="paragraph" style:class="index"><style:paragraph-properties fo:margin-left=")~~" +
+        detail::to_string(0.5f * static_cast<float>(level - 1)) +
+        R"~~(cm" fo:margin-right="0cm" fo:text-indent="0cm"><style:tab-stops><style:tab-stop style:position=")~~" +
+        detail::to_string(17 - 0.5f * static_cast<float>(level - 1)) + R"~~(cm" style:type="right" style:leader-style="dotted" style:leader-text="."/></style:tab-stops></style:paragraph-properties></style:style>)~~";
+}
 
 /// The builtin styles the writer defines when the document uses one and
 /// neither it nor the loaded file defines it. LibreOffice knows them without a
@@ -669,7 +693,10 @@ void writer::emit(pugi::xml_node parent, const field &f)
     case field_type::date:
         value = detail::today();
         n = parent.append_child("text:date");
+        n.append_attribute("style:data-style-name") = date_style_name;
         n.append_attribute("text:date-value") = value.c_str();
+        if(!m_styles.find_child_by_attribute("number:date-style", "style:name", date_style_name))
+            m_styles.append_buffer(date_style, std::strlen(date_style));
         break;
     case field_type::title:
         n = parent.append_child("text:title");
@@ -678,6 +705,81 @@ void writer::emit(pugi::xml_node parent, const field &f)
     }
     if(!value.empty())
         n.append_child(pugi::node_pcdata).set_value(value.c_str());
+}
+
+// LibreOffice shows the entries stored in the file and doesn't update an index
+// when it opens one, so they are written here: a link to each heading (its
+// bookmark, else LibreOffice's "#<text>|outline"). The page numbers need a
+// layout; LibreOffice's Update Index adds them, from the entry templates.
+void writer::emit(pugi::xml_node parent, const table_of_contents &toc)
+{
+    flush_page_break(parent);
+    const int levels = std::clamp(toc.levels, 1, 10);
+    define_style("Contents_20_Heading", contents_heading_style);
+    for(int level = 1; level <= levels; ++level)
+        define_style("Contents_20_" + std::to_string(level), contents_style(level));
+
+    auto n = parent.append_child("text:table-of-content");
+    const std::string name = "Table of Contents" + std::to_string(++m_tocs);
+    n.append_attribute("text:protected") = "true";
+    n.append_attribute("text:name") = name.c_str();
+
+    auto source = n.append_child("text:table-of-content-source");
+    source.append_attribute("text:outline-level") = levels;
+    if(!toc.title.empty())
+    {
+        auto t = source.append_child("text:index-title-template");
+        t.append_attribute("text:style-name") = "Contents_20_Heading";
+        t.append_child(pugi::node_pcdata).set_value(toc.title.c_str());
+    }
+    for(int level = 1; level <= levels; ++level)
+    {
+        auto t = source.append_child("text:table-of-content-entry-template");
+        t.append_attribute("text:outline-level") = level;
+        t.append_attribute("text:style-name") = ("Contents_20_" + std::to_string(level)).c_str();
+        t.append_child("text:index-entry-link-start");
+        t.append_child("text:index-entry-chapter");
+        t.append_child("text:index-entry-text");
+        auto tab = t.append_child("text:index-entry-tab-stop");
+        tab.append_attribute("style:type") = "right";
+        tab.append_attribute("style:leader-char") = ".";
+        t.append_child("text:index-entry-page-number");
+        t.append_child("text:index-entry-link-end");
+    }
+
+    auto body = n.append_child("text:index-body");
+    if(!toc.title.empty())
+    {
+        auto title = body.append_child("text:index-title");
+        title.append_attribute("text:name") = (name + "_Head").c_str();
+        auto p = title.append_child("text:p");
+        p.append_attribute("text:style-name") = "Contents_20_Heading";
+        p.append_child(pugi::node_pcdata).set_value(toc.title.c_str());
+    }
+    for(const heading *h : detail::body_headings(*m_doc))
+    {
+        if(h->level > levels)
+            continue;
+        const std::string text = detail::plain_text(h->children());
+        const bookmark *b = detail::first_bookmark(h->children());
+        const std::string href = "#" + (b ? b->name : text + "|outline");
+
+        auto p = body.append_child("text:p");
+        p.append_attribute("text:style-name") =
+            ("Contents_20_" + std::to_string(std::max(h->level, 1))).c_str();
+        auto a = p.append_child("text:a");
+        a.append_attribute("xlink:type") = "simple";
+        a.append_attribute("xlink:href") = href.c_str();
+        emit(a, docsmith::text{text});
+    }
+}
+
+/// Adds xml to styles.xml's common styles unless a paragraph style of that
+/// name is defined there already.
+void writer::define_style(const std::string &name, const std::string &xml)
+{
+    if(!find_style(m_styles, name, style_family::paragraph))
+        m_styles.append_buffer(xml.data(), xml.size());
 }
 
 void writer::emit(pugi::xml_node parent, const page_break &)

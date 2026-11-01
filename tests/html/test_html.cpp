@@ -393,3 +393,32 @@ TEST(HTML, HeaderAndFooter)
         "<body>\n<header>\n  <p>Top</p>\n</header>\n<p>Body</p>\n<footer>\n  <p>Bottom</p>\n</footer>\n</body>"));
     EXPECT_FALSE(has(html::file(text_doc{paragraph("x")}).to_string(), "<header>"));
 }
+
+TEST(HTML, TableOfContents)
+{
+    const text_doc doc{table_of_contents("Contents"), heading(1, "Intro"),
+        heading(2, bookmark{"r"}, "Results"), heading(2, "Intro"), heading(1, "End")};
+    const auto html = html::file(doc).to_string();
+    EXPECT_TRUE(has(html,
+        "<nav class=\"toc\">\n"
+        "  <p class=\"toc-title\">Contents</p>\n"
+        "  <ul>\n"
+        "    <li><a href=\"#intro\">Intro</a>\n"
+        "      <ul>\n"
+        "        <li><a href=\"#r\">Results</a>\n"
+        "        </li>\n"
+        "        <li><a href=\"#intro-2\">Intro</a>\n"
+        "        </li>\n"
+        "      </ul>\n"
+        "    </li>\n"
+        "    <li><a href=\"#end\">End</a>\n"
+        "    </li>\n"
+        "  </ul>\n"
+        "</nav>\n")) << html;
+    EXPECT_TRUE(has(html, "<h1 id=\"intro\">Intro</h1>"));
+    EXPECT_TRUE(has(html, "<h2><a id=\"r\"></a>Results</h2>")) << "linked by its bookmark";
+    EXPECT_TRUE(has(html, "<h2 id=\"intro-2\">Intro</h2>"));
+
+    EXPECT_TRUE(has(html::file(text_doc{heading(1, "A")}).to_string(), "<h1>A</h1>"))
+        << "no ids without a table of contents";
+}

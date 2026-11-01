@@ -87,9 +87,25 @@ struct page_break
     bool operator==(const page_break &) const = default;
 };
 
+/// A table of contents: the body's headings down to `levels`, each linking to
+/// its heading. Writers make the entries, so they follow the headings.
+struct table_of_contents
+{
+    std::string title; //!< Shown above the entries; empty for none
+    int levels{3};     //!< The deepest heading level listed
+
+    table_of_contents() = default;
+    explicit table_of_contents(std::string t, int lvls = 3) :
+        title(std::move(t)), levels(lvls)
+    {
+    }
+
+    bool operator==(const table_of_contents &) const = default;
+};
+
 struct block_node
 {
-    std::variant<paragraph, heading, list, table, frame, page_break, unknown> v;
+    std::variant<paragraph, heading, list, table, frame, page_break, table_of_contents, unknown> v;
     bool operator==(const block_node &) const = default;
 };
 

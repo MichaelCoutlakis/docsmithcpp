@@ -276,3 +276,30 @@ TEST(ODT_XML, HeaderAndFooterGoOnTheMasterPage)
     EXPECT_STREQ(masters.child("style:master-page").last_child().name(), "style:footer");
     EXPECT_STREQ(masters.select_node("//style:footer/text:p").node().text().as_string(), "New bottom");
 }
+
+TEST(ODT_XML, TableOfContentsEntries)
+{
+    const text_doc doc{table_of_contents("Contents", 2), heading(1, "Intro"),
+        heading(2, span(bookmark{"results"}, "Results")), heading(3, "Too deep")};
+    odt::file(doc).save("odt/out/toc_entries.odt");
+
+    part content("odt/out/toc_entries.odt", "content.xml");
+    auto toc = content.xml.select_node("//text:table-of-content").node();
+    ASSERT_TRUE(toc);
+    EXPECT_EQ(toc.child("text:table-of-content-source").attribute("text:outline-level").as_int(), 2);
+    auto body = toc.child("text:index-body");
+    EXPECT_STREQ(body.child("text:index-title").child("text:p").text().as_string(), "Contents");
+
+    std::vector<std::pair<std::string, std::string>> entries;
+    for(auto p : body.children("text:p"))
+        entries.emplace_back(p.attribute("text:style-name").as_string(),
+            p.child("text:a").attribute("xlink:href").as_string());
+    const std::vector<std::pair<std::string, std::string>> expected{
+        {"Contents_20_1", "#Intro|outline"}, {"Contents_20_2", "#results"}};
+    EXPECT_EQ(entries, expected) << "a bookmark in the heading is its link target";
+
+    part styles("odt/out/toc_entries.odt", "styles.xml");
+    auto defs = definitions(styles_of(styles));
+    EXPECT_EQ((defs[{"Contents_20_Heading", "paragraph"}]), 1);
+    EXPECT_EQ((defs[{"Contents_20_2", "paragraph"}]), 1);
+}

@@ -77,6 +77,8 @@ private:
     void emit(pugi::xml_node parent, const bookmark &b);
     void emit(pugi::xml_node parent, const field &f);
     void emit(pugi::xml_node parent, const page_break &);
+    void emit(pugi::xml_node parent, const table_of_contents &toc);
+    void define_style(const std::string &name, const std::string &xml);
     void emit(pugi::xml_node parent, const unknown &u);
     void emit(pugi::xml_node parent, const list &l);
     void emit(pugi::xml_node parent, const list_item &it);
@@ -95,6 +97,7 @@ private:
     bool m_page_break_pending{false};
     std::set<std::string> m_page_break_styles; //!< Made in this write
     std::string m_block_style;                 //!< Storage for block_style()
+    int m_tocs{0};                             //!< Tables of contents written
 };
 
 } // namespace docsmith::odt

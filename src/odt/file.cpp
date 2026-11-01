@@ -249,6 +249,13 @@ std::optional<block_node> parse_block(const pugi::xml_node &node)
         return block_node{parse_table(node)};
     if(tag == "draw:frame")
         return block_node{parse_frame(node)};
+    if(tag == "text:table-of-content")
+    {
+        // The entries are left out: the writer makes them from the headings.
+        auto source = node.child("text:table-of-content-source");
+        return block_node{table_of_contents(source.child("text:index-title-template").text().as_string(),
+            source.attribute("text:outline-level").as_int(10))};
+    }
 
     return block_node{unknown{serialize(node)}};
 }

@@ -5,7 +5,7 @@
 The document tree is a pair of value-type variants — `inline_node` (text-flow
 content: `text`, `span`, `hyperlink`, `frame`, `bookmark`, `field`, `unknown`) and
 `block_node` (`paragraph`, `heading`, `list`, `table`, `frame`, `page_break`,
-`unknown`). It
+`table_of_contents`, `unknown`). It
 is deliberately a _generic_, format-agnostic model: which group may go where is
 encoded by the child sequence's type, so there is no separate per-format
 validation layer. Copy and `operator==` are compiler-generated, and traversal is
@@ -43,6 +43,7 @@ What each node holds, independent of any one format. "Inline" is a sequence of
 | `table_cell` | — | blocks | styled; `rowspan`, `colspan`; a covered slot holds a placeholder cell |
 | `frame` | block, inline | an `image` | styled |
 | `page_break` | block | — | starts a new page |
+| `table_of_contents` | block | — | `title`, `levels`; the entries are made by writers |
 | `text` | inline | a string | white space as is, `'\t'` a tab, `'\n'` a line break |
 | `span` | inline | inline | styled |
 | `hyperlink` | inline | inline | `target`: a URL or a bookmark |
@@ -108,6 +109,25 @@ sections do; page size and margins would go in `page_style` too.
   automatic styles in `styles.xml`, not `content.xml`'s.
 - **HTML**: `<header>` before the body and `<footer>` after it, when not empty.
 
+### Table of contents
+
+A `table_of_contents` lists the body's headings down to `levels`, each linking
+to its heading. It holds no entries: writers make them from the headings when
+they write, so the list can't go stale as the body is edited or filled in.
+
+- **ODT**: `text:table-of-content`, with entry templates for each level and an
+  index body the writer fills in, because LibreOffice shows the stored entries
+  and doesn't regenerate them when it opens a file. An entry links to the
+  heading's first bookmark, else to `#<text>|outline`, LibreOffice's link to a
+  heading. Page numbers need a layout, so entries have none until the index is
+  updated in LibreOffice (Tools > Update). The writer defines Contents Heading
+  and Contents 1-n as LibreOffice does unless they are defined. Reading keeps
+  the title and levels and drops the stored entries.
+- **HTML**: `<nav class="toc">` with the title and nested `<ul>`s of links.
+  When a document has a table of contents, a heading with a bookmark is linked
+  through it, and the others get an `id` made from their text (`test-results`,
+  then `test-results-2`, ...).
+
 ### Fields
 
 A `field` is a value the writer or reader fills in: the page number, the page
@@ -115,7 +135,7 @@ count, the date, or the document's title (`meta.title`). It goes anywhere text
 goes, most usefully in a header or footer:
 `paragraph("Page ", field{field_type::page_number}, " of ", field{field_type::page_count})`.
 
-- **ODT**: `text:page-number`, `text:page-count`, `text:date` and `text:title`,
+- **ODT**: `text:page-number`, `text:page-count`, `text:date` (as YYYY-MM-DD) and `text:title`,
   each holding the value it shows until the reader updates it: `1` for page
   numbers (the writer doesn't lay out pages), today's date and the title. Read
   back from the same elements; other ODF fields stay `unknown`.

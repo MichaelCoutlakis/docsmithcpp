@@ -32,6 +32,7 @@
 #include <vector>
 
 #include "format.h"
+#include "outline.h"
 
 // The page is written directly rather than built as an XML tree: HTML is not
 // XML. An empty <p/> or <a id="x"/> is an *open* tag to an HTML parser, so
@@ -204,17 +205,51 @@ std::string generated_css(const text_doc &doc)
     return css;
 }
 
-void plain_text(const std::vector<inline_node> &kids, std::string &out)
+using detail::plain_text;
+
+/// The id a table of contents links to for each heading: its bookmark's, which
+/// the page has already, or else a slug of its text, made unique, which the
+/// heading gets as its own id.
+struct heading_ids
 {
-    for(const auto &k : kids)
-        std::visit(overloaded{
-                       [&](const text &t) { out += t.content; },
-                       [&](const span &s) { plain_text(s.children(), out); },
-                       [&](const hyperlink &h) { plain_text(h.children(), out); },
-                       [](const auto &) {},
-                   },
-            k.v);
-}
+    std::map<const heading *, std::string> link; //!< id to link to
+    std::set<const heading *> own;               //!< headings that get an id
+
+    explicit heading_ids(const text_doc &doc)
+    {
+        if(!detail::has_toc(doc))
+            return;
+        std::set<std::string> taken;
+        for(const bookmark *b : collect<bookmark>(doc))
+            taken.insert(html_id(b->name));
+        for(const heading *h : detail::body_headings(doc))
+        {
+            if(const bookmark *b = detail::first_bookmark(h->children()))
+            {
+                link[h] = html_id(b->name);
+                continue;
+            }
+            std::string slug;
+            for(unsigned char c : plain_text(h->children()))
+            {
+                if(std::isalnum(c) || c >= 0x80)
+                    slug += static_cast<char>(std::tolower(c));
+                else if(!slug.empty() && slug.back() != '-')
+                    slug += '-';
+            }
+            while(slug.ends_with('-'))
+                slug.pop_back();
+            if(slug.empty())
+                slug = "section";
+            std::string id = slug;
+            for(int i = 2; taken.contains(id); ++i)
+                id = slug + "-" + std::to_string(i);
+            taken.insert(id);
+            link[h] = id;
+            own.insert(h);
+        }
+    }
+};
 
 /// The page title: the document's title, else the title paragraph's or the
 /// first heading's text.
@@ -326,7 +361,7 @@ class writer
 {
 public:
     writer(std::ostream &os, const text_doc &doc, const resource_plan &plan) :
-        m_os(os), m_doc(doc), m_plan(plan)
+        m_os(os), m_doc(doc), m_plan(plan), m_ids(doc)
     {
     }
 
@@ -421,7 +456,11 @@ private:
     {
         const std::string tag = "h" + std::to_string(std::clamp(h.level, 1, 6));
         indent();
-        open(tag, h.style);
+        m_os << '<' << tag;
+        if(m_ids.own.contains(&h))
+            m_os << " id=\"" << m_ids.link.at(&h) << '"';
+        class_attr(h.style);
+        m_os << '>';
         flow(h.children());
         m_os << "</" << tag << ">\n";
     }
@@ -519,6 +558,70 @@ private:
     {
         indent();
         m_os << "<div style=\"break-after: page\"></div>\n";
+    }
+    /// Nested lists of links to the headings: a heading one level below the
+    /// one before it starts a list inside that one's item.
+    void emit_block(const table_of_contents &toc)
+    {
+        indent();
+        m_os << "<nav class=\"toc\">\n";
+        ++m_depth;
+        if(!toc.title.empty())
+        {
+            indent();
+            m_os << "<p class=\"toc-title\">";
+            escape(m_os, toc.title);
+            m_os << "</p>\n";
+        }
+        std::vector<bool> item_open; // per open <ul>
+        auto close_item = [&]
+        {
+            if(!item_open.back())
+                return;
+            --m_depth;
+            indent();
+            m_os << "</li>\n";
+            item_open.back() = false;
+        };
+        auto close_list = [&]
+        {
+            close_item();
+            item_open.pop_back();
+            --m_depth;
+            indent();
+            m_os << "</ul>\n";
+        };
+        for(const heading *h : detail::body_headings(m_doc))
+        {
+            if(h->level > toc.levels)
+                continue;
+            // A jump of more than one level nests only one list deeper.
+            const size_t depth = std::clamp<size_t>(h->level, 1, item_open.size() + 1);
+            while(item_open.size() > depth)
+                close_list();
+            if(item_open.size() == depth)
+                close_item();
+            while(item_open.size() < depth)
+            {
+                indent();
+                m_os << "<ul>\n";
+                ++m_depth;
+                item_open.push_back(false);
+            }
+            indent();
+            m_os << "<li><a href=\"#";
+            escape(m_os, m_ids.link.at(h), true);
+            m_os << "\">";
+            escape(m_os, plain_text(h->children()));
+            m_os << "</a>\n";
+            ++m_depth;
+            item_open.back() = true;
+        }
+        while(!item_open.empty())
+            close_list();
+        --m_depth;
+        indent();
+        m_os << "</nav>\n";
     }
     void emit_block(const unknown &) {} // another format's markup; no HTML meaning
 
@@ -640,6 +743,7 @@ private:
     int m_depth{0};
     bool m_pre{false};                       //!< Inside <pre>: text is written as is
     std::vector<const list_style *> m_lists; //!< Enclosing lists' styles, innermost last
+    const heading_ids m_ids;
 };
 
 } // namespace

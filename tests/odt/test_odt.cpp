@@ -579,3 +579,11 @@ TEST(ODT, NoHeaderNoMasterPage)
     odt::file(text_doc{paragraph("Body")}).save("odt/out/no_header.odt");
     EXPECT_EQ(odt::file::load("odt/out/no_header.odt").doc.page, page_style{});
 }
+
+TEST(ODT, TableOfContentsRoundTrip)
+{
+    const text_doc doc{table_of_contents("Contents", 2), heading(1, "One"), heading(2, "Two"),
+        heading(3, "Three")};
+    odt::file(doc).save("odt/out/toc.odt");
+    EXPECT_EQ(odt::file::load("odt/out/toc.odt").doc.body, doc.body);
+}

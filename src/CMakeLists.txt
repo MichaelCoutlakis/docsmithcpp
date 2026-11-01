@@ -20,6 +20,7 @@ add_library(docsmithcpp
     "bytes.h"
     "bytes.cpp"
     "format.h"
+    "outline.h"
     "zip/archive.h"
     "zip/archive.cpp"
     "odf/package.h"

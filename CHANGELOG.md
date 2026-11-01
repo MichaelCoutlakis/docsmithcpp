@@ -63,6 +63,10 @@ held in `std::variant`. This is a breaking change to almost every public API.
   directory. Generated test files go to `tests/odt/out/`.
 
 ### Added
+- **Table of contents**: a `table_of_contents` block node (`title`, `levels`).
+  The ODT writer writes `text:table-of-content` with entries made from the
+  headings, linked to them (LibreOffice doesn't regenerate them on load); HTML
+  writes a `<nav>` of nested lists, and gives the headings ids to link to.
 - **Headers and footers**: `text_doc::page` (`page_style`) holds the header and
   footer as blocks, with `set_header()` / `set_footer()`. ODT reads and writes
   them on the body's master page in `styles.xml`, creating one for a new document
