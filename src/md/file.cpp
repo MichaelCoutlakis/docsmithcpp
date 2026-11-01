@@ -25,7 +25,9 @@
 #include <vector>
 
 #include "bytes.h"
+#include "format.h"
 #include "md/names.h"
+#include "outline.h"
 #include "resource_plan.h"
 
 // Each block is rendered to a string without a trailing newline, so that a
@@ -168,7 +170,7 @@ class writer
 {
 public:
     writer(const text_doc &doc, const detail::resource_plan &plan) :
-        m_doc(doc), m_plan(plan)
+        m_doc(doc), m_plan(plan), m_ids(doc, names::anchor_id)
     {
     }
 
@@ -211,10 +213,12 @@ private:
                 s = std::visit([this](const auto &n) { return emit(n); }, bs[i].v);
             if(s.empty())
                 continue;
-            // A list's first line starts with its marker, '-' or a number.
+            // A list's first line starts with its marker, '-' or a number. A
+            // table of contents ends with a '-' list.
             const char marker = std::holds_alternative<list>(bs[i].v)
                 ? (s.front() == '-' ? '-' : s[s.find_first_not_of("0123456789")])
-                : 0;
+                : std::holds_alternative<table_of_contents>(bs[i].v) ? '-'
+                                                                     : 0;
             if(!out.empty())
                 out += tight ? "\n" : "\n\n";
             // Two lists of the same kind in a row would read as one.
@@ -272,7 +276,21 @@ private:
     }
 
     std::string emit(const heading &h)
-    { return heading_line(std::clamp(h.level, 1, 6), h.children()); }
+    {
+        const int level = std::clamp(h.level, 1, 6);
+        std::string s = heading_line(level, h.children());
+        // A heading a table of contents links to by a slug gets an anchor,
+        // written the way a bookmark at its start would be.
+        if(m_ids.own.contains(&h))
+        {
+            const std::string anchor = "<a id=\"" + attribute(m_ids.link.at(&h)) + "\"></a>";
+            if(s.size() == static_cast<size_t>(level))
+                s += " " + anchor;
+            else
+                s.insert(level + 1, anchor);
+        }
+        return s;
+    }
 
     std::string emit(const list &l)
     {
@@ -411,6 +429,32 @@ private:
     std::string emit(const page_break &) { return "---"; }
     std::string emit(const unknown &) { return {}; } // another format's markup
 
+    /// The title as a paragraph, then nested lists of links to the headings: a
+    /// heading one level below the one before it is listed inside that one's
+    /// item.
+    std::string emit(const table_of_contents &toc)
+    {
+        std::string out;
+        if(!toc.title.empty())
+            out = inline_block({to_inline(toc.title)}) + "\n\n";
+        size_t depth = 0;
+        for(const heading *h : detail::body_headings(m_doc))
+        {
+            if(h->level > toc.levels)
+                continue;
+            // A jump of more than one level nests only one list deeper.
+            depth = std::clamp<size_t>(h->level, 1, depth + 1);
+            std::string entry;
+            m_bol = false;
+            put_text(detail::plain_text(h->children()), context::heading, entry);
+            out += std::string((depth - 1) * 2, ' ') + "- [" + entry + "](#" + m_ids.link.at(h) +
+                ")\n";
+        }
+        while(out.ends_with('\n'))
+            out.pop_back();
+        return out;
+    }
+
     std::string heading_line(int level, const std::vector<inline_node> &kids)
     {
         std::string s = inlines(kids, context::heading);
@@ -528,6 +572,17 @@ private:
     {
         out += "<a id=\"" + attribute(names::anchor_id(b.name)) + "\"></a>";
         m_bol = false;
+    }
+
+    /// Markdown has no pages, so page numbers are left out, as in HTML.
+    void emit(const field &f, context ctx, std::string &out)
+    {
+        switch(f.type)
+        {
+        case field_type::title: put_text(m_doc.meta.title, ctx, out); break;
+        case field_type::date: put_text(detail::today(), ctx, out); break;
+        default: break;
+        }
     }
 
     void emit(const unknown &, context, std::string &) { }
@@ -668,6 +723,7 @@ private:
 
     const text_doc &m_doc;
     const detail::resource_plan &m_plan;
+    const detail::heading_ids m_ids;
     std::vector<const list_style *> m_lists; //!< Enclosing lists' styles, innermost last
     bool m_bol{false};                       //!< At the start of a line
 };

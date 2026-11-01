@@ -207,50 +207,6 @@ std::string generated_css(const text_doc &doc)
 
 using detail::plain_text;
 
-/// The id a table of contents links to for each heading: its bookmark's, which
-/// the page has already, or else a slug of its text, made unique, which the
-/// heading gets as its own id.
-struct heading_ids
-{
-    std::map<const heading *, std::string> link; //!< id to link to
-    std::set<const heading *> own;               //!< headings that get an id
-
-    explicit heading_ids(const text_doc &doc)
-    {
-        if(!detail::has_toc(doc))
-            return;
-        std::set<std::string> taken;
-        for(const bookmark *b : collect<bookmark>(doc))
-            taken.insert(html_id(b->name));
-        for(const heading *h : detail::body_headings(doc))
-        {
-            if(const bookmark *b = detail::first_bookmark(h->children()))
-            {
-                link[h] = html_id(b->name);
-                continue;
-            }
-            std::string slug;
-            for(unsigned char c : plain_text(h->children()))
-            {
-                if(std::isalnum(c) || c >= 0x80)
-                    slug += static_cast<char>(std::tolower(c));
-                else if(!slug.empty() && slug.back() != '-')
-                    slug += '-';
-            }
-            while(slug.ends_with('-'))
-                slug.pop_back();
-            if(slug.empty())
-                slug = "section";
-            std::string id = slug;
-            for(int i = 2; taken.contains(id); ++i)
-                id = slug + "-" + std::to_string(i);
-            taken.insert(id);
-            link[h] = id;
-            own.insert(h);
-        }
-    }
-};
-
 /// The page title: the document's title, else the title paragraph's or the
 /// first heading's text.
 std::string default_title(const text_doc &doc)
@@ -361,7 +317,7 @@ class writer
 {
 public:
     writer(std::ostream &os, const text_doc &doc, const resource_plan &plan) :
-        m_os(os), m_doc(doc), m_plan(plan), m_ids(doc)
+        m_os(os), m_doc(doc), m_plan(plan), m_ids(doc, html_id)
     {
     }
 
@@ -743,7 +699,7 @@ private:
     int m_depth{0};
     bool m_pre{false};                       //!< Inside <pre>: text is written as is
     std::vector<const list_style *> m_lists; //!< Enclosing lists' styles, innermost last
-    const heading_ids m_ids;
+    const detail::heading_ids m_ids;
 };
 
 } // namespace

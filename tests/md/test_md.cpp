@@ -265,6 +265,50 @@ TEST(Markdown, QuotesPageBreaksAndUnknown)
         "> q1\n>\n> q2\\\n> more\n\n---\n\nafter\n");
 }
 
+TEST(Markdown, TableOfContents)
+{
+    EXPECT_EQ(md_of(text_doc{table_of_contents("Contents"),
+                  heading(1, "Intro"),
+                  heading(2, "Scope and aims"),
+                  heading(3, "Deep"),
+                  heading(1, bookmark{"res"}, "Results"),
+                  heading(4, "Too deep")}),
+        "Contents\n\n"
+        "- [Intro](#intro)\n"
+        "  - [Scope and aims](#scope-and-aims)\n"
+        "    - [Deep](#deep)\n"
+        "- [Results](#res)\n\n"
+        "# <a id=\"intro\"></a>Intro\n\n"
+        "## <a id=\"scope-and-aims\"></a>Scope and aims\n\n"
+        "### <a id=\"deep\"></a>Deep\n\n"
+        "# <a id=\"res\"></a>Results\n\n"
+        "#### <a id=\"too-deep\"></a>Too deep\n");
+}
+
+TEST(Markdown, HeadingsGetNoAnchorsWithoutATableOfContents)
+{ EXPECT_EQ(md_of(text_doc{heading(1, "Intro")}), "# Intro\n"); }
+
+TEST(Markdown, FieldsAndPageHeaderAndFooter)
+{
+    text_doc doc{paragraph("Title: ",
+        field{field_type::title},
+        ", page ",
+        field{field_type::page_number},
+        " of ",
+        field{field_type::page_count},
+        ".")};
+    doc.meta.title = "Report";
+    // Markdown has no pages: page numbers, the header and the footer are left out.
+    doc.page.set_header(paragraph("header"));
+    doc.page.set_footer(paragraph("footer"));
+    EXPECT_EQ(md_of(doc), "Title: Report, page  of .\n");
+
+    const std::string date = md_of(text_doc{paragraph(field{field_type::date})});
+    ASSERT_EQ(date.size(), 11u); // YYYY-MM-DD and a newline
+    EXPECT_EQ(date[4], '-');
+    EXPECT_EQ(date[7], '-');
+}
+
 TEST(Markdown, FromOdt)
 {
     const auto md = md::file(odt::file::load("odt/table-intermediate.odt").doc).to_string();

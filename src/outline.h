@@ -20,6 +20,9 @@
 // Private: plain text, and the body's headings as a table of contents lists
 // them. Shared by the writers.
 
+#include <cctype>
+#include <map>
+#include <set>
 #include <string>
 #include <type_traits>
 #include <variant>
@@ -92,5 +95,50 @@ inline bool has_toc(const text_doc &doc)
             return true;
     return false;
 }
+
+/// The id a table of contents links to for each heading: its bookmark's, which
+/// the output has already, or else a slug of its text, made unique, which the
+/// heading gets as its own id. to_id turns a bookmark name into the format's id.
+struct heading_ids
+{
+    std::map<const heading *, std::string> link; //!< id to link to
+    std::set<const heading *> own;               //!< headings that get an id
+
+    template <typename Id>
+    heading_ids(const text_doc &doc, Id to_id)
+    {
+        if(!has_toc(doc))
+            return;
+        std::set<std::string> taken;
+        for(const bookmark *b : collect<bookmark>(doc))
+            taken.insert(to_id(b->name));
+        for(const heading *h : body_headings(doc))
+        {
+            if(const bookmark *b = first_bookmark(h->children()))
+            {
+                link[h] = to_id(b->name);
+                continue;
+            }
+            std::string slug;
+            for(unsigned char c : plain_text(h->children()))
+            {
+                if(std::isalnum(c) || c >= 0x80)
+                    slug += static_cast<char>(std::tolower(c));
+                else if(!slug.empty() && slug.back() != '-')
+                    slug += '-';
+            }
+            while(slug.ends_with('-'))
+                slug.pop_back();
+            if(slug.empty())
+                slug = "section";
+            std::string id = slug;
+            for(int i = 2; taken.contains(id); ++i)
+                id = slug + "-" + std::to_string(i);
+            taken.insert(id);
+            link[h] = id;
+            own.insert(h);
+        }
+    }
+};
 
 } // namespace docsmith::detail

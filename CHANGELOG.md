@@ -94,8 +94,10 @@ held in `std::variant`. This is a breaking change to almost every public API.
   code blocks and `Quotations` block quotes. Lists are ordered or not from their list
   style, tables are GFM tables (an empty header row without `header_rows`), bookmarks
   are `<a id>` anchors, `'\n'` is a hard break and `page_break` a thematic break.
-  Markdown's special characters are escaped. Images are written next to the file, as
-  for HTML. See DESIGN.md, *Markdown*.
+  A `table_of_contents` is a nested list of links to the headings, with the same ids
+  as in HTML; `field` writes the title or date, and the page header and footer are
+  left out. Markdown's special characters are escaped. Images are written next to the
+  file, as for HTML. See DESIGN.md, *Markdown*.
 - **Markdown input** (CMake option `DOCSMITHCPP_MARKDOWN`, off by default and on in
   the `dev` preset): `md::parse(std::string_view)` and `md::file::load()` read
   CommonMark with GFM tables, strikethrough and autolinks, using md4c. md4c is linked

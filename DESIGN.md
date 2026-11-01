@@ -290,6 +290,9 @@ looks right in an `.odt` and writes back to the same Markdown.
 | `table` | GFM table | the same, see below |
 | `frame` | `![](uri)`; a block frame is a paragraph of its own | a paragraph holding only an image is a block frame |
 | `page_break` | thematic break `---` | `page_break` |
+| `table_of_contents` | its title as a paragraph, then nested `-` lists of `[heading](#id)` links; headings without a bookmark get an `<a id>` anchor with the same slug HTML uses | the paragraph and lists |
+| `field` | the title or date as text; page number and count left out | text |
+| `text_doc::page` header and footer | left out: Markdown has no pages | — |
 | `unknown` | left out (it holds another format's markup) | — |
 
 - **Styles**: a span's style counts as bold or italic if it, or a style it is
