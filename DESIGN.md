@@ -456,3 +456,94 @@ looks right in an `.odt` and writes back to the same Markdown.
   reads images given by a relative path that exists into `resources()`, so the
   document can be saved as `.odt` or `.html` elsewhere. `parse()` leaves image
   uris as written. Alt text and titles are dropped.
+
+## DOCX
+
+`docx::file` reads and writes WordprocessingML with no new dependency: the
+package is an OPC zip (`src/opc/`) on the same private zip layer as ODT, with
+`[Content_Types].xml` and relationship parts in place of ODF's manifest. Like
+`odt::file`, it keeps the package it loaded, so load, edit, save writes back
+the parts the model doesn't hold (theme, settings, footnotes, comments, fonts,
+other headers) and updates `styles.xml`, `numbering.xml` and `settings.xml` in
+place. Relationships, media, headers and numbering instances that nothing
+refers to after writing are dropped.
+
+pugixml matches names by prefix, not namespace, and a DOCX file may bind any
+prefix (or the default namespace) to WordprocessingML. So every part is
+normalised when it's parsed: each name is renamed to the prefix the code uses
+for its namespace URI (`w:`, `r:`, `wp:`, ...; `src/xml/namespaces.h`), and
+the declarations move to the root. Prefixes of namespaces the code doesn't know
+are kept, renamed only if they clash, and `mc:Ignorable` follows them.
+
+| Model | DOCX | Read back as |
+|---|---|---|
+| `paragraph` | `w:p`, its style as `w:pStyle` | the same; the default paragraph style reads as none |
+| `heading` | `w:p` with `w:outlineLvl` (level - 1) and `w:pStyle` `Heading<level>`, or its own style | a paragraph with an outline level, directly or from its style; `Heading<level>` reads as none |
+| `span` | runs with `w:rStyle`; runs don't nest, so a span in a span gets the inner style | runs of one style in one span |
+| `text` | `w:t` (`xml:space="preserve"` where needed), `'\t'` `w:tab`, `'\n'` `w:br` | the same; `w:cr` is `'\n'` too |
+| `hyperlink` | `w:hyperlink`, a URL as an external relationship, a bookmark as `w:anchor`; unstyled text gets the `Hyperlink` character style | the same, without the `Hyperlink` style |
+| `bookmark` | `w:bookmarkStart` and `w:bookmarkEnd` | a bookmark; `_Toc...` ones are dropped |
+| `list` | items are paragraphs with `w:numPr` (`w:ilvl` = depth); see below | lists, nested by `w:ilvl` |
+| `table` | `w:tbl` on an even grid at full width, `w:gridSpan`, `w:vMerge`, `w:tblHeader` on the first `header_rows` rows; no borders | the same; cell, row and table properties are dropped |
+| `frame` | `w:drawing/wp:inline`; a block frame is a paragraph of its own | a frame; an unstyled paragraph holding only an image is a block frame |
+| `page_break` | a paragraph holding `w:br w:type="page"` | a page break; one inside a paragraph splits it, and `w:pageBreakBefore` on a paragraph is one before it |
+| `table_of_contents` | see below | the title and levels |
+| `field` | `w:fldSimple` `PAGE`, `NUMPAGES`, `DATE \@ "yyyy-MM-dd"`, `TITLE`, with the value it shows | those four, from simple or complex (`w:fldChar`) fields |
+| `text_doc::page` | header and footer parts, the default ones of the body's `w:sectPr` | the same |
+| `unknown` | written verbatim if it holds OOXML (`markup::ooxml`); ODF is left out | elements the reader doesn't model |
+
+- **Styles**: a style's name is its `w:styleId` as is, so names round-trip
+  exactly; `w:name` is the name with ODF's escapes decoded (`_20_` is a space).
+  Paragraph styles are `w:type="paragraph"`, text styles `character`, table
+  styles `table`; graphic and table column, row and cell styles have no DOCX
+  form. A style with no family is written for each family it's used with; if
+  that is both, the character one is `<name>Char`, linked with `w:link`. Font,
+  size (half-points), weight, italic, colour and `break_before` page map to
+  `w:rFonts`, `w:sz`, `w:b`, `w:i`, `w:color` and `w:pageBreakBefore`. As with
+  ODT, an unchanged loaded style keeps its XML and an edited one replaces it.
+  The writer defines the styles it uses that neither the document nor the file
+  defines: the builtins (Title; Preformatted Text and Source Text in Courier
+  New), `Heading1`-`9`, `Hyperlink` and the table of contents ones. When
+  reading, Word's `HTML Preformatted` and `HTML Code`, and LibreOffice's names
+  for its own, are the builtins.
+- **Direct formatting**: Word puts formatting on the run or paragraph itself
+  (`w:rPr`, `w:pPr`) where ODF makes an automatic style. The reader does what
+  ODF does: each distinct direct formatting becomes a style, `T1`, `T2`, ... for
+  runs and `P1`, ... for paragraphs, based on the run's or paragraph's own
+  style, so the model sees bold text as bold. The file keeps the original XML,
+  and while the definition is unchanged the writer writes that XML back instead
+  of the style, so properties the model doesn't hold (underline, spacing,
+  alignment, a section break) survive. Properties that repeat what the style
+  already says, or set a default (as LibreOffice writes `w:jc="left"` on every
+  paragraph), aren't direct formatting.
+- **Lists**: each list style is a `w:abstractNum` named after it (`w:name`),
+  with each level's format (`decimal`, `lowerLetter`, ..., `bullet`), text
+  (prefix, `%<level>`, suffix), start and indent. Each `list` node gets a `w:num`
+  of its own whose `w:startOverride`s restart it. An unstyled nested list
+  continues its parent's numbering one level down; a styled one gets its own.
+  The second and later paragraphs of an item have `w:numId` 0 and the item's
+  indent, so they read back into the item. A list with no list style gets
+  bullets from an abstractNum named "DocSmith Default List", which reads back
+  unstyled. An abstractNum with no name reads as `WWNum<id>`, as LibreOffice
+  names them.
+- **Images**: written to `word/media/` (a resource already named
+  `word/media/...` keeps its name) and sized in EMUs from the image's own pixel
+  size and resolution (`src/image_size.h` reads PNG, JPEG and GIF headers),
+  scaled down to the text width. Loading names each resource by its part. The
+  file keeps a loaded image's `w:drawing`, and writes it again (size, anchoring,
+  alt text) while a frame in the same part shows that image.
+- **Table of contents**: a `w:sdt` content control (docPartGallery "Table of
+  Contents"): the title in `TOCHeading`, then a `TOC \o "1-<levels>" \h \z \u`
+  complex field whose result is a `TOC<level>` paragraph per heading, linking
+  to the heading's first bookmark or to a `_Toc<n>` bookmark the writer adds.
+  As in ODT the entries have no page numbers; `w:updateFields` in
+  `settings.xml` has Word offer to update the fields when it opens the file.
+  Reading takes the title and levels from a content control or a bare `TOC`
+  field, and drops the entries.
+- **Pages**: a loaded `w:sectPr` (page size, margins, first and even page
+  headers) is kept, its default header and footer references replaced. A new
+  document is A4 with 2cm margins.
+- **Metadata**: `title`, `author`, `language`, `subject` and `description` are
+  `dc:*` in `docProps/core.xml`, `keywords` is `cp:keywords` (joined with `, `,
+  split on `;` or `,`), `created` and `modified` are `dcterms:*`, and `custom`
+  is `docProps/custom.xml`. A loaded core.xml is updated in place.

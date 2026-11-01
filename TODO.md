@@ -35,7 +35,7 @@ dropped. So load, edit, save of a real-world file can silently lose content.
 ### Table and cell properties
 The style model covers only text, paragraph and graphics properties. It has no
 borders, column widths, cell shading or vertical alignment, so a results table
-in ODT has no borders at all. Add table, column and cell style properties. The
+in ODT or DOCX has no borders at all. Add table, column and cell style properties. The
 report template (`examples/make_report_template.cpp`) should then get a table
 style.
 
@@ -65,12 +65,34 @@ headers and footers*.
 
 ## 4. Formats
 
-### DOCX
-This is the format most users of a C++ document library will need. Output
-first, then input. DOCX is an OPC package, a zip like ODF with
-`[Content_Types].xml` in place of the manifest, so it should share the zip layer
-(`src/zip/`). Note that pugixml matches namespace *prefixes*, not URIs. That's
-fine for ODF as LibreOffice writes it, but DOCX reading should not assume `w:`.
+### DOCX gaps
+`docx::file` reads and writes every node (see DESIGN.md, *DOCX*). What it
+doesn't do yet, roughly by how much a report or a loaded file would miss it:
+- **Table properties**: table styles, borders, widths and shading are neither
+  read nor written (see *Table and cell properties*), so a loaded Word table
+  loses its borders when saved. The table node has no style to keep them in.
+- **Sections**: section breaks inside the body stay in the direct formatting of
+  the paragraph that ends the section, so they survive load and save but the
+  model can't see them. First-page and even-page headers are kept, not read.
+  Both wait for *Several page styles*.
+- **Lists**: a table or other non-paragraph block in a list item ends the list
+  when read back. Numbering overrides other than the start, `%1.%2.` style
+  multi-level numbers (read as the last level only) and list styles linked
+  through `w:numStyleLink` aren't modelled.
+- **Fields**: fields other than page number, page count, date and title stay
+  `unknown`, their shown text included, so it isn't found by text searches.
+  Tracked changes, content controls other than a table of contents, and
+  comment ranges are `unknown` too.
+- **Spans**: runs don't nest, so a span in a span is written with the inner
+  style only. A style with no family used on both paragraphs and spans is
+  written as `X` and a linked `XChar`, which reads back as two styles.
+- **Direct formatting** that is only paragraph-mark run properties (`w:pPr/w:rPr`)
+  or a run's language is dropped when read.
+- **Images**: a frame's style has no DOCX form and is dropped. An image whose
+  size can't be read from its header (SVG, BMP) is written one inch square.
+- `_Toc` bookmarks are dropped when read, since the writer makes its own for
+  the table of contents; a cross-reference to one in `unknown` markup breaks.
+- Strict OOXML (`purl.oclc.org` namespaces) isn't read.
 
 ## 5. Dependencies
 
@@ -93,6 +115,12 @@ goes next to it (CONTRIBUTING, *Adding a dependency*).
 `src/resource_plan.{h,cpp}` (where images go when a file is saved with its
 images next to it) is used by Markdown. `src/html/file.cpp` still has its own
 copy of the same code in an anonymous namespace; switch it to the shared one.
+
+### Namespace prefixes in ODT
+pugixml matches names by prefix, not namespace. The DOCX reader renames every
+prefix to its own by namespace URI first (`xml::normalize`, `src/xml/`); the
+ODT reader still assumes LibreOffice's prefixes (`text:`, `office:`, ...). Use
+the same helper there.
 
 ### Separate HTML serialisation from the document mapping
 `src/html/file.cpp` currently mixes two concerns. One is mapping nodes to
@@ -123,9 +151,6 @@ Options:
   library covering both directions would earn its place.
 
 ### Model gaps
-- `unknown` holds ODT XML but doesn't say which format it came from. Record the
-  source format so writers for other formats (Markdown, DOCX) can decide what to
-  do with it.
 - `set_style(style)` keeps only the name. `text_doc::add_style()` registers a
   definition and returns its name, but nothing yet checks that every style a node
   names is defined.
@@ -147,10 +172,10 @@ Options:
   updating only the modelled attributes in place would keep the rest.
 
 ## Testing
-- **Optional LibreOffice validation test.** Headless LibreOffice found a bug every
-  unit test missed (an `office:version` mismatch made it reject resaved files).
-  Add a ctest that runs only when `soffice` is found and converts every file in
-  `tests/odt/out/` (see *Verifying* below).
+- **LibreOffice validation in CI.** `libreoffice_opens_output` has LibreOffice
+  open every file the tests write, when `soffice` is found. A CI job with
+  LibreOffice installed would run it on every change. Word itself is stricter
+  than LibreOffice about element order; nothing checks DOCX output against it.
 - **Fixtures:** the old experimental samples were deleted. Add small, targeted
   `.odt` fixtures per feature (lists, figures, bookmarks, page breaks, nested
   tables, header rows) as tests need them. `examples/report_template.odt`, as
@@ -186,6 +211,7 @@ file (setup in CONTRIBUTING.md). Checked with lldb 23 and CodeLLDB's lldb 22
   `cmake --preset dev`, `cmake --build --preset dev-debug`, `ctest --preset dev`
 - MSVC: run `vcvars64.bat`, then configure with Ninja and the MSVC vcpkg toolchain
   (`x64-windows` triplet).
-- LibreOffice check (a file that fails to load prints "source file could not be
-  loaded"):
+- LibreOffice check: `ctest --preset dev -L libreoffice` runs the tests and
+  opens what they wrote. By hand (a file that fails to load prints "source file
+  could not be loaded"):
   `soffice.com -env:UserInstallation=file:///<scratch>/lo-profile --headless --convert-to txt:Text --outdir <scratch> tests/odt/out/*.odt`

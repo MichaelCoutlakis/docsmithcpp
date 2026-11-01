@@ -63,6 +63,29 @@ held in `std::variant`. This is a breaking change to almost every public API.
   directory. Generated test files go to `tests/odt/out/`.
 
 ### Added
+- **DOCX output**: `docx::file(doc).save()` writes a `.docx` with no new
+  dependency, on the same private zip layer as ODT. Paragraphs and headings
+  (`Heading1`-`9` with `w:outlineLvl`), spans as runs with `w:rStyle`, tabs and
+  line breaks, links to URLs and bookmarks, bookmarks, lists through
+  `numbering.xml` (each list restarts its numbering), tables with spans and
+  repeated header rows, images as inline drawings sized from the PNG, JPEG or GIF
+  header, page breaks, `styles.xml` from `styles()` with the builtin code styles
+  in Courier New, the page header and footer, `PAGE` / `NUMPAGES` / `DATE` /
+  `TITLE` fields, a table of contents field with its entries (and
+  `w:updateFields`, so Word offers to add the page numbers), and `meta` in
+  `docProps/core.xml` and `custom.xml`. See DESIGN.md, *DOCX*.
+- **DOCX input**: `docx::file::load()` reads the same back, from files Word or
+  LibreOffice wrote, whatever namespace prefixes they use. Load, edit and save
+  keeps the parts the model doesn't represent (theme, footnotes, settings, other
+  headers, section settings), elements it doesn't model (as `unknown` nodes), and
+  formatting set directly on runs and paragraphs, which is read as styles `T1`,
+  `P1`, ... (like ODF's automatic styles) and written back as it was while
+  unchanged. A loaded image keeps its size and placement.
+- `unknown::source` (`markup::odf` or `markup::ooxml`) says whose markup the node
+  holds; each writer writes only its own. `unknown{xml}` is ODF, as before.
+- `example_docx_to_html`, and `example_create_document` also writes `.docx`.
+- A `libreoffice_opens_output` test (label `libreoffice`) has LibreOffice open
+  every `.odt` and `.docx` the tests write, when `soffice` is found.
 - **Template-driven test report**: `examples/report_template.odt` (built by
   `example_make_report_template`, then saved by LibreOffice) has heading, body,
   header, footer and pass / fail styles, a header with the title, a footer with
