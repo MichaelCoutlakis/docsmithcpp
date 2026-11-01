@@ -23,6 +23,7 @@ option(BUILD_SHARED_LIBS "Build shared libraries" OFF)
 option(DOCSMITHCPP_BUILD_TESTS "Build unit tests" ${docsmithcpp_is_top_level})
 option(DOCSMITHCPP_BUILD_EXAMPLES "Build examples" ${docsmithcpp_is_top_level})
 option(DOCSMITHCPP_DEBUG_FILES "Write debug dumps (e.g. <name>.content.xml next to saved .odt files)" OFF)
+option(DOCSMITHCPP_MARKDOWN "Markdown input (md::parse, md::file::load), using md4c" OFF)
 
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
@@ -30,6 +31,9 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
 find_package(pugixml CONFIG REQUIRED)
 find_package(miniz CONFIG REQUIRED)
+if(DOCSMITHCPP_MARKDOWN)
+    find_package(md4c CONFIG REQUIRED)
+endif()
 
 add_subdirectory(src)
 

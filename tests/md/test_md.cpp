@@ -271,3 +271,172 @@ TEST(Markdown, FromOdt)
     EXPECT_NE(md.find("| --- |"), std::string::npos);
 }
 
+// ---- Input ------------------------------------------------------------------
+
+#ifdef DOCSMITHCPP_MARKDOWN
+
+namespace
+{
+/// Markdown -> model -> Markdown gives the same text, and parsing that again
+/// gives the same document.
+void expect_round_trip(const std::string &markdown)
+{
+    const text_doc doc = md::parse(markdown);
+    const std::string out = md_of(doc);
+    EXPECT_EQ(out, markdown);
+    EXPECT_EQ(md::parse(out), doc);
+}
+} // namespace
+
+TEST(MarkdownInput, Blocks)
+{
+    const text_doc doc = md::parse("# Title\n\nSome *text*.\n\n---\n\n```c++\nint x;\n```\n");
+    ASSERT_EQ(doc.body.size(), 4U);
+    EXPECT_EQ(doc.body[0], block_node{heading(1, "Title")});
+    EXPECT_EQ(doc.body[1], block_node{paragraph("Some ", span("text").set_style("Emphasis"), ".")});
+    EXPECT_EQ(doc.body[2], block_node{page_break{}});
+    EXPECT_EQ(doc.body[3], block_node{paragraph("int x;").set_style(builtin::preformatted)});
+
+    const style *em = doc.styles().find("Emphasis");
+    ASSERT_NE(em, nullptr);
+    EXPECT_EQ(em->m_text_props->m_font_style, font_style::italic);
+}
+
+TEST(MarkdownInput, InlineContent)
+{
+    const text_doc doc = md::parse("a **b** `c` [d](https://x.org) <https://y.org> ~~e~~ "
+                                   "&amp; &#65; &unknown;\\\nf\ng<a id=\"m\"></a><span>h</span>");
+    ASSERT_EQ(doc.body.size(), 1U);
+    EXPECT_EQ(doc.body[0],
+        block_node{paragraph("a ",
+            span("b").set_style("Strong_20_Emphasis"),
+            " ",
+            span("c").set_style(builtin::source_text),
+            " ",
+            hyperlink("https://x.org", "d"),
+            " ",
+            hyperlink("https://y.org", "https://y.org"),
+            " e & A &unknown;\nf g",
+            bookmark{"m"},
+            "h")});
+}
+
+TEST(MarkdownInput, ImagesAndBookmarkLinks)
+{
+    const text_doc doc = md::parse("![alt *text*](pic.png)\n\nsee ![](a.png) and [x](#m)\n");
+    ASSERT_EQ(doc.body.size(), 2U);
+    EXPECT_EQ(doc.body[0], block_node{frame(image{"pic.png"})});
+    EXPECT_EQ(doc.body[1],
+        block_node{
+            paragraph("see ", frame(image{"a.png"}), " and ", hyperlink(bookmark{"m"}, "x"))});
+}
+
+TEST(MarkdownInput, ListsGetListStyles)
+{
+    const text_doc doc = md::parse("1. a\n   - b\n     1. c\n2. d\n\n- e\n\n5. f\n");
+    ASSERT_EQ(doc.body.size(), 3U);
+    const auto &outer = std::get<list>(doc.body[0].v);
+    EXPECT_EQ(outer.style, style_name("Numbering_20_123"));
+    const auto &inner = std::get<list>(outer.items()[0].children()[1].v);
+    EXPECT_EQ(inner.style, style_name("List_20_1"));
+    EXPECT_EQ(
+        std::get<list>(inner.items()[0].children()[1].v).style, style_name("Numbering_20_123"));
+    EXPECT_EQ(std::get<list>(doc.body[1].v).style, style_name("List_20_1"));
+    EXPECT_EQ(std::get<list>(doc.body[2].v).style, style_name("Numbering_20_123_start_5"));
+    EXPECT_EQ(outer.items()[1].children(), std::vector<block_node>{block_node{paragraph("d")}});
+
+    // A nested list of the same kind continues its parent's style.
+    const text_doc same = md::parse("- a\n  - b\n");
+    EXPECT_TRUE(
+        std::get<list>(std::get<list>(same.body[0].v).items()[0].children()[1].v).style.is_empty());
+}
+
+TEST(MarkdownInput, Tables)
+{
+    const text_doc doc = md::parse("| A | B |\n| --- | --- |\n| 1 | x<br>y |\n");
+    const auto &t = std::get<table>(doc.body.at(0).v);
+    EXPECT_EQ(t.header_rows, 1U);
+    ASSERT_EQ(t.num_rows(), 2U);
+    EXPECT_EQ(t.cell(0, 0), table_cell("A"));
+    EXPECT_EQ(t.cell(1, 1), table_cell("x\ny"));
+
+    const text_doc headless_doc = md::parse("| | |\n| --- | --- |\n| 1 | 2 |\n");
+    const auto &headless = std::get<table>(headless_doc.body.at(0).v);
+    EXPECT_EQ(headless.header_rows, 0U);
+    EXPECT_EQ(headless.num_rows(), 1U);
+}
+
+TEST(MarkdownInput, QuotesAndHtmlBlocks)
+{
+    const text_doc doc = md::parse("> q1\n>\n> q2\n\n<div>\ndropped\n</div>\n\nafter\n");
+    ASSERT_EQ(doc.body.size(), 3U);
+    EXPECT_EQ(doc.body[0], block_node{paragraph("q1").set_style("Quotations")});
+    EXPECT_EQ(doc.body[1], block_node{paragraph("q2").set_style("Quotations")});
+    EXPECT_EQ(doc.body[2], block_node{paragraph("after")});
+}
+
+TEST(MarkdownInput, RoundTrip)
+{
+    expect_round_trip("# Title\n\nPlain *em* **strong** ***both*** `code` text.\n");
+    expect_round_trip("Line 1\\\nline 2\n");
+    expect_round_trip("\\# not a heading, \\*not em\\*, snake_case, \\[x\\], a \\| b\n");
+    expect_round_trip("&#32;   leading spaces\n");
+    expect_round_trip(
+        "## <a id=\"sec\"></a>Section\n\nSee [the section](#sec) or [site](https://x.org).\n");
+    expect_round_trip("<https://example.com>\n");
+    expect_round_trip("```\nint main()\n{\n    return 0;\n}\n```\n");
+    expect_round_trip("- a\n- b\n  - c\n- d\n");
+    expect_round_trip("1. a\n2. b\n   1. c\n\n- x\n");
+    expect_round_trip("3. three\n4. four\n");
+    expect_round_trip("- a\n\n  more\n\n- b\n");
+    expect_round_trip("> quoted\n>\n> two\n");
+    expect_round_trip("| A | B |\n| --- | --- |\n| 1 | 2 |\n| | x |\n");
+    expect_round_trip("| | |\n| --- | --- |\n| 1 | 2 |\n");
+    expect_round_trip("![](pic.png)\n\nText ![](a.png) inline.\n");
+    expect_round_trip("---\n\nafter the break\n");
+    expect_round_trip("- a\n\n<!-- -->\n\n- b\n");
+}
+
+TEST(MarkdownInput, AppendsToADocument)
+{
+    text_doc doc{heading(1, "Report")};
+    doc.append(md::parse("Some *notes*.\n"));
+    doc.append(md::parse("More *notes*.\n")); // equal style definitions merge
+    EXPECT_EQ(md_of(doc), "# Report\n\nSome *notes*.\n\nMore *notes*.\n");
+}
+
+TEST(MarkdownInput, LoadReadsImagesIntoResources)
+{
+    const fs::path dir = "md/out/load";
+    fs::remove_all(dir);
+    fs::create_directories(dir / "img");
+    std::ofstream(dir / "img/a.png", std::ios::binary) << "png bytes";
+    std::ofstream(dir / "in.md", std::ios::binary) << "# Doc\n\n![](img/a.png)\n";
+    std::ofstream(dir / "missing.md", std::ios::binary) << "![](missing.png)\n";
+
+    const auto f = md::file::load(dir / "in.md");
+    const resource *r = f.doc.resources().find("img/a.png");
+    ASSERT_NE(r, nullptr);
+    EXPECT_EQ(r->data(), "png bytes");
+    EXPECT_EQ(r->media_type(), "image/png");
+    EXPECT_TRUE(md::file::load(dir / "missing.md").doc.resources().empty());
+
+    // The images travel with the document into other formats.
+    odt::file(f.doc).save(dir / "out.odt");
+    const auto back = odt::file::load(dir / "out.odt");
+    EXPECT_EQ(back.doc.resources().size(), 1U);
+    html::file(f.doc).save(dir / "html/out.html");
+    EXPECT_EQ(read(dir / "html/img/a.png"), "png bytes");
+}
+
+TEST(MarkdownInput, ToOdtAndBack)
+{
+    const text_doc doc =
+        md::parse("# T\n\n*em* **strong** `code`\n\n1. a\n2. b\n\n> q\n\n```\nx\n```\n");
+    const fs::path out = "md/out/to_odt.odt";
+    fs::create_directories(out.parent_path());
+    odt::file(doc).save(out);
+    EXPECT_EQ(md_of(odt::file::load(out).doc), md_of(doc));
+}
+
+#endif

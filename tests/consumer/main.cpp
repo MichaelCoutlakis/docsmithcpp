@@ -44,6 +44,13 @@ int main()
         std::cerr << "consumer.odt did not read back as written\n";
         return 1;
     }
+#ifdef DOCSMITHCPP_MARKDOWN
+    if(md::file::load("consumer.md").doc.body != doc.body)
+    {
+        std::cerr << "consumer.md did not read back as written\n";
+        return 1;
+    }
+#endif
     std::cout << "ok\n";
     return 0;
 }

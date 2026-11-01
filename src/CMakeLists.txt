@@ -59,6 +59,14 @@ target_compile_features(docsmithcpp PUBLIC cxx_std_20)
 # them at link time, which CMake propagates and the package config finds.
 target_link_libraries(docsmithcpp PRIVATE pugixml::pugixml miniz::miniz)
 
+# Markdown output needs nothing; input uses md4c. The definition is public, so
+# md/file.h declares parse() and load() for consumers too.
+if(DOCSMITHCPP_MARKDOWN)
+    target_sources(docsmithcpp PRIVATE "md/parser.cpp")
+    target_link_libraries(docsmithcpp PRIVATE md4c::md4c)
+    target_compile_definitions(docsmithcpp PUBLIC DOCSMITHCPP_MARKDOWN)
+endif()
+
 if(DOCSMITHCPP_DEBUG_FILES)
     target_compile_definitions(docsmithcpp PRIVATE DOCSMITHCPP_DEBUG_FILES)
 endif()

@@ -26,7 +26,8 @@
 namespace docsmith::md
 {
 
-/// A Markdown (GitHub Flavored Markdown) file generated from a document.
+/// A Markdown (GitHub Flavored Markdown) file generated from, or read into, a
+/// document.
 ///
 /// Styles have no Markdown form. A span whose style is bold is **strong**, one
 /// that is italic is *emphasis*, and one based on builtin::source_text is a
@@ -37,6 +38,11 @@ namespace docsmith::md
 /// page_break is a thematic break. unknown (pass-through) nodes are left out.
 ///
 ///     md::file(doc).save("summary.md");
+///
+/// Reading needs the library built with DOCSMITHCPP_MARKDOWN:
+///
+///     auto f = md::file::load("in.md");
+///     odt::file(f.doc).save("out.odt");
 class file
 {
 public:
@@ -54,9 +60,30 @@ public:
     /// html::file::save() does.
     void save(const std::filesystem::path &p) const;
 
+#ifdef DOCSMITHCPP_MARKDOWN
+    /// Parses the file (see parse()). Images given by a relative path to a file
+    /// that exists are read into doc.resources() under that path, so the
+    /// document can be saved elsewhere without them.
+    static file load(const std::filesystem::path &p);
+#endif
+
     text_doc doc;
     /// Folder for the images, relative to the file. Empty puts them next to it.
     std::filesystem::path resource_dir;
 };
+
+#ifdef DOCSMITHCPP_MARKDOWN
+/// Parses CommonMark with the GFM tables, strikethrough and autolink
+/// extensions. Emphasis and strong are spans with the styles "Emphasis" and
+/// "Strong_20_Emphasis" (defined in the result's styles()), code spans have
+/// builtin::source_text, code blocks are builtin::preformatted paragraphs, and
+/// block quotes "Quotations" paragraphs. Lists get the list styles
+/// "Numbering_20_123" or "List_20_1". Raw HTML is dropped, apart from <a id>
+/// anchors (bookmarks) and <br> in table cells. Strikethrough keeps its text;
+/// the model has no strikethrough. Image uris are left as written.
+///
+/// The result can be added to another document with text_doc::append().
+text_doc parse(std::string_view markdown);
+#endif
 
 } // namespace docsmith::md
