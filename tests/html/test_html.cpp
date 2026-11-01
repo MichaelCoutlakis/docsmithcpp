@@ -431,3 +431,53 @@ TEST(HTML, TableOfContents)
     EXPECT_TRUE(has(html::file(text_doc{heading(1, "A")}).to_string(), "<h1>A</h1>"))
         << "no ids without a table of contents";
 }
+
+namespace
+{
+/// A report-style table: a styled header, lines and column widths.
+text_doc formatted_table()
+{
+    text_doc doc;
+    const border thick = border::solid(pt(1.5), colour::rgb(0x20, 0x40, 0x60));
+    const border thin = border::solid(pt(0.5));
+    doc.add_style(style("Grid",
+        style_family::table,
+        table_props(percent{80},
+            table_align::centre,
+            outer_border{thick},
+            inside_h{thin},
+            header_props{colour::rgb(0xdd, 0xdd, 0xdd), thick, "Table Heading"})));
+    doc.add_style(style("Table Heading", style_family::paragraph, text_props(font_weight::bold)));
+    table t = table::from_cells({{"Test", "Result"}, {"open", "pass"}, {"save", "fail"}});
+    t.set_header_rows(1).set_style("Grid").set_column_widths({3, 1});
+    t.cell(2, 1).props.set(colour::rgb(0xff, 0xcc, 0xcc));
+    doc.add(t);
+    return doc;
+}
+} // namespace
+
+TEST(HTML, TableFormatting)
+{
+    const auto html = html::file(formatted_table()).to_string();
+    EXPECT_TRUE(has(html,
+        ".Grid { border-collapse: collapse; width: 80%; margin-left: auto; margin-right: auto; }"));
+    EXPECT_TRUE(has(html, "<table class=\"Grid\">"));
+    EXPECT_TRUE(
+        has(html, "<colgroup><col style=\"width: 75%;\"><col style=\"width: 25%;\"></colgroup>"));
+    // The header: its background and the line below it, and its text's style.
+    EXPECT_TRUE(has(html,
+        "<th class=\"Table_Heading\" style=\"border-top: 1.5pt solid #204060; "
+        "border-bottom: 1.5pt solid #204060; border-left: 1.5pt solid #204060; "
+        "background-color: #dddddd;\">Test</th>"));
+    // A body cell between rows, and one with direct formatting.
+    EXPECT_TRUE(has(html,
+        "<td style=\"border-top: 1.5pt solid #204060; border-bottom: 0.5pt solid #000000; "
+        "border-left: 1.5pt solid #204060;\">open</td>"));
+    EXPECT_TRUE(has(html, "background-color: #ffcccc;\">fail</td>"));
+
+    // Direct borders on a table with no style still collapse.
+    table plain(1, 1);
+    plain.set_borders(border::solid());
+    EXPECT_TRUE(has(
+        html::file(text_doc{plain}).to_string(), "<table style=\"border-collapse: collapse;\">"));
+}

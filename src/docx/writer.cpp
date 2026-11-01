@@ -207,7 +207,7 @@ std::map<std::string, std::set<style_family>> used_families(const text_doc &doc)
 {
     std::map<std::string, std::set<style_family>> out;
     walk(doc,
-        [&out](const auto &n)
+        [&out, &doc](const auto &n)
         {
             using T = std::decay_t<decltype(n)>;
             if constexpr(std::is_same_v<T, paragraph> || std::is_same_v<T, heading>)
@@ -219,6 +219,14 @@ std::map<std::string, std::set<style_family>> used_families(const text_doc &doc)
             {
                 if(!n.style.is_empty())
                     out[n.style.get_name()].insert(style_family::text);
+            }
+            else if constexpr(std::is_same_v<T, table>)
+            {
+                if(!n.style.is_empty())
+                    out[n.style.get_name()].insert(style_family::table);
+                if(const auto h = effective_table_props(n, doc.styles()).m_header;
+                    h && !h->m_paragraph_style.is_empty())
+                    out[h->m_paragraph_style.get_name()].insert(style_family::paragraph);
             }
         });
     return out;
@@ -821,7 +829,7 @@ private:
     void emit(pugi::xml_node parent, const paragraph &p)
     {
         auto n = parent.append_child("w:p");
-        auto ppr = paragraph_props(n, p.style);
+        auto ppr = paragraph_props(n, p.style.is_empty() ? m_cell_paragraph_style : p.style);
         drop_if_empty(n, ppr);
         write_inlines(n, p.children(), {});
     }
@@ -882,27 +890,52 @@ private:
         const std::size_t rows = t.num_rows(), cols = t.num_cols();
         if(cols == 0)
             return;
+        const table_props tp = effective_table_props(t, m_doc.styles());
         auto tbl = parent.append_child("w:tbl");
         auto tbl_pr = tbl.append_child("w:tblPr");
+        if(!t.style.is_empty())
+        {
+            set_val(tbl_pr.append_child("w:tblStyle"), t.style.get_name());
+            m_used_ids.emplace(t.style.get_name(), "table");
+        }
         auto w = tbl_pr.append_child("w:tblW");
-        w.append_attribute("w:w") = 5000;
-        w.append_attribute("w:type") = "pct";
+        int table_width = text_width_twips;
+        if(const auto *len = tp.m_width ? std::get_if<length>(&*tp.m_width) : nullptr)
+        {
+            table_width = twips(*len);
+            w.append_attribute("w:w") = table_width;
+            w.append_attribute("w:type") = "dxa";
+        }
+        else
+        {
+            const double pc = tp.m_width ? std::get<percent>(*tp.m_width).m_value : 100;
+            table_width = static_cast<int>(text_width_twips * pc / 100 + 0.5);
+            w.append_attribute("w:w") = static_cast<int>(pc * 50 + 0.5);
+            w.append_attribute("w:type") = "pct";
+        }
+        if(tp.m_align)
+            set_val(tbl_pr.append_child("w:jc"),
+                *tp.m_align == table_align::centre    ? "center"
+                    : *tp.m_align == table_align::end ? "right"
+                                                      : "left");
         auto look = tbl_pr.append_child("w:tblLook");
         look.append_attribute("w:val") = "04A0";
-        const int col_width = text_width_twips / static_cast<int>(cols);
+        std::vector<int> col_widths;
+        for(double share : column_shares(t))
+            col_widths.push_back(static_cast<int>(table_width * share + 0.5));
         auto grid = tbl.append_child("w:tblGrid");
-        for(std::size_t c = 0; c != cols; ++c)
-            grid.append_child("w:gridCol").append_attribute("w:w") = col_width;
+        for(int cw : col_widths)
+            grid.append_child("w:gridCol").append_attribute("w:w") = cw;
 
         // The cell each slot belongs to.
         std::vector<std::vector<std::pair<std::size_t, std::size_t>>> origin(
             rows, std::vector<std::pair<std::size_t, std::size_t>>(cols, {SIZE_MAX, SIZE_MAX}));
         for(std::size_t r = 0; r != rows; ++r)
-            for(std::size_t c = 0; c != cols && c < t.rows[r].size(); ++c)
+            for(std::size_t c = 0; c != cols; ++c)
             {
                 if(origin[r][c].first != SIZE_MAX)
                     continue;
-                const auto &cell = t.rows[r][c];
+                const auto &cell = t.cell(r, c);
                 for(std::size_t dr = 0;
                     dr < static_cast<std::size_t>(std::max(cell.rowspan, 1)) && r + dr < rows;
                     ++dr)
@@ -915,11 +948,14 @@ private:
 
         auto saved = m_list;
         m_list.reset();
+        const style_name saved_style = m_cell_paragraph_style;
+        const style_name header_style = tp.m_header ? tp.m_header->m_paragraph_style : style_name{};
         for(std::size_t r = 0; r != rows; ++r)
         {
             auto tr = tbl.append_child("w:tr");
-            if(r < t.header_rows)
+            if(r < t.header_rows())
                 tr.append_child("w:trPr").append_child("w:tblHeader");
+            m_cell_paragraph_style = r < t.header_rows() ? header_style : style_name{};
             for(std::size_t c = 0; c < cols;)
             {
                 const auto o = origin[r][c].first == SIZE_MAX ? std::pair{r, c} : origin[r][c];
@@ -931,11 +967,14 @@ private:
                     c += span;
                     continue;
                 }
-                const auto &cell = t.rows[o.first][o.second];
+                const auto &cell = t.cell(o.first, o.second);
                 auto tc = tr.append_child("w:tc");
                 auto tc_pr = tc.append_child("w:tcPr");
                 auto tc_w = tc_pr.append_child("w:tcW");
-                tc_w.append_attribute("w:w") = col_width * static_cast<int>(span);
+                int width = 0;
+                for(std::size_t i = c; i != c + span; ++i)
+                    width += col_widths[i];
+                tc_w.append_attribute("w:w") = width;
                 tc_w.append_attribute("w:type") = "dxa";
                 if(span > 1)
                     set_val(tc_pr.append_child("w:gridSpan"), std::to_string(span));
@@ -945,6 +984,16 @@ private:
                     if(o.first == r)
                         set_val(vm, "restart");
                 }
+                // The table style's lines are in the table style; the rest is
+                // the cell's own. A merged cell's rows each draw its sides.
+                cell_props props =
+                    effective_cell_props(t, m_doc.styles(), o.first, o.second, false);
+                if(o.first != r)
+                    props.m_borders.m_top.reset();
+                if(r + 1 !=
+                    std::min(rows, o.first + static_cast<std::size_t>(std::max(cell.rowspan, 1))))
+                    props.m_borders.m_bottom.reset();
+                write_tcpr(tc_pr, props);
                 if(o.first == r)
                     write_blocks(tc, cell.children());
                 // A cell ends with a paragraph.
@@ -953,6 +1002,7 @@ private:
                 c += span;
             }
         }
+        m_cell_paragraph_style = saved_style;
         m_list = saved;
     }
 
@@ -1295,6 +1345,8 @@ private:
     state &m_st;
     opc::package &m_pkg;
     std::map<std::string, std::set<style_family>> m_used;
+    /// For paragraphs with no style in the cells being written (header rows).
+    style_name m_cell_paragraph_style;
     std::set<std::string> m_dual; //!< Styles written as a paragraph and a character style
     std::set<std::pair<std::string, std::string>> m_used_ids; //!< styleId, w:type
 

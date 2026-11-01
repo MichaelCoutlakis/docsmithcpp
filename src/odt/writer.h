@@ -21,6 +21,7 @@
 
 #include <set>
 #include <string>
+#include <tuple>
 #include <vector>
 
 #include <pugixml.hpp>
@@ -83,7 +84,10 @@ private:
     void emit(pugi::xml_node parent, const list &l);
     void emit(pugi::xml_node parent, const list_item &it);
     void emit(pugi::xml_node parent, const table &t);
-    void emit(pugi::xml_node parent, const table_cell &c);
+    void emit(pugi::xml_node parent, const table_cell &c, const std::string &style);
+    std::string cell_style(const table &t, size_t r, size_t c);
+    /// prefix plus a number, not yet a style name in the document or file.
+    std::string automatic_name(const std::string &prefix, style_family f);
 
     odf::package &m_pkg;
     const text_doc *m_doc{nullptr}; //!< The document being written
@@ -98,6 +102,11 @@ private:
     std::set<std::string> m_page_break_styles; //!< Made in this write
     std::string m_block_style;                 //!< Storage for block_style()
     int m_tocs{0};                             //!< Tables of contents written
+    int m_automatic_names{0};                  //!< Last number automatic_name() used
+    /// The cell styles made in this write: parent, properties, name.
+    std::vector<std::tuple<style_name, cell_props, std::string>> m_cell_styles;
+    /// For paragraphs with no style in the cells being written (header rows).
+    style_name m_cell_paragraph_style;
 };
 
 } // namespace docsmith::odt

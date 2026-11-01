@@ -247,6 +247,60 @@ TEST(ODT, GenerateBookmark)
     odt::file(d).save("odt/out/bookmark.odt");
 }
 
+TEST(ODT, ReadTableFormatting)
+{
+    // basic_table.odt: a 77% wide table, centred, with LibreOffice's borders
+    // on its cells.
+    const text_doc doc = odt::file::load("odt/basic_table.odt").doc;
+    const table &t = *collect<table>(doc).front();
+    EXPECT_EQ(t.style, style_name("Table1"));
+    const table_props tp = effective_table_props(t, doc.styles());
+    EXPECT_EQ(tp.m_width, (std::variant<length, percent>(percent{77})));
+    EXPECT_EQ(tp.m_align, table_align::centre);
+
+    const border line = border::solid(pt(0.5));
+    const cell_props a1 = effective_cell_props(t, doc.styles(), 0, 0);
+    EXPECT_EQ(a1.m_borders, (cell_borders{line, line, line, border::none()}));
+    EXPECT_NEAR(a1.m_padding->m_points, 0.097 * 72 / 2.54, 1e-9);
+    EXPECT_EQ(effective_cell_props(t, doc.styles(), 0, 1).m_borders,
+        (cell_borders{line, line, line, line}));
+}
+
+TEST(ODT, TableFormattingRoundTrip)
+{
+    text_doc doc;
+    const border thick = border::solid(pt(1.5), colour::rgb(0x20, 0x40, 0x60));
+    const border thin = border::solid(pt(0.5));
+    doc.add_style(style("Grid",
+        style_family::table,
+        table_props(percent{80},
+            table_align::centre,
+            outer_border{thick},
+            inside_h{thin},
+            header_props{colour::rgb(0xdd, 0xdd, 0xdd), thick, {}})));
+    table t = table::from_cells({{"Test", "Result"}, {"open", "pass"}, {"save", "fail"}});
+    t.set_header_rows(1).set_style("Grid").set_column_widths({3, 1});
+    t.cell(2, 1).props.set(colour::rgb(0xff, 0xcc, 0xcc));
+    doc.add(t);
+    odt::file(doc).save("odt/out/table_formatting.odt");
+
+    // The table style's lines come back on the cells. A line between two rows
+    // is the upper cell's bottom only, as LibreOffice draws both.
+    const text_doc again = odt::file::load("odt/out/table_formatting.odt").doc;
+    const table &back = *collect<table>(again).front();
+    EXPECT_NEAR(column_shares(back).at(0), 0.75, 1e-4);
+    for(size_t r = 0; r != t.num_rows(); ++r)
+        for(size_t c = 0; c != t.num_cols(); ++c)
+        {
+            auto expected = effective_cell_props(t, doc.styles(), r, c);
+            if(r != 0)
+                expected.m_borders.m_top = border::none();
+            EXPECT_EQ(effective_cell_props(back, again.styles(), r, c), expected) << r << ", " << c;
+        }
+    EXPECT_EQ(effective_table_props(back, again.styles()).m_width,
+        (std::variant<length, percent>(percent{80})));
+}
+
 TEST(ODT, ParseTable)
 {
     text_doc actual = load_strip_styles("odt/basic_table.odt");
@@ -258,6 +312,8 @@ TEST(ODT, ParseTable)
     t.row(0).assign(paragraph("Col 0"), paragraph("Col 1"));
     t.cell(1, 0).add(paragraph()); // LO empty table cell defaults to empty paragraph
     t.cell(1, 1).add(paragraph("Some text value"));
+    t.name = "Table1";
+    t.set_column_widths({3759, 3759}); // LibreOffice's relative widths
 
     print_compare(text_doc{t}, text_doc{actual_table});
     EXPECT_EQ(t, actual_table);
@@ -453,9 +509,9 @@ TEST(ODT, ParseHeaderRows)
     const text_doc doc = odt::file::load("odt/table-intermediate.odt").doc;
     const auto tables = collect<table>(doc);
     ASSERT_EQ(tables.size(), 2U);
-    EXPECT_EQ(tables[0]->header_rows, 1U);
+    EXPECT_EQ(tables[0]->header_rows(), 1U);
     EXPECT_EQ(tables[0]->num_rows(), 5U) << "header rows are rows too";
-    EXPECT_EQ(tables[1]->header_rows, 0U);
+    EXPECT_EQ(tables[1]->header_rows(), 0U);
 }
 
 TEST(ODT, HeaderRowsRoundTrip)

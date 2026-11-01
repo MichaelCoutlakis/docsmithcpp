@@ -19,30 +19,34 @@ are dropped. So load, edit, save of a real-world file can silently lose content.
 In ODT (`parse_table`, `parse_list` in `src/odt/file.cpp`) that includes things
 every LibreOffice table has:
 
-- the table's own `table:style-name` and `table:name`;
-- `table:table-column` (column widths and styles), which the writer replaces
-  with one unstyled column repeated;
-- row styles;
+- ~~the table's own `table:style-name` and `table:name`~~ (done);
+- ~~`table:table-column` (column widths and styles)~~ (done);
+- ~~row styles~~ (done);
 - a list's `text:list-header`, and an item's `text:start-value`.
 
-The table's style and columns need a place in the model first, which is the
-same change as _Table and cell properties_ below; do the two together. What the
-model still doesn't hold can then be kept as `unknown` or as raw attributes.
+The table's name, style, row styles and column widths are now kept, as is the
+table's look through its cells' styles. What's left: a list's
+`text:list-header` and an item's `text:start-value`, and unknown attributes and
+children, which could be kept as `unknown` or as raw attributes.
 
 ## 2. Reports that look like reports (blocks 0.1.0)
 
 `write_example_test_report()` in `examples/create_document.cpp` is the
 yardstick.
 
-### Table and cell properties
+### Table and cell properties: what's left
 
-The style model covers only text, paragraph and graphics properties. It has no
-borders, column widths, cell shading or vertical alignment, so a results table
-in ODT or DOCX has no borders at all. Add table, column and cell style
-properties, and a style and columns on `table` (see _Content lost inside tables
-and lists_). The report template (`examples/make_report_template.cpp`) should
-then get a table style. DOCX reads and writes none of this yet (see _DOCX
-gaps_); a report needs at least the writer.
+Tables have styles, borders, shading, padding, column widths and header rows in
+every format (DESIGN.md, _Tables_). Still to do:
+
+- **Table styles in an ODT template.** ODF can't hold a table style's lines in
+  the style, so they go on the cells and a template saved as `.odt` loses them
+  from the style. ODF's `table:table-template` (LibreOffice's table styles)
+  would keep them; check what LibreOffice reads and writes.
+- **DOCX header rows** are written as each header cell's own formatting, not as
+  the table style's `firstRow` conditional formatting, so Word's table style
+  pane doesn't show them. Banded rows and first column aren't modelled.
+- Row properties (height, keep together) and absolute column widths.
 
 ### Paragraph spacing and alignment
 
@@ -85,9 +89,10 @@ tag it.
 `docx::file` reads and writes every node (see DESIGN.md, _DOCX_). What it
 doesn't do yet, roughly by how much a report or a loaded file would miss it:
 
-- **Table properties**: table styles, borders, widths and shading are neither
-  read nor written (see _Table and cell properties_), so a loaded Word table
-  loses its borders when saved. The table node has no style to keep them in.
+- **Table properties**: a table style's `tblBorders` and cell margins, the
+  table's style, width and alignment, column widths and each cell's borders,
+  shading, margins and vertical alignment are read and written. Conditional
+  formatting (`tblStylePr`: first row, banding) and row properties aren't.
 - **Sections**: section breaks inside the body stay in the direct formatting of
   the paragraph that ends the section, so they survive load and save but the
   model can't see them. First-page and even-page headers are kept, not read.

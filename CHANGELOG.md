@@ -11,6 +11,15 @@ The document model was rewritten from a polymorphic class hierarchy into value t
 held in `std::variant`. This is a breaking change to almost every public API.
 
 ### Changed
+- **`table`** keeps its cells private, row by row, and is always rectangular. Read
+  them with `cell()`, `row()`, `col()` and `cells()`; add rows with
+  `add_row(cells, row_style)`. `header_rows` is now `header_rows()` /
+  `set_header_rows()`. `add_row()` with no cells, `add_cell()` and
+  `is_rectangular()` are gone. A table also has a style, a name, a style per row,
+  and a width and style per column.
+- **ODT tables** keep their name, style, row styles and column widths through
+  load and save, and the columns and repeated cells and rows LibreOffice writes
+  are read.
 - **Document model**: nodes are plain value types grouped into two variants,
   `inline_node` (`text`, `span`, `hyperlink`, `frame`, `bookmark`, `unknown`) and
   `block_node` (`paragraph`, `heading`, `list`, `table`, `frame`, `unknown`). What may
@@ -63,6 +72,18 @@ held in `std::variant`. This is a breaking change to almost every public API.
   directory. Generated test files go to `tests/odt/out/`.
 
 ### Added
+- **Table formatting** in every format (see DESIGN.md, *Tables*). A table style
+  (`table_props`) gives the table's width and alignment, its outer and inside
+  lines, cell padding and its header rows' background, rule and paragraph style.
+  A cell style or a cell's direct formatting (`table_cell::props`, `cell_props`)
+  gives borders, background, vertical alignment and padding, the later winning.
+  `set_borders`, `set_outer_border`, `set_horiz_borders`, `set_vert_borders`,
+  `set_row_borders` and `set_column_borders` set lines after the content is in;
+  `set_column_widths` sets relative column widths. `effective_cell_props()` says
+  how a cell will look. ODT, DOCX and HTML write all of it; ODT and DOCX read it
+  back.
+- `length` (`pt()`, `mm()`, `cm()`, `inch()`) and `percent`, replacing the unused
+  `dim`.
 - **DOCX output**: `docx::file(doc).save()` writes a `.docx` with no new
   dependency, on the same private zip layer as ODT. Paragraphs and headings
   (`Heading1`-`9` with `w:outlineLvl`), spans as runs with `w:rStyle`, tabs and
@@ -293,6 +314,9 @@ held in `std::variant`. This is a breaking change to almost every public API.
 - HTML leaves out `unknown` nodes, which hold another format's markup. List number
   prefixes and suffixes aren't reflected in the CSS.
 - Font sizes in units other than points (e.g. `130%`) aren't read into the model.
+- ODT can't hold a table style's lines or header in the style, so the writer puts
+  them on the cells. Reading a file back finds them there, not in the table style,
+  so a template saved as `.odt` loses them; define the table style in code.
 - Editing a loaded style rewrites its definition from the model, so the properties
   the model doesn't hold (margins, display name, ...) are dropped from that style.
 - `unknown` round-trips only block- and inline-level content. Unrecognized children

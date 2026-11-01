@@ -391,3 +391,58 @@ TEST(DOCX_Write, UnknownFromAnotherFormatIsDropped)
     EXPECT_STREQ(body.first_child().child("w:r").child("w:t").text().get(), "kept");
     EXPECT_STREQ(body.first_child().next_sibling().name(), "w:sectPr");
 }
+
+TEST(DOCX_Write, TableFormatting)
+{
+    text_doc doc;
+    const border thick = border::solid(pt(1.5), colour::rgb(0x20, 0x40, 0x60));
+    const border thin = border::solid(pt(0.5));
+    doc.add_style(style("Grid",
+        style_family::table,
+        table_props(percent{80},
+            table_align::centre,
+            outer_border{thick},
+            inside_h{thin},
+            cell_padding{pt(3)},
+            header_props{colour::rgb(0xdd, 0xdd, 0xdd), thick, {}})));
+    table t = table::from_cells({{"Test", "Result"}, {"open", "pass"}});
+    t.set_header_rows(1).set_style("Grid").set_column_widths({3, 1});
+    t.cell(1, 1).props.set(colour::rgb(0xff, 0xcc, 0xcc));
+    doc.add(t);
+    saved s(doc, "table_formatting");
+
+    // The lines and padding are in the table style, as in Word's Table Grid.
+    const auto styles = s.xml("word/styles.xml");
+    auto grid = style_def(styles, "Grid");
+    EXPECT_STREQ(grid.attribute("w:type").as_string(), "table");
+    auto borders = grid.child("w:tblPr").child("w:tblBorders");
+    EXPECT_STREQ(borders.child("w:top").attribute("w:val").as_string(), "single");
+    EXPECT_EQ(borders.child("w:top").attribute("w:sz").as_int(), 12);
+    EXPECT_STREQ(borders.child("w:top").attribute("w:color").as_string(), "204060");
+    EXPECT_EQ(borders.child("w:insideH").attribute("w:sz").as_int(), 4);
+    EXPECT_FALSE(borders.child("w:insideV"));
+    EXPECT_EQ(
+        grid.child("w:tblPr").child("w:tblCellMar").child("w:left").attribute("w:w").as_int(), 60);
+
+    auto tbl = s.body().child("w:tbl");
+    auto tbl_pr = tbl.child("w:tblPr");
+    EXPECT_EQ(docx::val(tbl_pr, "w:tblStyle"), "Grid");
+    EXPECT_EQ(tbl_pr.child("w:tblW").attribute("w:w").as_int(), 4000);
+    EXPECT_STREQ(tbl_pr.child("w:tblW").attribute("w:type").as_string(), "pct");
+    EXPECT_EQ(docx::val(tbl_pr, "w:jc"), "center");
+    auto col = tbl.child("w:tblGrid").child("w:gridCol");
+    EXPECT_NEAR(col.attribute("w:w").as_int(), 3 * col.next_sibling().attribute("w:w").as_int(), 3);
+
+    // The header and direct formatting are on the cells.
+    auto header = tbl.child("w:tr").child("w:tc").child("w:tcPr");
+    EXPECT_STREQ(header.child("w:shd").attribute("w:fill").as_string(), "dddddd");
+    EXPECT_EQ(header.child("w:tcBorders").child("w:bottom").attribute("w:sz").as_int(), 12);
+    EXPECT_FALSE(header.child("w:tcBorders").child("w:top")) << "the table style has it";
+    auto body = tbl.child("w:tr").next_sibling("w:tr").child("w:tc");
+    EXPECT_EQ(
+        body.child("w:tcPr").child("w:tcBorders").child("w:top").attribute("w:sz").as_int(), 12)
+        << "the line below the header, on both sides of it";
+    EXPECT_STREQ(
+        body.next_sibling("w:tc").child("w:tcPr").child("w:shd").attribute("w:fill").as_string(),
+        "ffcccc");
+}

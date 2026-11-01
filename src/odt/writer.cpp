@@ -159,7 +159,7 @@ std::map<std::string, std::set<style_family>> used_families(const text_doc &doc)
 {
     std::map<std::string, std::set<style_family>> out;
     walk(doc,
-        [&out](const auto &n)
+        [&out, &doc](const auto &n)
         {
             using T = std::decay_t<decltype(n)>;
             auto use = [&](const style_name &sn, style_family f)
@@ -175,6 +175,16 @@ std::map<std::string, std::set<style_family>> used_families(const text_doc &doc)
                 use(n.style, style_family::graphic);
             else if constexpr(std::is_same_v<T, table_cell>)
                 use(n.style, style_family::table_cell);
+            else if constexpr(std::is_same_v<T, table>)
+            {
+                use(n.style, style_family::table);
+                for(size_t r = 0; r != n.num_rows(); ++r)
+                    use(n.row_style(r), style_family::table_row);
+                for(size_t c = 0; c != n.num_cols(); ++c)
+                    use(n.column_style(c), style_family::table_column);
+                if(const auto h = effective_table_props(n, doc.styles()).m_header)
+                    use(h->m_paragraph_style, style_family::paragraph);
+            }
         });
     return out;
 }
@@ -585,7 +595,7 @@ void writer::write_inline(pugi::xml_node parent, const inline_node &i)
 void writer::emit(pugi::xml_node parent, const paragraph &p)
 {
     auto n = parent.append_child("text:p");
-    if(const char *style = block_style(p.style))
+    if(const char *style = block_style(p.style.is_empty() ? m_cell_paragraph_style : p.style))
         n.append_attribute("text:style-name").set_value(style);
     for(const auto &c : p.children())
         write_inline(n, c);
@@ -842,33 +852,136 @@ void writer::emit(pugi::xml_node parent, const list_item &it)
     write_blocks(n, it.children());
 }
 
+std::string writer::automatic_name(const std::string &prefix, style_family f)
+{
+    for(;;)
+        if(std::string name = prefix + std::to_string(++m_automatic_names);
+            !find_style(m_automatic_styles, name, f) && !m_doc->styles().find(name))
+            return name;
+}
+
+// The cell's style, unless its table's style or its direct formatting adds to
+// it: then an automatic style with all of them combined, the cell's own style
+// as its parent. Cells that look the same share one.
+std::string writer::cell_style(const table &t, size_t r, size_t c)
+{
+    const table_cell &cell = t.cell(r, c);
+    cell_props props = effective_cell_props(t, m_doc->styles(), r, c);
+    // LibreOffice draws both cells' edges where two meet, so a line between
+    // them is drawn once, as the cell above's bottom (or the cell before's
+    // end), as in its own files.
+    auto drawn = [&](size_t nr, size_t nc, std::optional<border> cell_borders::*side)
+    {
+        const auto [orow, ocol] = t.origin(nr, nc);
+        const auto b = effective_cell_props(t, m_doc->styles(), orow, ocol).m_borders.*side;
+        return b && b->m_line != border_line::none;
+    };
+    if(r != 0 && props.m_borders.m_top && drawn(r - 1, c, &cell_borders::m_bottom))
+        props.m_borders.m_top = border::none();
+    if(c != 0 && props.m_borders.m_start && drawn(r, c - 1, &cell_borders::m_end))
+        props.m_borders.m_start = border::none();
+    if(props == effective_cell_style(cell.style, m_doc->styles()))
+        return cell.style.get_name();
+    for(const auto &[parent, p, name] : m_cell_styles)
+        if(parent == cell.style && p == props)
+            return name;
+
+    style s(style_name(automatic_name("Cell", style_family::table_cell)), style_family::table_cell);
+    s.m_parent_style = cell.style;
+    s.set(props);
+    write_xml(m_automatic_styles, s);
+    m_cell_styles.emplace_back(cell.style, props, s.m_name.get_name());
+    return s.m_name.get_name();
+}
+
 void writer::emit(pugi::xml_node parent, const table &t)
 {
     flush_page_break(parent); // a break in a cell would have no effect
     auto n = parent.append_child("table:table");
-    auto table_column = n.append_child("table:table-column");
-    table_column.append_attribute("table:number-columns-repeated")
-        .set_value(static_cast<unsigned>(t.num_cols()));
+    if(!t.name.empty()) // LibreOffice names the others when it loads them
+        n.append_attribute("table:name") = t.name.c_str();
+    if(!t.style.is_empty())
+        n.append_attribute("table:style-name") = t.style.get_name().c_str();
 
-    auto header = t.header_rows ? n.append_child("table:table-header-rows") : pugi::xml_node{};
+    // Columns with a width get an automatic style for it. Without widths,
+    // neighbouring columns with the same style are written once, repeated.
+    const table_props tp = effective_table_props(t, m_doc->styles());
+    bool widths = false;
+    for(size_t c = 0; c != t.num_cols(); ++c)
+        widths = widths || t.column_width(c);
+    const auto shares = column_shares(t);
+    // Relative widths as given when they are whole numbers of LibreOffice's
+    // size (as read from a file), so they read back the same; else the shares,
+    // scaled. LibreOffice ignores small ones such as 3* and 1*.
+    bool whole = true;
+    double total = 0;
+    for(size_t c = 0; c != t.num_cols(); ++c)
+    {
+        const auto w = t.column_width(c);
+        whole = whole && w && *w >= 1 && *w == static_cast<double>(static_cast<long>(*w));
+        total += w.value_or(0);
+    }
+    whole = whole && total >= 1000;
+    double width = 17 * 72 / 2.54; // the default page's text width, in points
+    if(tp.m_width)
+        width = std::holds_alternative<length>(*tp.m_width)
+            ? std::get<length>(*tp.m_width).m_points
+            : width * std::get<percent>(*tp.m_width).m_value / 100;
+    for(size_t c = 0; c != t.num_cols();)
+    {
+        size_t same = 1;
+        while(!widths && c + same != t.num_cols() && t.column_style(c + same) == t.column_style(c))
+            ++same;
+        auto col = n.append_child("table:table-column");
+        if(widths)
+        {
+            const std::string name = automatic_name("Column", style_family::table_column);
+            auto s = m_automatic_styles.append_child("style:style");
+            s.append_attribute("style:name") = name.c_str();
+            s.append_attribute("style:family") = "table-column";
+            auto props = s.append_child("style:table-column-properties");
+            props.append_attribute("style:column-width") =
+                (detail::to_string(width * shares[c]) + "pt").c_str();
+            const long rel = whole ? static_cast<long>(*t.column_width(c))
+                                   : static_cast<long>(shares[c] * 65535 + 0.5);
+            props.append_attribute("style:rel-column-width") = (std::to_string(rel) + "*").c_str();
+            col.append_attribute("table:style-name") = name.c_str();
+        }
+        else if(!t.column_style(c).is_empty())
+            col.append_attribute("table:style-name") = t.column_style(c).get_name().c_str();
+        if(same != 1)
+            col.append_attribute("table:number-columns-repeated")
+                .set_value(static_cast<unsigned>(same));
+        c += same;
+    }
+
+    // Unstyled paragraphs in header cells get the table style's header
+    // paragraph style.
+    const style_name saved = m_cell_paragraph_style;
+    const style_name header_style = tp.m_header ? tp.m_header->m_paragraph_style : style_name{};
+    auto header = t.header_rows() ? n.append_child("table:table-header-rows") : pugi::xml_node{};
     for(size_t r = 0; r != t.num_rows(); ++r)
     {
-        auto xml_row = (r < t.header_rows ? header : n).append_child("table:table-row");
+        auto xml_row = (r < t.header_rows() ? header : n).append_child("table:table-row");
+        if(!t.row_style(r).is_empty())
+            xml_row.append_attribute("table:style-name") = t.row_style(r).get_name().c_str();
+        m_cell_paragraph_style = r < t.header_rows() ? header_style : style_name{};
         for(size_t c = 0; c != t.num_cols(); ++c)
         {
             if(t.is_cell_covered(r, c))
                 xml_row.append_child("table:covered-table-cell");
             else
-                emit(xml_row, t.cell(r, c));
+                emit(xml_row, t.cell(r, c), cell_style(t, r, c));
         }
     }
+    m_cell_paragraph_style = saved;
 }
 
-void writer::emit(pugi::xml_node parent, const table_cell &c)
+void writer::emit(pugi::xml_node parent, const table_cell &c, const std::string &style)
 {
     auto n = parent.append_child("table:table-cell");
-    if(!c.style.is_empty())
-        n.append_attribute("table:style-name").set_value(c.style.get_name().c_str());
+    if(!style.empty())
+        n.append_attribute("table:style-name").set_value(style.c_str());
     n.append_attribute("office:value-type").set_value("string");
 
     if(c.rowspan != 1)

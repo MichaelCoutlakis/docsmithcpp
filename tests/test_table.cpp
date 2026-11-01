@@ -1,0 +1,168 @@
+/******************************************************************************
+ * Copyright 2025 Michael Coutlakis
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *****************************************************************************/
+
+#include <stdexcept>
+
+#include <gtest/gtest.h>
+
+#include "docsmithcpp/text_doc.h"
+
+using namespace docsmith;
+
+namespace
+{
+const border thin = border::solid(pt(0.5));
+const border thick = border::solid(pt(1.5), colour::rgb(0x20, 0x40, 0x60));
+} // namespace
+
+TEST(Table, AddRowChecksWidth)
+{
+    table t;
+    t.add_row({paragraph("a"), paragraph("b")});
+    t.add_row({table_cell(paragraph("wide")).set_span(1, 2), {}}, "Row style");
+    EXPECT_THROW(t.add_row({paragraph("c")}), std::invalid_argument);
+    EXPECT_EQ(t.num_rows(), 2U);
+    EXPECT_EQ(t.num_cols(), 2U);
+    EXPECT_EQ(t.row_style(1), style_name("Row style"));
+    EXPECT_EQ(t.cells().size(), 4U);
+    EXPECT_THROW(table::from_cells({{"a", "b"}, {"c"}}), std::invalid_argument);
+}
+
+TEST(Table, RemoveRowKeepsHeaderCount)
+{
+    table t = table::from_cells({{"h1"}, {"h2"}, {"body"}});
+    t.set_header_rows(2);
+    t.remove_row(0);
+    EXPECT_EQ(t.header_rows(), 1U);
+    EXPECT_EQ(t.cell(0, 0), table_cell("h2"));
+    t.remove_row(1);
+    EXPECT_EQ(t.header_rows(), 1U);
+    EXPECT_EQ(t.num_rows(), 1U);
+}
+
+TEST(Table, BuildThenFormat)
+{
+    table t = table::from_cells({{"Test", "Result"}, {"open", "pass"}});
+    t.add_row({"save", "fail"});
+    t.set_header_rows(1).set_style("Results").set_column_widths({3, 1});
+    t.set_row_borders({0}, edge::bottom, thick);
+
+    // The line below the header is on both sides of it.
+    for(size_t c = 0; c != 2; ++c)
+    {
+        EXPECT_EQ(t.cell(0, c).props.m_borders.m_bottom, thick);
+        EXPECT_EQ(t.cell(1, c).props.m_borders.m_top, thick);
+        EXPECT_FALSE(t.cell(2, c).props.m_borders.m_top);
+    }
+    EXPECT_EQ(column_shares(t), (std::vector<double>{0.75, 0.25}));
+}
+
+TEST(Table, ColumnSharesFillGaps)
+{
+    table t(1, 3);
+    EXPECT_EQ(column_shares(t), (std::vector<double>{1.0 / 3, 1.0 / 3, 1.0 / 3}));
+    t.set_column_width(0, 1).set_column_width(1, 3);
+    EXPECT_EQ(column_shares(t), (std::vector<double>{1.0 / 6, 3.0 / 6, 2.0 / 6}));
+}
+
+TEST(Table, BordersSkipSpannedCells)
+{
+    // A B C
+    // A A C   (A spans two rows and two columns)
+    // D E F
+    table t(3, 3);
+    t.cell(0, 0).set_span(2, 2);
+    t.set_horiz_borders(lines::inner, thin);
+
+    // Line 1 runs through A, so only C gets it.
+    EXPECT_FALSE(t.cell(0, 0).props.m_borders.m_top);
+    EXPECT_EQ(t.cell(0, 0).props.m_borders.m_bottom, thin); // line 2
+    EXPECT_EQ(t.cell(0, 2).props.m_borders.m_bottom, thin);
+    EXPECT_EQ(t.cell(1, 2).props.m_borders.m_top, thin);
+    EXPECT_TRUE(t.cell(1, 0).props.empty()) << "placeholders are left alone";
+    EXPECT_EQ(t.cell(2, 1).props.m_borders.m_top, thin);
+    EXPECT_FALSE(t.cell(2, 1).props.m_borders.m_bottom) << "the outer line isn't inner";
+
+    t.set_vert_borders(lines::outer, thick);
+    EXPECT_EQ(t.cell(0, 0).props.m_borders.m_start, thick);
+    EXPECT_FALSE(t.cell(0, 0).props.m_borders.m_end);
+    EXPECT_EQ(t.cell(1, 2).props.m_borders.m_end, thick);
+    EXPECT_EQ(t.origin(1, 1), (std::pair<size_t, size_t>{0, 0}));
+}
+
+TEST(Table, SetBordersDrawsAGrid)
+{
+    table t(2, 2);
+    t.set_borders(thin);
+    for(const auto &c : t.cells())
+        EXPECT_EQ(c.props.m_borders, (cell_borders{thin, thin, thin, thin}));
+}
+
+TEST(Table, EffectivePropsLayers)
+{
+    text_doc doc;
+    doc.add_style(style("Grid",
+        style_family::table,
+        table_props(outer_border{thick},
+            inside_h{thin},
+            inside_v{thin},
+            cell_padding{pt(2)},
+            header_props{colour::rgb(0xdd, 0xdd, 0xdd), thick, "Table Heading"})));
+    doc.add_style(style("Base cell", style_family::table_cell, cell_props(cell_valign::middle)));
+    style highlight("Highlight", style_family::table_cell, cell_props(colour::rgb(0xff, 0xff, 0)));
+    highlight.m_parent_style = "Base cell";
+    doc.add_style(highlight);
+
+    table t = table::from_cells({{"h", "h"}, {"a", "b"}, {"c", "d"}});
+    t.set_header_rows(1).set_style("Grid");
+    t.cell(1, 1).set_style("Highlight");
+    t.cell(2, 1).props.m_borders.m_top = border::none();
+
+    const auto header = effective_cell_props(t, doc.styles(), 0, 0);
+    EXPECT_EQ(header.m_borders, (cell_borders{thick, thick, thick, thin}));
+    EXPECT_EQ(header.m_background, colour::rgb(0xdd, 0xdd, 0xdd));
+    EXPECT_EQ(header.m_padding, pt(2));
+
+    const auto body = effective_cell_props(t, doc.styles(), 1, 1);
+    EXPECT_EQ(body.m_borders, (cell_borders{thick, thin, thin, thick}));
+    EXPECT_EQ(body.m_background, colour::rgb(0xff, 0xff, 0)) << "the cell's style";
+    EXPECT_EQ(body.m_valign, cell_valign::middle) << "its parent's";
+
+    const auto direct = effective_cell_props(t, doc.styles(), 2, 1);
+    EXPECT_EQ(direct.m_borders.m_top, border::none()) << "direct beats the table style";
+    EXPECT_EQ(direct.m_borders.m_bottom, thick);
+
+    // Without the table style's lines (DOCX), the header's still apply.
+    const auto no_lines = effective_cell_props(t, doc.styles(), 0, 0, false);
+    EXPECT_EQ(no_lines.m_borders, (cell_borders{{}, thick, {}, {}}));
+    EXPECT_FALSE(no_lines.m_padding);
+
+    // Live: a change to the style shows on the next look.
+    doc.styles().find("Grid")->m_table_props->m_inside_v = thick;
+    EXPECT_EQ(effective_cell_props(t, doc.styles(), 1, 0).m_borders.m_end, thick);
+}
+
+TEST(Table, PropsCopy)
+{
+    cell_props a(colour::rgb(1, 2, 3));
+    cell_props b(a);
+    table_props c(percent{50});
+    table_props d(c);
+    EXPECT_EQ(a, b);
+    EXPECT_EQ(c, d);
+}

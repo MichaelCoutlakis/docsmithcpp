@@ -17,6 +17,7 @@
  *****************************************************************************/
 #include "docx/styles.h"
 
+#include <algorithm>
 #include <charconv>
 #include <cmath>
 #include <string_view>
@@ -59,6 +60,82 @@ std::optional<colour> colour_from(std::string_view hex)
             ec != std::errc{} || p != hex.data() + 2 * i + 2)
             return std::nullopt;
     return colour::rgb(c[0], c[1], c[2]);
+}
+
+struct border_spelling
+{
+    border_line line;
+    const char *docx;
+};
+constexpr border_spelling border_names[] = {{border_line::solid, "single"},
+    {border_line::dashed, "dashed"},
+    {border_line::dotted, "dotted"},
+    {border_line::double_line, "double"},
+    {border_line::none, "nil"}};
+
+/// A border element (w:top, w:insideH, ...): its width is in eighths of a
+/// point.
+void write_border(pugi::xml_node parent, const char *name, const border &b)
+{
+    auto n = parent.append_child(name);
+    const char *val = "single";
+    for(const auto &s : border_names)
+        if(s.line == b.m_line)
+            val = s.docx;
+    set_val(n, val);
+    if(b.m_line == border_line::none)
+        return;
+    n.append_attribute("w:sz") = std::clamp(static_cast<int>(b.m_width.m_points * 8 + 0.5), 2, 96);
+    n.append_attribute("w:space") = 0;
+    n.append_attribute("w:color") = detail::to_hex(b.m_colour).substr(1).c_str();
+}
+
+std::optional<border> read_border(const pugi::xml_node &n)
+{
+    if(!n)
+        return std::nullopt;
+    const std::string v = n.attribute("w:val").as_string();
+    if(v == "nil" || v == "none")
+        return border::none();
+    border b;
+    b.m_line = border_line::solid;
+    for(const auto &s : border_names)
+        if(v == s.docx)
+            b.m_line = s.line;
+    b.m_width = pt(n.attribute("w:sz").as_double(4) / 8);
+    if(auto c = colour_from(n.attribute("w:color").as_string()))
+        b.m_colour = *c;
+    return b;
+}
+
+/// A w:tcMar or w:tblCellMar, the same on every side.
+void write_margins(pugi::xml_node n, const length &l)
+{
+    for(const char *side : {"w:top", "w:left", "w:bottom", "w:right"})
+    {
+        auto m = n.append_child(side);
+        m.append_attribute("w:w") = twips(l);
+        m.append_attribute("w:type") = "dxa";
+    }
+}
+
+/// The margin, if every side has the same one.
+std::optional<length> read_margins(const pugi::xml_node &n)
+{
+    std::optional<int> w;
+    for(const char *side : {"w:top", "w:left", "w:bottom", "w:right"})
+    {
+        auto m = n.child(side);
+        if(!m)
+            return std::nullopt;
+        const int v = m.attribute("w:w").as_int();
+        if(w && *w != v)
+            return std::nullopt;
+        w = v;
+    }
+    if(!w)
+        return std::nullopt;
+    return pt(*w / 20.0);
 }
 
 /// The level's number or bullet text style and properties, as its w:rPr.
@@ -173,6 +250,96 @@ std::optional<paragraph_props> read_ppr(const pugi::xml_node &ppr)
     return pp == paragraph_props{} ? std::nullopt : std::optional(std::move(pp));
 }
 
+void write_tcpr(pugi::xml_node tc_pr, const cell_props &props)
+{
+    const auto &b = props.m_borders;
+    if(b != cell_borders{})
+    {
+        auto borders = tc_pr.append_child("w:tcBorders");
+        for(auto [name, side] : {std::pair{"w:top", &b.m_top},
+                std::pair{"w:left", &b.m_start},
+                std::pair{"w:bottom", &b.m_bottom},
+                std::pair{"w:right", &b.m_end}})
+            if(*side)
+                write_border(borders, name, **side);
+    }
+    if(props.m_background)
+    {
+        auto shd = tc_pr.append_child("w:shd");
+        set_val(shd, "clear");
+        shd.append_attribute("w:color") = "auto";
+        shd.append_attribute("w:fill") = detail::to_hex(*props.m_background).substr(1).c_str();
+    }
+    if(props.m_padding)
+        write_margins(tc_pr.append_child("w:tcMar"), *props.m_padding);
+    if(props.m_valign)
+        set_val(tc_pr.append_child("w:vAlign"),
+            *props.m_valign == cell_valign::middle       ? "center"
+                : *props.m_valign == cell_valign::bottom ? "bottom"
+                                                         : "top");
+}
+
+cell_props read_tcpr(const pugi::xml_node &tc_pr)
+{
+    cell_props p;
+    if(auto borders = tc_pr.child("w:tcBorders"))
+    {
+        auto side = [&](const char *name, const char *alt)
+        { return read_border(borders.child(name) ? borders.child(name) : borders.child(alt)); };
+        p.m_borders.m_top = side("w:top", "w:top");
+        p.m_borders.m_start = side("w:left", "w:start");
+        p.m_borders.m_bottom = side("w:bottom", "w:bottom");
+        p.m_borders.m_end = side("w:right", "w:end");
+    }
+    if(auto c = colour_from(tc_pr.child("w:shd").attribute("w:fill").as_string()))
+        p.set(*c);
+    if(auto m = read_margins(tc_pr.child("w:tcMar")))
+        p.set(cell_padding{*m});
+    if(const std::string v = val(tc_pr, "w:vAlign"); !v.empty())
+        p.set(v == "center"     ? cell_valign::middle
+                : v == "bottom" ? cell_valign::bottom
+                                : cell_valign::top);
+    return p;
+}
+
+void write_style_tblpr(pugi::xml_node tbl_pr, const table_props &props)
+{
+    const auto &o = props.m_outer;
+    if(o != cell_borders{} || props.m_inside_h || props.m_inside_v)
+    {
+        auto borders = tbl_pr.append_child("w:tblBorders");
+        for(auto [name, side] : {std::pair{"w:top", &o.m_top},
+                std::pair{"w:left", &o.m_start},
+                std::pair{"w:bottom", &o.m_bottom},
+                std::pair{"w:right", &o.m_end},
+                std::pair{"w:insideH", &props.m_inside_h},
+                std::pair{"w:insideV", &props.m_inside_v}})
+            if(*side)
+                write_border(borders, name, **side);
+    }
+    if(props.m_padding)
+        write_margins(tbl_pr.append_child("w:tblCellMar"), *props.m_padding);
+}
+
+std::optional<table_props> read_style_tblpr(const pugi::xml_node &tbl_pr)
+{
+    table_props p;
+    if(auto borders = tbl_pr.child("w:tblBorders"))
+    {
+        auto side = [&](const char *name, const char *alt)
+        { return read_border(borders.child(name) ? borders.child(name) : borders.child(alt)); };
+        p.m_outer.m_top = side("w:top", "w:top");
+        p.m_outer.m_start = side("w:left", "w:start");
+        p.m_outer.m_bottom = side("w:bottom", "w:bottom");
+        p.m_outer.m_end = side("w:right", "w:end");
+        p.m_inside_h = side("w:insideH", "w:insideH");
+        p.m_inside_v = side("w:insideV", "w:insideV");
+    }
+    if(auto m = read_margins(tbl_pr.child("w:tblCellMar")))
+        p.set(cell_padding{*m});
+    return p == table_props{} ? std::nullopt : std::optional(std::move(p));
+}
+
 void write_style(pugi::xml_node n, const style &s, const char *type, const std::string &id,
     const std::string &based_on, const std::string &link)
 {
@@ -189,11 +356,13 @@ void write_style(pugi::xml_node n, const style &s, const char *type, const std::
         write_ppr(n.append_child("w:pPr"), *s.m_paragraph_props);
     if((t == "paragraph" || t == "character") && s.m_text_props)
         write_rpr(n.append_child("w:rPr"), *s.m_text_props);
+    if(t == "table" && s.m_table_props)
+        write_style_tblpr(n.append_child("w:tblPr"), *s.m_table_props);
     for(auto c = n.first_child(); c;)
     {
         auto next = c.next_sibling();
-        if((std::string_view(c.name()) == "w:pPr" || std::string_view(c.name()) == "w:rPr") &&
-            !c.first_child())
+        const std::string_view name = c.name();
+        if((name == "w:pPr" || name == "w:rPr" || name == "w:tblPr") && !c.first_child())
             n.remove_child(c);
         c = next;
     }
@@ -218,6 +387,9 @@ std::optional<style> read_style(const pugi::xml_node &n)
     if(type == "paragraph")
         if(auto pp = read_ppr(n.child("w:pPr")))
             s.set(*pp);
+    if(type == "table")
+        if(auto tp = read_style_tblpr(n.child("w:tblPr")))
+            s.set(*tp);
     return s;
 }
 

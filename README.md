@@ -59,6 +59,9 @@ Test software written in C++ could use `docsmithcpp` to generate test reports.
   lists, tables, images, headers and footers, fields and a table of contents.
   Load, edit and save keeps the parts and the direct formatting the model
   doesn't represent.
+- 🧮 Table formatting in every format: table styles with lines and a shaded
+  header, cell borders, shading and padding, and column widths, set after the
+  content is in (`t.set_row_borders({0}, edge::bottom, border::solid(pt(1)))`)
 - 🌐 Write HTML5 pages: styles become CSS classes, list styles pick
   `<ol>`/`<ul>`, and images are written next to the page
 - 📄 Write GitHub Flavored Markdown (CI job summaries, PR comments): bold and

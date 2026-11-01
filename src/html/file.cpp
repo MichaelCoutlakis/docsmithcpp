@@ -100,6 +100,79 @@ const char *css_value(font_style fs)
 
 const char *css_value(font_weight fw) { return fw == font_weight::bold ? "bold" : "normal"; }
 
+const char *css_value(border_line l)
+{
+    switch(l)
+    {
+    case border_line::none: return "none";
+    case border_line::dashed: return "dashed";
+    case border_line::dotted: return "dotted";
+    case border_line::double_line: return "double";
+    default: return "solid";
+    }
+}
+
+std::string css_value(const border &b)
+{
+    if(b.m_line == border_line::none)
+        return "none";
+    return detail::to_string(b.m_width.m_points) + "pt " + css_value(b.m_line) + " " +
+        detail::to_hex(b.m_colour);
+}
+
+const char *css_value(cell_valign v)
+{
+    switch(v)
+    {
+    case cell_valign::middle: return "middle";
+    case cell_valign::bottom: return "bottom";
+    default: return "top";
+    }
+}
+
+/// Declarations for a cell, each starting with a space.
+std::string css_decls(const cell_props &p)
+{
+    std::string out;
+    auto side = [&](const char *name, const std::optional<border> &b)
+    {
+        if(b)
+            out += std::string(" border-") + name + ": " + css_value(*b) + ";";
+    };
+    side("top", p.m_borders.m_top);
+    side("bottom", p.m_borders.m_bottom);
+    side("left", p.m_borders.m_start);
+    side("right", p.m_borders.m_end);
+    if(p.m_background)
+        out += " background-color: " + detail::to_hex(*p.m_background) + ";";
+    if(p.m_valign)
+        out += std::string(" vertical-align: ") + css_value(*p.m_valign) + ";";
+    if(p.m_padding)
+        out += " padding: " + detail::to_string(p.m_padding->m_points) + "pt;";
+    return out;
+}
+
+/// Declarations for a table style: its width and alignment. The lines and
+/// header go on the cells (see emit_block(table)).
+std::string css_decls(const table_props &p)
+{
+    std::string out = " border-collapse: collapse;";
+    if(p.m_width)
+        out += " width: " +
+            std::visit(
+                overloaded{
+                    [](const length &l) { return detail::to_string(l.m_points) + "pt"; },
+                    [](const percent &pc) { return detail::to_string(pc.m_value) + "%"; },
+                },
+                *p.m_width) +
+            ";";
+    if(p.m_align == table_align::centre)
+        out += " margin-left: auto; margin-right: auto;";
+    else if(p.m_align == table_align::end)
+        out += " margin-left: auto;";
+    return out;
+}
+
 const char *css_value(break_type b)
 {
     switch(b)
@@ -199,6 +272,10 @@ std::string generated_css(const text_doc &doc)
             if(pp->m_break_after)
                 decls += std::string(" break-after: ") + css_value(pp->m_break_after->m_break_type) + ";";
         }
+        if(s->m_table_props)
+            decls += css_decls(effective_table_style(s->m_name, doc.styles()));
+        if(s->m_cell_props)
+            decls += css_decls(effective_cell_style(s->m_name, doc.styles()));
         if(!decls.empty())
             css += "." + css_class(s->m_name.get_name()) + " {" + decls + " }\n";
     }
@@ -453,7 +530,12 @@ private:
     {
         // <thead> / <tbody> only when there are header rows, so a plain table
         // stays plain.
-        const size_t header_rows = std::min(t.header_rows, t.num_rows());
+        const size_t header_rows = std::min(t.header_rows(), t.num_rows());
+        const style_name header_style = [&]
+        {
+            const auto h = effective_table_props(t, m_doc.styles()).m_header;
+            return h ? h->m_paragraph_style : style_name{};
+        }();
         auto section = [&](size_t r)
         {
             if(header_rows == 0 || (r != 0 && r != header_rows))
@@ -469,9 +551,37 @@ private:
             ++m_depth;
         };
 
+        // Each cell's formatting, with the table style's lines, in its style
+        // attribute: CSS selectors for a table's edges break with spans.
+        std::vector<std::string> cell_css(t.num_rows() * t.num_cols());
+        bool lines = false;
+        for(size_t r = 0; r != t.num_rows(); ++r)
+            for(size_t c = 0; c != t.num_cols(); ++c)
+                if(!t.is_cell_covered(r, c))
+                {
+                    const auto p = effective_cell_props(t, m_doc.styles(), r, c);
+                    lines = lines || p.m_borders != cell_borders{};
+                    cell_css[r * t.num_cols() + c] = css_decls(p);
+                }
+
         indent();
-        m_os << "<table>\n";
+        m_os << "<table";
+        class_attr(t.style);
+        if(lines && t.style.is_empty())
+            m_os << " style=\"border-collapse: collapse;\"";
+        m_os << ">\n";
         ++m_depth;
+        bool widths = false;
+        for(size_t c = 0; c != t.num_cols(); ++c)
+            widths = widths || t.column_width(c);
+        if(widths)
+        {
+            indent();
+            m_os << "<colgroup>";
+            for(double share : column_shares(t))
+                m_os << "<col style=\"width: " << detail::to_string(share * 100) << "%;\">";
+            m_os << "</colgroup>\n";
+        }
         for(size_t r = 0; r != t.num_rows(); ++r)
         {
             section(r);
@@ -488,7 +598,13 @@ private:
                     attrs += " rowspan=\"" + std::to_string(cell.rowspan) + "\"";
                 if(cell.colspan != 1)
                     attrs += " colspan=\"" + std::to_string(cell.colspan) + "\"";
-                container(r < header_rows ? "th" : "td", cell.style, cell.children(), attrs);
+                if(const auto &css = cell_css[r * t.num_cols() + c]; !css.empty())
+                    attrs += " style=\"" + css.substr(1) + "\"";
+                container(r < header_rows ? "th" : "td",
+                    cell.style,
+                    cell.children(),
+                    attrs,
+                    r < header_rows ? header_style : style_name{});
             }
             --m_depth;
             indent();
@@ -641,12 +757,14 @@ private:
     void emit_inline(const unknown &) {}
 
     /// <li> or <td>: tight when it holds one plain paragraph, else block layout.
+    /// extra: a second class, e.g. the paragraph style of a header row's text.
     void container(std::string_view tag, const style_name &style,
-        const std::vector<block_node> &blocks, const std::string &attrs = {})
+        const std::vector<block_node> &blocks, const std::string &attrs = {},
+        const style_name &extra = {})
     {
         indent();
         m_os << '<' << tag;
-        class_attr(style);
+        class_attr(style, extra);
         m_os << attrs << '>';
         if(const auto *p = sole_plain_paragraph(blocks))
             flow(p->children());
@@ -683,12 +801,17 @@ private:
         class_attr(style);
         m_os << '>';
     }
-    void class_attr(const style_name &style)
+    void class_attr(const style_name &style, const style_name &extra = {})
     {
-        if(style.is_empty())
+        if(style.is_empty() && extra.is_empty())
             return;
         m_os << " class=\"";
-        escape(m_os, css_class(style.get_name()), true);
+        if(!style.is_empty())
+            escape(m_os, css_class(style.get_name()), true);
+        if(!style.is_empty() && !extra.is_empty())
+            m_os << ' ';
+        if(!extra.is_empty())
+            escape(m_os, css_class(extra.get_name()), true);
         m_os << '"';
     }
     void indent() { m_os << std::string(m_depth * 2, ' '); }

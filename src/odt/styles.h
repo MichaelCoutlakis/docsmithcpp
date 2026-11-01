@@ -21,6 +21,7 @@
 // write_xml() for the properties the model holds; the rest are left out.
 
 #include <optional>
+#include <string_view>
 
 #include <pugixml.hpp>
 
@@ -44,6 +45,14 @@ void write_xml(pugi::xml_node &n, const list_style_num &b);
 void write_xml(pugi::xml_node &n, const text_props &props);
 void write_xml(pugi::xml_node &n, const paragraph_props &props);
 void write_xml(pugi::xml_node &n, const graphics_props &props);
+void write_xml(pugi::xml_node &n, const table_props &props);
+void write_xml(pugi::xml_node &n, const cell_props &props);
+
+/// A length such as "0.5pt" or "1.2cm".
+std::optional<length> length_from(std::string_view odf);
+/// A table-column style's width: its relative width if it has one, else its
+/// width in points.
+std::optional<double> read_column_width(const pugi::xml_node &n);
 
 /// A style:style, or nullopt if its family has no style_family.
 std::optional<style> read_style(const pugi::xml_node &n);

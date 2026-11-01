@@ -271,13 +271,14 @@ public:
         case MD_BLOCK_TABLE:
             blocks().push_back(block_node{table{}});
             m_tables.push_back(&std::get<table>(blocks().back().v));
-            m_tables.back()->header_rows = 1;
+            m_tables.back()->set_header_rows(1);
+            m_rows.emplace_back();
             break;
-        case MD_BLOCK_TR: m_tables.back()->add_row(); break;
+        case MD_BLOCK_TR: m_rows.back().clear(); break;
         case MD_BLOCK_TH:
         case MD_BLOCK_TD:
-            m_tables.back()->add_cell(table_cell{});
-            m_blocks.push_back(&m_tables.back()->rows.back().back().children());
+            m_rows.back().emplace_back();
+            m_blocks.push_back(&m_rows.back().back().children());
             break;
         default: break; // DOC, THEAD, TBODY; extensions that aren't enabled
         }
@@ -298,6 +299,17 @@ public:
         case MD_BLOCK_LI:
         case MD_BLOCK_TH:
         case MD_BLOCK_TD: m_blocks.pop_back(); break;
+        case MD_BLOCK_TR:
+        {
+            // A row with fewer or more cells than the header is filled out or cut.
+            table &t = *m_tables.back();
+            auto &row = m_rows.back();
+            if(t.num_rows() != 0)
+                row.resize(t.num_cols());
+            t.add_row(std::move(row));
+            row.clear();
+            break;
+        }
         case MD_BLOCK_H: m_inlines.pop_back(); break;
         case MD_BLOCK_CODE:
         {
@@ -313,7 +325,10 @@ public:
         }
         case MD_BLOCK_HTML: --m_skip; break;
         case MD_BLOCK_P: close_paragraph(); break;
-        case MD_BLOCK_TABLE: finish_table(); break;
+        case MD_BLOCK_TABLE:
+            m_rows.pop_back();
+            finish_table();
+            break;
         default: break;
         }
         return 0;
@@ -503,10 +518,11 @@ private:
     {
         table &t = *m_tables.back();
         m_tables.pop_back();
-        if(t.rows.empty())
+        if(t.num_rows() == 0)
             return;
-        const bool empty_header = std::all_of(t.rows.front().begin(),
-            t.rows.front().end(),
+        const auto header = t.cells().first(t.num_cols());
+        const bool empty_header = std::all_of(header.begin(),
+            header.end(),
             [](const table_cell &c)
             {
                 return std::all_of(c.children().begin(),
@@ -519,8 +535,8 @@ private:
             });
         if(empty_header)
         {
-            t.rows.erase(t.rows.begin());
-            t.header_rows = 0;
+            t.remove_row(0);
+            t.set_header_rows(0);
         }
     }
 
@@ -529,6 +545,7 @@ private:
     std::vector<list *> m_lists;
     std::vector<std::string> m_list_styles; //!< Each open list's effective list style
     std::vector<table *> m_tables;
+    std::vector<std::vector<table_cell>> m_rows; //!< Each open table's row being read
     int m_quote{0};
     int m_skip{0}; //!< Inside an HTML block
     int m_alt{0};  //!< Inside an image's alt text

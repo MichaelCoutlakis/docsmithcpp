@@ -70,9 +70,8 @@ struct deep_visitor
             for(auto &b : n.children())
                 recurse(b.v);
         else if constexpr(std::is_same_v<T, table>)
-            for(auto &row : n.rows)
-                for(auto &c : row)
-                    node(c);
+            for(auto &c : n.cells())
+                node(c);
         // text, bookmark, image, page_break, unknown have no children.
     }
 };
@@ -120,8 +119,9 @@ auto find_all(Doc &doc, Pred pred)
     return out;
 }
 
-/// Clear the style name on every node that carries one. Handy for comparing a
-/// parsed document against a code-built one without minding style names.
+/// Clear the style name on every node that carries one, and on table rows and
+/// columns. Handy for comparing a parsed document against a code-built one
+/// without minding style names.
 /// Templated on the document type so this header needs only nodes.h (text_doc
 /// is defined in text_doc.h, which includes this header).
 template <typename Doc>
@@ -132,6 +132,13 @@ void strip_styles(Doc &doc)
         {
             if constexpr(requires { n.style; })
                 n.style = style_name{};
+            if constexpr(std::is_same_v<std::decay_t<decltype(n)>, table>)
+            {
+                for(size_t r = 0; r != n.num_rows(); ++r)
+                    n.set_row_style(r, {});
+                for(size_t c = 0; c != n.num_cols(); ++c)
+                    n.set_column_style(c, {});
+            }
         });
 }
 

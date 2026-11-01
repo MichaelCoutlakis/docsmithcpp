@@ -38,6 +38,18 @@ void write_rpr(pugi::xml_node rpr, const text_props &props);
 void write_ppr(pugi::xml_node ppr, const paragraph_props &props);
 
 std::optional<text_props> read_rpr(const pugi::xml_node &rpr);
+
+/// Appends a cell's borders, shading, padding and vertical alignment to a
+/// w:tcPr that holds its width and spans so far.
+void write_tcpr(pugi::xml_node tc_pr, const cell_props &props);
+cell_props read_tcpr(const pugi::xml_node &tc_pr);
+
+/// A table style's lines and cell padding, as a style's w:tblPr.
+void write_style_tblpr(pugi::xml_node tbl_pr, const table_props &props);
+std::optional<table_props> read_style_tblpr(const pugi::xml_node &tbl_pr);
+
+/// Twips (1/20 pt), as most DOCX lengths are given.
+inline int twips(const length &l) { return static_cast<int>(l.m_points * 20 + 0.5); }
 std::optional<paragraph_props> read_ppr(const pugi::xml_node &ppr);
 
 /// Fills an empty w:style with s, in the family type (style_type()), as id.

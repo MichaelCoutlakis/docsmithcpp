@@ -399,14 +399,14 @@ TEST(MarkdownInput, Tables)
 {
     const text_doc doc = md::parse("| A | B |\n| --- | --- |\n| 1 | x<br>y |\n");
     const auto &t = std::get<table>(doc.body.at(0).v);
-    EXPECT_EQ(t.header_rows, 1U);
+    EXPECT_EQ(t.header_rows(), 1U);
     ASSERT_EQ(t.num_rows(), 2U);
     EXPECT_EQ(t.cell(0, 0), table_cell("A"));
     EXPECT_EQ(t.cell(1, 1), table_cell("x\ny"));
 
     const text_doc headless_doc = md::parse("| | |\n| --- | --- |\n| 1 | 2 |\n");
     const auto &headless = std::get<table>(headless_doc.body.at(0).v);
-    EXPECT_EQ(headless.header_rows, 0U);
+    EXPECT_EQ(headless.header_rows(), 0U);
     EXPECT_EQ(headless.num_rows(), 1U);
 }
 

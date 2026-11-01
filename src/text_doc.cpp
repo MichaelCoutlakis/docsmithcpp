@@ -120,10 +120,9 @@ found_block find_placeholder(std::vector<block_node> &blocks, const placeholder 
                 },
                 [&](table &t)
                 {
-                    for(auto &row : t.rows)
-                        for(auto &c : row)
-                            if(auto f = find_placeholder(c.children(), p); f.blocks)
-                                return f;
+                    for(auto &c : t.cells())
+                        if(auto f = find_placeholder(c.children(), p); f.blocks)
+                            return f;
                     return found_block{};
                 },
                 [](auto &) { return found_block{}; },

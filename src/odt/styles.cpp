@@ -126,6 +126,32 @@ std::optional<colour> colour_from(std::string_view odf)
     return colour::rgb(c[0], c[1], c[2]);
 }
 
+} // namespace
+
+std::optional<length> length_from(std::string_view odf)
+{
+    struct unit
+    {
+        std::string_view name;
+        double points;
+    };
+    constexpr unit units[] = {
+        {"pt", 1}, {"cm", 72 / 2.54}, {"mm", 72 / 25.4}, {"in", 72}, {"pc", 12}, {"px", 0.75}};
+    for(const auto &u : units)
+        if(odf.ends_with(u.name))
+        {
+            const std::string_view num = odf.substr(0, odf.size() - u.name.size());
+            double v{};
+            if(auto [p, ec] = std::from_chars(num.data(), num.data() + num.size(), v);
+                ec != std::errc{} || p != num.data() + num.size())
+                return std::nullopt;
+            return length{v * u.points};
+        }
+    return std::nullopt;
+}
+
+namespace
+{
 std::optional<list_enum> list_enum_from(std::string_view odf)
 {
     for(list_enum e : {list_enum::arabic,
@@ -180,6 +206,94 @@ std::optional<graphics_props> read_graphics_props(const pugi::xml_node &n)
     return gp == graphics_props{} ? std::nullopt : std::optional(std::move(gp));
 }
 
+constexpr spelling<border_line> border_names[] = {{border_line::none, "none"},
+    {border_line::solid, "solid"},
+    {border_line::dashed, "dashed"},
+    {border_line::dotted, "dotted"},
+    {border_line::double_line, "double"}};
+constexpr spelling<cell_valign> valign_names[] = {
+    {cell_valign::top, "top"}, {cell_valign::middle, "middle"}, {cell_valign::bottom, "bottom"}};
+constexpr spelling<table_align> table_align_names[] = {
+    {table_align::start, "left"}, {table_align::centre, "center"}, {table_align::end, "right"}};
+
+/// "0.5pt solid #000000", in any order; "none" and "hidden" are no line.
+std::optional<border> border_from(std::string_view odf)
+{
+    if(odf.empty())
+        return std::nullopt;
+    border b;
+    while(!odf.empty())
+    {
+        const auto end = odf.find(' ');
+        const std::string_view word = odf.substr(0, end);
+        odf = end == std::string_view::npos ? std::string_view{} : odf.substr(end + 1);
+        if(word == "hidden" || word == "none")
+            return border::none();
+        if(auto l = from_odf(border_names, word))
+            b.m_line = *l;
+        else if(auto c = colour_from(word))
+            b.m_colour = *c;
+        else if(auto w = length_from(word))
+            b.m_width = *w;
+    }
+    return b;
+}
+
+std::string to_odf(const border &b)
+{
+    if(b.m_line == border_line::none)
+        return "none";
+    return detail::to_string(b.m_width.m_points) + "pt " + to_odf(border_names, b.m_line) + " " +
+        detail::to_hex(b.m_colour);
+}
+
+std::string to_odf(const length &l) { return detail::to_string(l.m_points) + "pt"; }
+
+std::optional<table_props> read_table_props(const pugi::xml_node &n)
+{
+    if(!n)
+        return std::nullopt;
+    table_props tp;
+    const std::string_view align = n.attribute("table:align").as_string();
+    // A table aligned to the margins fills them, whatever its width says.
+    if(align != "margins")
+    {
+        if(auto a = from_odf(table_align_names, align))
+            tp.set(*a);
+        const std::string_view rel = n.attribute("style:rel-width").as_string();
+        double pc{};
+        if(rel.ends_with('%') &&
+            std::from_chars(rel.data(), rel.data() + rel.size() - 1, pc).ec == std::errc{})
+            tp.set(percent{pc});
+        else if(auto w = length_from(n.attribute("style:width").as_string()))
+            tp.set(*w);
+    }
+    return tp == table_props{} ? std::nullopt : std::optional(std::move(tp));
+}
+
+std::optional<cell_props> read_cell_props(const pugi::xml_node &n)
+{
+    if(!n)
+        return std::nullopt;
+    cell_props cp;
+    auto &b = cp.m_borders;
+    if(auto all = border_from(n.attribute("fo:border").as_string()))
+        b.m_top = b.m_bottom = b.m_start = b.m_end = all;
+    for(auto [attr, side] : {std::pair{"fo:border-top", &b.m_top},
+            std::pair{"fo:border-bottom", &b.m_bottom},
+            std::pair{"fo:border-left", &b.m_start},
+            std::pair{"fo:border-right", &b.m_end}})
+        if(auto one = border_from(n.attribute(attr).as_string()))
+            *side = one;
+    if(auto c = colour_from(n.attribute("fo:background-color").as_string()))
+        cp.set(*c);
+    if(auto v = from_odf(valign_names, n.attribute("style:vertical-align").as_string()))
+        cp.set(*v);
+    if(auto p = length_from(n.attribute("fo:padding").as_string()))
+        cp.set(cell_padding{*p});
+    return cp.empty() ? std::nullopt : std::optional(std::move(cp));
+}
+
 void read_into(const pugi::xml_node &container, text_doc &doc)
 {
     for(auto c : container.children())
@@ -189,6 +303,10 @@ void read_into(const pugi::xml_node &container, text_doc &doc)
         {
             if(page_break_base(c))
                 continue; // made by the writer for a page_break node
+            // A column style's only modelled property, its width, is read
+            // onto the table's columns instead (see odt::file::load()).
+            if(std::string_view(c.attribute("style:family").as_string()) == "table-column")
+                continue;
             if(auto s = read_style(c); s && !doc.styles().find(s->m_name.get_name()))
                 doc.styles().add(*s);
         }
@@ -247,6 +365,12 @@ void write_xml(pugi::xml_node &n, const style &s, style_family family)
 
     if(s.m_graphics_props)
         write_xml(style_node, s.m_graphics_props.value());
+
+    // A table style's lines and header go on its cells (see the writer).
+    if(family == style_family::table)
+        write_xml(style_node, s.m_table_props.value_or(table_props{}));
+    if(family == style_family::table_cell && s.m_cell_props)
+        write_xml(style_node, *s.m_cell_props);
 
     if(s.m_paragraph_props)
         write_xml(style_node, s.m_paragraph_props.value());
@@ -334,6 +458,58 @@ void write_xml(pugi::xml_node &n, const graphics_props &props)
         graphic_node.append_attribute("style:vertical-pos") = to_odf(vert_names, *props.m_vert_pos);
 }
 
+void write_xml(pugi::xml_node &n, const table_props &props)
+{
+    auto node = n.append_child("style:table-properties");
+    // Text width of the writer's default page (A4, 2cm margins), for a width
+    // given as a percentage.
+    constexpr double text_width = 17 * 72 / 2.54;
+    if(props.m_width)
+    {
+        if(const auto *pc = std::get_if<percent>(&*props.m_width))
+        {
+            node.append_attribute("style:width") =
+                to_odf(length{text_width * pc->m_value / 100}).c_str();
+            node.append_attribute("style:rel-width") =
+                (detail::to_string(pc->m_value) + "%").c_str();
+        }
+        else
+            node.append_attribute("style:width") = to_odf(std::get<length>(*props.m_width)).c_str();
+    }
+    node.append_attribute("table:align") = props.m_align ? to_odf(table_align_names, *props.m_align)
+                                                         : (props.m_width ? "left" : "margins");
+}
+
+void write_xml(pugi::xml_node &n, const cell_props &props)
+{
+    auto node = n.append_child("style:table-cell-properties");
+    for(auto [attr, side] : {std::pair{"fo:border-top", &props.m_borders.m_top},
+            std::pair{"fo:border-bottom", &props.m_borders.m_bottom},
+            std::pair{"fo:border-left", &props.m_borders.m_start},
+            std::pair{"fo:border-right", &props.m_borders.m_end}})
+        if(*side)
+            node.append_attribute(attr) = to_odf(**side).c_str();
+    if(props.m_background)
+        node.append_attribute("fo:background-color") = detail::to_hex(*props.m_background).c_str();
+    if(props.m_valign)
+        node.append_attribute("style:vertical-align") = to_odf(valign_names, *props.m_valign);
+    if(props.m_padding)
+        node.append_attribute("fo:padding") = to_odf(*props.m_padding).c_str();
+}
+
+std::optional<double> read_column_width(const pugi::xml_node &n)
+{
+    auto props = n.child("style:table-column-properties");
+    const std::string_view rel = props.attribute("style:rel-column-width").as_string();
+    double v{};
+    if(rel.ends_with('*') &&
+        std::from_chars(rel.data(), rel.data() + rel.size() - 1, v).ec == std::errc{} && v > 0)
+        return v;
+    if(auto w = length_from(props.attribute("style:column-width").as_string()))
+        return w->m_points;
+    return std::nullopt;
+}
+
 constexpr std::string_view page_break_suffix = ".PageBreak";
 
 std::string page_break_style_name(const style_name &base)
@@ -371,6 +547,10 @@ std::optional<style> read_style(const pugi::xml_node &n)
     s.m_graphics_props = read_graphics_props(n.child("style:graphic-properties"));
     s.m_paragraph_props = read_paragraph_props(n.child("style:paragraph-properties"));
     s.m_text_props = read_text_props(n.child("style:text-properties"));
+    if(*family == style_family::table)
+        s.m_table_props = read_table_props(n.child("style:table-properties"));
+    if(*family == style_family::table_cell)
+        s.m_cell_props = read_cell_props(n.child("style:table-cell-properties"));
     return s;
 }
 

@@ -40,6 +40,16 @@ inline std::string to_string(float v)
     return std::string(buf, end);
 }
 
+/// v to at most three decimals, e.g. "0.5" for a length in points.
+inline std::string to_string(double v)
+{
+    const double rounded =
+        static_cast<double>(static_cast<long long>(v * 1000 + (v < 0 ? -0.5 : 0.5))) / 1000;
+    char buf[32];
+    const auto [end, ec] = std::to_chars(buf, buf + sizeof buf, rounded);
+    return std::string(buf, end);
+}
+
 /// n in decimal, padded with leading zeros to at least width digits.
 inline std::string zero_pad(long long n, std::size_t width)
 {

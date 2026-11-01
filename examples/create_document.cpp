@@ -53,7 +53,24 @@ void write_example_test_report()
     auto result = [](bool passed)
     { return paragraph(span(passed ? "Passed" : "Failed").set_style(passed ? "Pass" : "Fail")); };
 
+    // The results table's look: lines, a shaded header and padding. ODT can't
+    // keep a table style's lines in a template, so it is defined here.
+    const auto heading_style = doc.add_style(
+        style("Table_20_Heading", style_family::paragraph, text_props(font_weight::bold)));
+    const border rule = border::solid(pt(1), colour::rgb(0x40, 0x40, 0x40));
+    const border black = border::solid(pt(1), colour::rgb(0, 0, 0));
+    const auto results_style = doc.add_style(style("Results",
+        style_family::table,
+        table_props(percent{100},
+            cell_borders{rule, rule, black, black},
+            inside_h{border::solid(pt(0.5), colour::rgb(0xa0, 0xa0, 0xa0))},
+            inside_v{black},
+            cell_padding{pt(3)},
+            header_props{colour::rgb(0xe8, 0xe8, 0xe8), rule, heading_style})));
+
     auto summary_table = table::from_cells({{{"Test Case"}, {"Result"}}}).set_header_rows(1);
+    summary_table.set_style(results_style).set_column_widths({3, 1});
+
     for(auto &r : records)
     {
         summary_table.add_row({
@@ -62,6 +79,7 @@ void write_example_test_report()
             {result(r.passed)},
         });
     }
+
     const auto passed =
         std::count_if(records.begin(), records.end(), [](auto &r) { return r.passed; });
     doc.replace(text{"{{summary}}"},
@@ -86,10 +104,9 @@ void write_example_test_report()
     html::file page(doc);
     // A page has no page numbers: its footer is the template's without them.
     page.doc.page.set_footer(paragraph("Generated test report").set_style("Footer"));
-    page.css =
-        "body { max-width: 50em; margin: auto; }\n"
-        "table { border-collapse: collapse; } td, th { border: 1px solid #999; padding: 0.3em; }\n"
-        "header, footer { color: #595959; font-size: 9pt; }\n";
+    page.css = "body { max-width: 50em; margin: auto; }\n"
+               "th { text-align: left; }\n"
+               "header, footer { color: #595959; font-size: 9pt; }\n";
     page.save("Example DocSmith++ Test Report.html");
 }
 

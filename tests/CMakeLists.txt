@@ -3,6 +3,7 @@ include(GoogleTest)
 add_executable(docsmithcpp_tests
     test_main.cpp
     basic_usage.cpp
+    test_table.cpp
     odt/test_odt.cpp
     odt/test_odt_xml.cpp
     odt/test_package.cpp

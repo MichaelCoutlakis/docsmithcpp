@@ -17,6 +17,7 @@
  *****************************************************************************/
 #include "docx/reader.h"
 
+#include <algorithm>
 #include <cctype>
 #include <initializer_list>
 #include <map>
@@ -928,16 +929,17 @@ private:
 
     table read_table(const pugi::xml_node &tbl)
     {
-        table t;
+        std::vector<std::vector<table_cell>> rows;
+        std::size_t header_rows = 0;
         // Where each slot's cell is, to extend it when a row merges into it.
         std::vector<std::vector<std::pair<std::size_t, std::size_t>>> origin;
         bool header = true;
         for(auto tr : tbl.children("w:tr"))
         {
-            const std::size_t r = t.rows.size();
-            t.rows.emplace_back();
+            const std::size_t r = rows.size();
+            rows.emplace_back();
             origin.emplace_back();
-            auto &row = t.rows.back();
+            auto &row = rows.back();
             auto pad = [&](int n)
             {
                 for(int i = 0; i < n; ++i)
@@ -948,7 +950,7 @@ private:
             };
             auto tr_pr = tr.child("w:trPr");
             if(header && tr_pr.child("w:tblHeader") && on(tr_pr.child("w:tblHeader")))
-                t.header_rows = r + 1;
+                header_rows = r + 1;
             else
                 header = false;
             pad(std::atoi(val(tr_pr, "w:gridBefore").c_str()));
@@ -964,8 +966,11 @@ private:
                 if(merged && r > 0 && c < origin[r - 1].size())
                 {
                     const auto o = origin[r - 1][c];
-                    auto &cell = t.rows[o.first][o.second];
+                    auto &cell = rows[o.first][o.second];
                     cell.rowspan = static_cast<int>(r - o.first) + 1;
+                    // The merged cell's last row has its bottom edge.
+                    if(auto b = read_tcpr(tc_pr).m_borders.m_bottom)
+                        cell.props.m_borders.m_bottom = b;
                     for(int i = 0; i < span; ++i)
                     {
                         origin.back().push_back(o);
@@ -975,6 +980,7 @@ private:
                 }
                 table_cell cell;
                 cell.colspan = span;
+                cell.props = read_tcpr(tc_pr);
                 cell.children() = read_blocks(tc);
                 // The writer ends every cell with a paragraph.
                 auto &kids = cell.children();
@@ -997,10 +1003,27 @@ private:
             pad(std::atoi(val(tr_pr, "w:gridAfter").c_str()));
         }
         std::size_t cols = 0;
-        for(const auto &row : t.rows)
+        for(const auto &row : rows)
             cols = std::max(cols, row.size());
-        for(auto &row : t.rows)
+        table t;
+        for(auto &row : rows)
+        {
             row.resize(cols);
+            t.add_row(std::move(row));
+        }
+        t.set_header_rows(header_rows);
+        auto tbl_pr = tbl.child("w:tblPr");
+        if(const std::string id = val(tbl_pr, "w:tblStyle"); !id.empty())
+            t.style = style_name(name_of(id));
+
+        std::vector<double> widths;
+        for(auto col : tbl.child("w:tblGrid").children("w:gridCol"))
+            widths.push_back(col.attribute("w:w").as_double());
+        if(widths.size() == cols &&
+            std::any_of(
+                widths.begin(), widths.end(), [&](double w) { return w != widths.front(); }) &&
+            std::all_of(widths.begin(), widths.end(), [](double w) { return w > 0; }))
+            t.set_column_widths(widths);
         return t;
     }
 

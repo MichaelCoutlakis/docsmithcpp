@@ -152,19 +152,6 @@ TEST(BASIC_USAGE, AppendClashLeavesDocumentUnchanged)
     EXPECT_EQ(doc, before);
 }
 
-TEST(BASIC_USAGE, AddRowChecksWidth)
-{
-    table t;
-    t.add_row({paragraph("a"), paragraph("b")});
-    t.add_row({table_cell(paragraph("wide")).set_span(1, 2), {}});
-    EXPECT_THROW(t.add_row({paragraph("c")}), std::invalid_argument);
-    EXPECT_TRUE(t.is_rectangular());
-
-    t.add_row();
-    t.add_cell(paragraph("d"));
-    EXPECT_FALSE(t.is_rectangular());
-}
-
 TEST(BASIC_USAGE, ReplacePlaceholders)
 {
     text_doc doc{heading(1, "Report"),

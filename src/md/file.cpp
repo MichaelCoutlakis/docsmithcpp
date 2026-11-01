@@ -368,7 +368,7 @@ private:
 
         // GFM tables always have a header row. Without one, it is left empty.
         std::string out = "|";
-        if(t.header_rows != 0)
+        if(t.header_rows() != 0)
             out = row(0);
         else
             for(size_t c = 0; c != cols; ++c)
@@ -376,7 +376,7 @@ private:
         out += "\n|";
         for(size_t c = 0; c != cols; ++c)
             out += " --- |";
-        for(size_t r = t.header_rows != 0 ? 1 : 0; r != t.num_rows(); ++r)
+        for(size_t r = t.header_rows() != 0 ? 1 : 0; r != t.num_rows(); ++r)
             out += '\n' + row(r);
         return out;
     }
@@ -415,10 +415,9 @@ private:
                 },
                 [&](const table &t)
                 {
-                    for(const auto &r : t.rows)
-                        for(const auto &tc : r)
-                            for(const auto &cb : tc.children())
-                                cell_block(cb, part);
+                    for(const auto &tc : t.cells())
+                        for(const auto &cb : tc.children())
+                            cell_block(cb, part);
                 },
                 [](const auto &) { },
             },

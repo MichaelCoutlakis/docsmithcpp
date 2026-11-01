@@ -332,11 +332,10 @@ TEST(DOCX_Read, LibreOfficeTable)
     const table &t = *tables[0];
     EXPECT_EQ(t.num_rows(), 5U);
     EXPECT_EQ(t.num_cols(), 3U);
-    EXPECT_EQ(t.header_rows, 1U);
+    EXPECT_EQ(t.header_rows(), 1U);
     EXPECT_EQ(t.cell(1, 0).rowspan, 2);
     EXPECT_EQ(t.cell(1, 0).colspan, 2);
     EXPECT_TRUE(t.is_cell_covered(2, 1));
-    EXPECT_TRUE(t.is_rectangular());
 }
 
 TEST(DOCX_Read, LibreOfficeImage)
@@ -358,3 +357,35 @@ TEST(DOCX_Read, LibreOfficeImage)
 
 TEST(DOCX_Read, NotAWordDocument)
 { EXPECT_THROW(docx::file::load("odt/basic.odt"), std::runtime_error); }
+
+TEST(DOCX_Read, TableFormattingRoundTrip)
+{
+    text_doc doc;
+    const border thick = border::solid(pt(1.5), colour::rgb(0x20, 0x40, 0x60));
+    const border thin = border::solid(pt(0.5));
+    doc.add_style(style("Grid",
+        style_family::table,
+        table_props(outer_border{thick}, inside_h{thin}, inside_v{thin}, cell_padding{pt(3)})));
+    table t = table::from_cells({{"Test", "Result"}, {"open", "pass"}, {"save", "fail"}});
+    t.set_style("Grid").set_column_widths({3, 1});
+    t.cell(1, 1).props.set(colour::rgb(0xff, 0xcc, 0xcc)).set(cell_valign::middle);
+    t.set_row_borders({0}, edge::bottom, border::none());
+    doc.add(t);
+    docx::file(doc).save("docx/out/table_formatting_read.docx");
+
+    const auto f = docx::file::load("docx/out/table_formatting_read.docx");
+    const table &back = *collect<table>(f.doc).front();
+    EXPECT_EQ(back.style, style_name("Grid"));
+    const style *grid = f.doc.styles().find("Grid");
+    ASSERT_NE(grid, nullptr);
+    ASSERT_TRUE(grid->m_table_props);
+    EXPECT_EQ(grid->m_table_props->m_outer, (cell_borders{thick, thick, thick, thick}));
+    EXPECT_EQ(grid->m_table_props->m_inside_h, thin);
+    EXPECT_EQ(grid->m_table_props->m_padding, pt(3));
+    EXPECT_NEAR(column_shares(back).at(0), 0.75, 1e-3) << "widths are whole twips";
+    for(size_t r = 0; r != t.num_rows(); ++r)
+        for(size_t c = 0; c != t.num_cols(); ++c)
+            EXPECT_EQ(effective_cell_props(back, f.doc.styles(), r, c),
+                effective_cell_props(t, doc.styles(), r, c))
+                << r << ", " << c;
+}
