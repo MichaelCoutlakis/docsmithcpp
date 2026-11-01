@@ -5,161 +5,183 @@ where to start. See `CHANGELOG.md` for what's done.
 
 The order follows what stops someone else from using the library. First they
 need to be able to get it and build against it. Then it has to be correct. Then
-the headline use case (a generated test report) has to look like a report.
-More formats come after that.
+the headline use case (a generated test report) has to look like a report. More
+formats come after that.
 
 ## 1. Usable by others (blocks 0.1.0)
 
 ### CI
-GitHub Actions for msys2 clang64, MSVC, and **Linux GCC and Clang, which have
-never been built**. The README claims GCC ≥ 11 and libstdc++ support, and nothing
-checks either. Include a GCC 11 job so the stated minimum is tested, not just
-the newest compiler. Run the `consumer` test (`tests/consumer/`) in at least
-one job.
+
+Linux is done (`.github/workflows/ci.yml`, see CONTRIBUTING.md): GCC 11 and 14,
+Clang 14 and 18, with the `consumer` test. Still to add:
+
+- **Windows**: msys2 clang64 (the `dev` setup, libc++) and MSVC, so all three
+  standard libraries the README claims are built.
+- **Clang 14 when ubuntu-22.04 is retired**: it runs there so it gets an older
+  libstdc++ than its own. Keep that pairing by running the job in an
+  `ubuntu:22.04` container on a newer runner.
 
 ### Tag 0.1.0
+
 Do this once the items above pass. Move `[Unreleased]` in `CHANGELOG.md` to
 `[0.1.0]` and tag it.
 
 ## 2. Correctness
 
 ### Content lost inside tables and lists
-`unknown` round-trips only block- and inline-level content. Unrecognised children
-*inside* tables and lists, and unknown *attributes* on known elements, are
-dropped. So load, edit, save of a real-world file can silently lose content.
+
+`unknown` round-trips only block- and inline-level content. Unrecognised
+children _inside_ tables and lists, and unknown _attributes_ on known elements,
+are dropped. So load, edit, save of a real-world file can silently lose content.
 
 ## 3. Reports that look like reports
 
-`write_example_test_report()` in `examples/create_document.cpp` is the yardstick.
+`write_example_test_report()` in `examples/create_document.cpp` is the
+yardstick.
 
 ### Table and cell properties
+
 The style model covers only text, paragraph and graphics properties. It has no
 borders, column widths, cell shading or vertical alignment, so a results table
-in ODT or DOCX has no borders at all. Add table, column and cell style properties. The
-report template (`examples/make_report_template.cpp`) should then get a table
-style.
+in ODT or DOCX has no borders at all. Add table, column and cell style
+properties. The report template (`examples/make_report_template.cpp`) should
+then get a table style.
 
 ### Paragraph spacing and alignment
+
 Paragraph properties are only page breaks, so the template's headings have no
 space above or below them, and a style defined in code replaces LibreOffice's
 spacing for a style of the same name (e.g. Heading 1). Add margins, alignment
 and keep-with-next.
 
 ### Page numbers in the table of contents
+
 The ODT writer writes table of contents entries without page numbers, since it
 doesn't lay out pages; LibreOffice adds them when the index is updated. Options:
 a macro-free way to have LibreOffice update indexes on load (check whether a
 setting exists), or a note in the template.
 
 ### Fonts in HTML
+
 A style's `font_name` is ODF's `style:font-name`, the name of a font
-declaration, not the font family: LibreOffice declares "Liberation Sans1" for
-a second "Liberation Sans". HTML writes the name as the CSS font family. Read
-the declaration's `svg:font-family` instead.
+declaration, not the font family: LibreOffice declares "Liberation Sans1" for a
+second "Liberation Sans". HTML writes the name as the CSS font family. Read the
+declaration's `svg:font-family` instead.
 
 ### Several page styles
+
 `text_doc::page` is one page style for the whole document. A different first
-page, or a landscape section, needs a registry of page styles and a way to
-start one in the body (ODF master pages, DOCX sections). See DESIGN.md, *Pages,
-headers and footers*.
+page, or a landscape section, needs a registry of page styles and a way to start
+one in the body (ODF master pages, DOCX sections). See DESIGN.md, _Pages,
+headers and footers_.
 
 ## 4. Formats
 
 ### DOCX gaps
-`docx::file` reads and writes every node (see DESIGN.md, *DOCX*). What it
+
+`docx::file` reads and writes every node (see DESIGN.md, _DOCX_). What it
 doesn't do yet, roughly by how much a report or a loaded file would miss it:
+
 - **Table properties**: table styles, borders, widths and shading are neither
-  read nor written (see *Table and cell properties*), so a loaded Word table
+  read nor written (see _Table and cell properties_), so a loaded Word table
   loses its borders when saved. The table node has no style to keep them in.
 - **Sections**: section breaks inside the body stay in the direct formatting of
   the paragraph that ends the section, so they survive load and save but the
   model can't see them. First-page and even-page headers are kept, not read.
-  Both wait for *Several page styles*.
+  Both wait for _Several page styles_.
 - **Lists**: a table or other non-paragraph block in a list item ends the list
   when read back. Numbering overrides other than the start, `%1.%2.` style
   multi-level numbers (read as the last level only) and list styles linked
   through `w:numStyleLink` aren't modelled.
 - **Fields**: fields other than page number, page count, date and title stay
   `unknown`, their shown text included, so it isn't found by text searches.
-  Tracked changes, content controls other than a table of contents, and
-  comment ranges are `unknown` too.
+  Tracked changes, content controls other than a table of contents, and comment
+  ranges are `unknown` too.
 - **Spans**: runs don't nest, so a span in a span is written with the inner
   style only. A style with no family used on both paragraphs and spans is
   written as `X` and a linked `XChar`, which reads back as two styles.
-- **Direct formatting** that is only paragraph-mark run properties (`w:pPr/w:rPr`)
-  or a run's language is dropped when read.
+- **Direct formatting** that is only paragraph-mark run properties
+  (`w:pPr/w:rPr`) or a run's language is dropped when read.
 - **Images**: a frame's style has no DOCX form and is dropped. An image whose
   size can't be read from its header (SVG, BMP) is written one inch square.
-- `_Toc` bookmarks are dropped when read, since the writer makes its own for
-  the table of contents; a cross-reference to one in `unknown` markup breaks.
+- `_Toc` bookmarks are dropped when read, since the writer makes its own for the
+  table of contents; a cross-reference to one in `unknown` markup breaks.
 - Strict OOXML (`purl.oclc.org` namespaces) isn't read.
 
 ## 5. Dependencies
 
 The goal is a library a consumer can build without a package manager. The
-dependencies are pugixml and miniz, both MIT and small, and md4c (MIT) for
-the optional Markdown input.
+dependencies are pugixml and miniz, both MIT and small, and md4c (MIT) for the
+optional Markdown input.
 
 ### Keep pugixml
+
 It's MIT, one `.cpp`, widely packaged, and private. Writing XML ourselves would
 be easy, but parsing (entities, namespaces, CDATA) isn't worth owning.
 
 ### Fallbacks for pugixml and miniz
+
 Offer a vendored or FetchContent fallback for each alongside `find_package`.
 miniz is a single `.c`/`.h` pair, so vendoring it is cheap. Its licence file
-goes next to it (CONTRIBUTING, *Adding a dependency*).
+goes next to it (CONTRIBUTING, _Adding a dependency_).
 
 ## 6. Internal quality
 
 ### Share the image resource plan
+
 `src/resource_plan.{h,cpp}` (where images go when a file is saved with its
 images next to it) is used by Markdown. `src/html/file.cpp` still has its own
 copy of the same code in an anonymous namespace; switch it to the shared one.
 
 ### Namespace prefixes in ODT
+
 pugixml matches names by prefix, not namespace. The DOCX reader renames every
-prefix to its own by namespace URI first (`xml::normalize`, `src/xml/`); the
-ODT reader still assumes LibreOffice's prefixes (`text:`, `office:`, ...). Use
-the same helper there.
+prefix to its own by namespace URI first (`xml::normalize`, `src/xml/`); the ODT
+reader still assumes LibreOffice's prefixes (`text:`, `office:`, ...). Use the
+same helper there.
 
 ### Separate HTML serialisation from the document mapping
+
 `src/html/file.cpp` currently mixes two concerns. One is mapping nodes to
 elements. The other is HTML serialisation: escaping, void elements, attribute
 quoting, indentation, CSS identifier and id sanitising. Keep the second out of
 the docsmith mapping code.
 
-Why not pugixml: it's an XML library, and XML serialisation isn't HTML. It writes
-empty elements as `<p/>`, which an HTML parser treats as an *open* tag. Its
-`format_no_empty_element_tags` flag would instead give `<img></img>` for void
-elements, which isn't valid HTML either. It also knows nothing about raw-text
-elements (`<style>`, `<script>`).
+Why not pugixml: it's an XML library, and XML serialisation isn't HTML. It
+writes empty elements as `<p/>`, which an HTML parser treats as an _open_ tag.
+Its `format_no_empty_element_tags` flag would instead give `<img></img>` for
+void elements, which isn't valid HTML either. It also knows nothing about
+raw-text elements (`<style>`, `<script>`).
 
 Options:
+
 - **Own small utility** (private, e.g. `src/html/markup.{h,cpp}`): a minimal
   writer or builder with `open(tag, attrs)`, `text()`, `close()`, a void-element
-  table and escaping. It's roughly 100–150 lines, has no dependency, and the rules
-  are small and well specified. The node mapping would then only describe
+  table and escaping. It's roughly 100–150 lines, has no dependency, and the
+  rules are small and well specified. The node mapping would then only describe
   structure. Recommended for now.
-- **Third-party**: evaluate licence, upkeep and vcpkg availability before relying
-  on any of these.
+- **Third-party**: evaluate licence, upkeep and vcpkg availability before
+  relying on any of these.
   - [CTML](https://github.com/tinfoilboy/CTML) (MIT, header-only C++) builds and
     renders HTML trees.
   - [lexbor](https://github.com/lexbor/lexbor) (Apache-2.0, C) is a full HTML5
-    parser, DOM and serialiser. Heavier, but it would also cover HTML *import*.
+    parser, DOM and serialiser. Heavier, but it would also cover HTML _import_.
   - Gumbo is parse-only, so it doesn't help with writing.
-- Revisit the third-party route if HTML *parsing* becomes a goal. Then one
+- Revisit the third-party route if HTML _parsing_ becomes a goal. Then one
   library covering both directions would earn its place.
 
 ### Model gaps
+
 - `set_style(style)` keeps only the name. `text_doc::add_style()` registers a
-  definition and returns its name, but nothing yet checks that every style a node
-  names is defined.
-- Package entries that no `image` referred to at load (e.g. pictures used only by
-  `unknown` markup) stay in the ODT package and are carried over on save, even if
-  nothing uses them any more. Resources whose image was removed are dropped.
+  definition and returns its name, but nothing yet checks that every style a
+  node names is defined.
+- Package entries that no `image` referred to at load (e.g. pictures used only
+  by `unknown` markup) stay in the ODT package and are carried over on save,
+  even if nothing uses them any more. Resources whose image was removed are
+  dropped.
 - Code blocks are paragraphs styled `builtin::preformatted`, so a Markdown
-  fence's info string (```` ```c++ ````) has nowhere to go and is dropped. Code
-  blocks are now as common as headings, so a `code_block` block node (text plus
+  fence's info string (` ```c++ `) has nowhere to go and is dropped. Code blocks
+  are now as common as headings, so a `code_block` block node (text plus
   `language`) would make them first class. ODT would still write it as a
   Preformatted Text paragraph, keeping the language in a derived style or an
   attribute, and HTML as `<pre><code class="language-…">`.
@@ -172,9 +194,11 @@ Options:
   updating only the modelled attributes in place would keep the rest.
 
 ## Testing
+
 - **LibreOffice validation in CI.** `libreoffice_opens_output` has LibreOffice
-  open every file the tests write, when `soffice` is found. A CI job with
-  LibreOffice installed would run it on every change. Word itself is stricter
+  open every file the tests write, when `soffice` is found. Installing
+  LibreOffice (`apt-get install libreoffice-writer`) in one Linux CI job would
+  run it on every change. Word itself is stricter
   than LibreOffice about element order; nothing checks DOCX output against it.
 - **Fixtures:** the old experimental samples were deleted. Add small, targeted
   `.odt` fixtures per feature (lists, figures, bookmarks, page breaks, nested
@@ -182,35 +206,40 @@ Options:
   LibreOffice saved it, covers headers, footers, fields and a table of contents.
 
 ## Performance (deferred)
-- `box<T>` costs one heap allocation per span, hyperlink, list item and table cell.
-  The block side could be boxed per list or table instead
-  (`list::items`, `table::rows`), leaving `list_item` and `table_cell` unboxed. The
-  inline side (span, hyperlink) needs one box per instance.
+
+- `box<T>` costs one heap allocation per span, hyperlink, list item and table
+  cell. The block side could be boxed per list or table instead (`list::items`,
+  `table::rows`), leaving `list_item` and `table_cell` unboxed. The inline side
+  (span, hyperlink) needs one box per instance.
 - If allocation ever shows up in profiles, `box` is the natural place to add an
   arena or pool.
 
 ## Debugger display
-`box<T>` holds a typed `T *`, and `tools/debug/` has an lldb formatter and a natvis
-file (setup in CONTRIBUTING.md). Checked with lldb 23 and CodeLLDB's lldb 22
-(clang64, libc++) and cdb (MSVC). Not yet checked in the VSCodium UI.
 
-- Not checked with libstdc++ (no g++ toolchain here). The lldb formatter reads the
-  variant through lldb's own std::variant formatter, so it should work there too.
+`box<T>` holds a typed `T *`, and `tools/debug/` has an lldb formatter and a
+natvis file (setup in CONTRIBUTING.md). Checked with lldb 23 and CodeLLDB's lldb
+22 (clang64, libc++) and cdb (MSVC). Not yet checked in the VSCodium UI.
+
+- Not checked with libstdc++ (no g++ toolchain here). The lldb formatter reads
+  the variant through lldb's own std::variant formatter, so it should work there
+  too.
 - The natvis reads MSVC STL internals. With `cppdbg` (gdb or lldb-mi, other
   standard libraries) the node variants fall back to showing `.v`, and the child
   lists don't expand.
 - Possibly gdb pretty printers.
 
 ## Docs and project
+
 - Add a Doxygen target. The `///` comments are there, but nothing generates an
   API reference.
 - The README's "Typical use case scenarios" section is a placeholder.
 
 ## Verifying changes
+
 - Build and test (msys2 clang64 via `CMakeUserPresets.json`):
   `cmake --preset dev`, `cmake --build --preset dev-debug`, `ctest --preset dev`
-- MSVC: run `vcvars64.bat`, then configure with Ninja and the MSVC vcpkg toolchain
-  (`x64-windows` triplet).
+- MSVC: run `vcvars64.bat`, then configure with Ninja and the MSVC vcpkg
+  toolchain (`x64-windows` triplet).
 - LibreOffice check: `ctest --preset dev -L libreoffice` runs the tests and
   opens what they wrote. By hand (a file that fails to load prints "source file
   could not be loaded"):
