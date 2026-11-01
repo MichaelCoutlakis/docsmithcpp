@@ -10,18 +10,12 @@ More formats come after that.
 
 ## 1. Usable by others (blocks 0.1.0)
 
-### Test `find_package(DocSmithCpp)` from a consumer project
-The install rules and `cmake/DocSmithCppConfig.cmake.in` exist but have never
-been tried. Add a small consumer project (e.g. `tests/consumer/`) that is
-configured against an installed build and links `docsmith::docsmithcpp`, and run
-it in CI. Also document the `add_subdirectory` / FetchContent route in the
-README.
-
 ### CI
 GitHub Actions for msys2 clang64, MSVC, and **Linux GCC and Clang, which have
 never been built**. The README claims GCC ≥ 11 and libstdc++ support, and nothing
 checks either. Include a GCC 11 job so the stated minimum is tested, not just
-the newest compiler. Run the consumer test above in at least one job.
+the newest compiler. Run the `consumer` test (`tests/consumer/`) in at least
+one job.
 
 ### Tag 0.1.0
 Do this once the items above pass. Move `[Unreleased]` in `CHANGELOG.md` to

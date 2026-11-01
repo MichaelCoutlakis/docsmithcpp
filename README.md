@@ -98,11 +98,55 @@ ctest --test-dir build
 | `DOCSMITHCPP_BUILD_EXAMPLES` | ON when top-level | Build `examples/`                                         |
 | `DOCSMITHCPP_DEBUG_FILES`    | OFF (ON in `dev`) | Also write `<name>.content.xml` next to each saved `.odt` |
 
+### Using it from another CMake project
+
+Whichever route you take, link `docsmith::docsmithcpp`, the same target name in
+every case. pugixml and miniz are linked privately, but a static library still
+needs them at link time, so they must be findable (e.g. through the same vcpkg
+toolchain).
+
+Installed, with `find_package`:
+
+```bash
+cmake --install build --prefix <prefix>
+```
+
+```cmake
+find_package(DocSmithCpp CONFIG REQUIRED) # with <prefix> in CMAKE_PREFIX_PATH
+target_link_libraries(my_app PRIVATE docsmith::docsmithcpp)
+```
+
+From a copy of the source tree, with `add_subdirectory`:
+
+```cmake
+add_subdirectory(third_party/docsmithcpp)
+target_link_libraries(my_app PRIVATE docsmith::docsmithcpp)
+```
+
+With FetchContent:
+
+```cmake
+include(FetchContent)
+FetchContent_Declare(docsmithcpp
+    GIT_REPOSITORY https://github.com/MichaelCoutlakis/docsmithcpp.git
+    GIT_TAG        main) # or a release tag
+FetchContent_MakeAvailable(docsmithcpp)
+target_link_libraries(my_app PRIVATE docsmith::docsmithcpp)
+```
+
+Tests and examples are only built when DocSmith++ is the top-level project, so
+the last two don't build them.
+
 ### 🧪 Testing
 
 The tests are unit and integration tests for parsing, writing and transforming
 documents. They use small `.odt` fixtures in `tests/odt/`. Files the tests
 generate go to `tests/odt/out/`.
+
+The `consumer` test installs the library into the build directory and builds
+`tests/consumer/` against it with `find_package`, using the same toolchain. It
+configures a project from scratch, so skip it with `ctest -LE consumer` when
+iterating.
 
 ### Examples
 

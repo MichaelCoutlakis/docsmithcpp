@@ -130,6 +130,10 @@ held in `std::variant`. This is a breaking change to almost every public API.
 - `named_registry::find` has a `const` overload, and registries compare with `==`.
 - `docsmith::docsmithcpp` alias target, so in-tree and installed builds use the same
   target name. The package now installs a version file.
+- A `consumer` ctest that installs the library into the build directory and builds
+  `tests/consumer/` against it with `find_package(DocSmithCpp)`, with the same
+  toolchain. The README shows the `find_package`, `add_subdirectory` and
+  FetchContent routes.
 - Debugger visualisers in `tools/debug/`: `docsmith_lldb.py` (CodeLLDB, lldb-dap, lldb)
   and `docsmith.natvis` (Visual Studio, VS Code `cppvsdbg`). They show each node's
   summary, fields and children without the variant, `has_children` and `box`
