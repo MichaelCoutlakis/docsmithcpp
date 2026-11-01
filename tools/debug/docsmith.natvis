@@ -26,8 +26,9 @@
     </Expand>
   </Type>
 
-  <!-- inline_node / block_node: the active alternative, without `.v`. Both
-       variants have six alternatives (see inline_nodes.h and nodes.h). -->
+  <!-- inline_node / block_node: the active alternative, without `.v`.
+       inline_node has seven alternatives and block_node eight (see
+       inline_nodes.h and nodes.h). -->
   <Type Name="docsmith::inline_node" Priority="High">
     <DisplayString Condition="(int)v._Which == 0">{v._Head}</DisplayString>
     <DisplayString Condition="(int)v._Which == 1">{v._Tail._Head}</DisplayString>
@@ -35,6 +36,7 @@
     <DisplayString Condition="(int)v._Which == 3">{v._Tail._Tail._Tail._Head}</DisplayString>
     <DisplayString Condition="(int)v._Which == 4">{v._Tail._Tail._Tail._Tail._Head}</DisplayString>
     <DisplayString Condition="(int)v._Which == 5">{v._Tail._Tail._Tail._Tail._Tail._Head}</DisplayString>
+    <DisplayString Condition="(int)v._Which == 6">{v._Tail._Tail._Tail._Tail._Tail._Tail._Head}</DisplayString>
     <DisplayString>valueless</DisplayString>
     <Expand>
       <ExpandedItem Condition="(int)v._Which == 0">v._Head</ExpandedItem>
@@ -43,6 +45,7 @@
       <ExpandedItem Condition="(int)v._Which == 3">v._Tail._Tail._Tail._Head</ExpandedItem>
       <ExpandedItem Condition="(int)v._Which == 4">v._Tail._Tail._Tail._Tail._Head</ExpandedItem>
       <ExpandedItem Condition="(int)v._Which == 5">v._Tail._Tail._Tail._Tail._Tail._Head</ExpandedItem>
+      <ExpandedItem Condition="(int)v._Which == 6">v._Tail._Tail._Tail._Tail._Tail._Tail._Head</ExpandedItem>
     </Expand>
   </Type>
   <Type Name="docsmith::block_node" Priority="High">
@@ -52,6 +55,8 @@
     <DisplayString Condition="(int)v._Which == 3">{v._Tail._Tail._Tail._Head}</DisplayString>
     <DisplayString Condition="(int)v._Which == 4">{v._Tail._Tail._Tail._Tail._Head}</DisplayString>
     <DisplayString Condition="(int)v._Which == 5">{v._Tail._Tail._Tail._Tail._Tail._Head}</DisplayString>
+    <DisplayString Condition="(int)v._Which == 6">{v._Tail._Tail._Tail._Tail._Tail._Tail._Head}</DisplayString>
+    <DisplayString Condition="(int)v._Which == 7">{v._Tail._Tail._Tail._Tail._Tail._Tail._Tail._Head}</DisplayString>
     <DisplayString>valueless</DisplayString>
     <Expand>
       <ExpandedItem Condition="(int)v._Which == 0">v._Head</ExpandedItem>
@@ -60,6 +65,8 @@
       <ExpandedItem Condition="(int)v._Which == 3">v._Tail._Tail._Tail._Head</ExpandedItem>
       <ExpandedItem Condition="(int)v._Which == 4">v._Tail._Tail._Tail._Tail._Head</ExpandedItem>
       <ExpandedItem Condition="(int)v._Which == 5">v._Tail._Tail._Tail._Tail._Tail._Head</ExpandedItem>
+      <ExpandedItem Condition="(int)v._Which == 6">v._Tail._Tail._Tail._Tail._Tail._Tail._Head</ExpandedItem>
+      <ExpandedItem Condition="(int)v._Which == 7">v._Tail._Tail._Tail._Tail._Tail._Tail._Tail._Head</ExpandedItem>
     </Expand>
   </Type>
   <!-- Fallback for other standard libraries: skip one level, keep `.v`. -->
@@ -95,6 +102,12 @@
   </Type>
   <Type Name="docsmith::page_break">
     <DisplayString>page_break</DisplayString>
+  </Type>
+  <Type Name="docsmith::field">
+    <DisplayString>field {type,en}</DisplayString>
+  </Type>
+  <Type Name="docsmith::table_of_contents">
+    <DisplayString>table_of_contents {title} levels={levels}</DisplayString>
   </Type>
 
   <!-- Nodes with children: own fields, then the children as [0], [1], ...
@@ -200,6 +213,9 @@
     </Expand>
   </Type>
 
+  <Type Name="docsmith::page_style">
+    <DisplayString>header {header} footer {footer}</DisplayString>
+  </Type>
   <Type Name="docsmith::text_doc">
     <DisplayString>text_doc body {body}</DisplayString>
   </Type>

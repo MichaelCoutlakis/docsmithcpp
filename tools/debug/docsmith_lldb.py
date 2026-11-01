@@ -163,6 +163,16 @@ def bookmark_target_summary(valobj, internal_dict):
     return "to bookmark " + (valobj.GetChildMemberWithName("name").GetSummary() or "")
 
 
+def field_summary(valobj, internal_dict):
+    return "field " + (valobj.GetChildMemberWithName("type").GetValue() or "")
+
+
+def table_of_contents_summary(valobj, internal_dict):
+    title = valobj.GetChildMemberWithName("title").GetSummary() or '""'
+    levels = valobj.GetChildMemberWithName("levels").GetValue()
+    return "table_of_contents %s levels=%s" % (title, levels)
+
+
 def bookmark_summary(valobj, internal_dict):
     return "bookmark " + (valobj.GetChildMemberWithName("name").GetSummary() or "")
 
@@ -331,6 +341,8 @@ def __lldb_init_module(debugger, internal_dict):
         f'type summary add -w docsmith "docsmith::text" -F {m}.text_summary',
         f'type summary add -w docsmith "docsmith::bookmark" -F {m}.bookmark_summary',
         'type summary add -w docsmith "docsmith::page_break" -s "page_break"',
+        f'type summary add -w docsmith "docsmith::field" -F {m}.field_summary',
+        f'type summary add -w docsmith "docsmith::table_of_contents" -F {m}.table_of_contents_summary',
         f'type summary add -w docsmith "docsmith::url_target" -F {m}.url_target_summary',
         f'type summary add -w docsmith "docsmith::bookmark_target" -F {m}.bookmark_target_summary',
         f'type summary add -w docsmith "docsmith::style_name" -F {m}.style_name_summary',
