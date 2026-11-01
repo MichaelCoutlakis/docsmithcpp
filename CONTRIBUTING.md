@@ -23,21 +23,36 @@ Further notes:
 - `snake_case` for types, functions, and variables; members prefixed `m_`.
 - `PascalCase` for template parameters and for the case name in
   `TEST(Suite, CaseName)` per GTest convention.
-- Every file starts with the SPDX MIT header block.
+- Every file starts with the SPDX header block.
 - Public API documented with Doxygen `///` comments — only where the comment
   adds what the code does not already convey.
 - Formatting is governed by `.clang-format`;
 
 Choose names with brevity, meaning, and clarity.
 
+## Adding a dependency
+
+Dependencies are a cost to every consumer, so discuss one before adding it (see
+[TODO.md](TODO.md), *Dependencies*). When one is added:
+
+- Keep it private: no public header includes it, and it is linked `PRIVATE` in
+  `src/CMakeLists.txt`. A static library still needs it at link time, so add a
+  `find_dependency` for it to `cmake/DocSmithCppConfig.cmake.in`.
+- Its licence must be compatible with Apache-2.0 (e.g. MIT, BSD, zlib,
+  Apache-2.0).
+- If it is Apache-licensed and ships a `NOTICE` file, add its attribution to
+  [NOTICE](NOTICE). Other licences don't use `NOTICE`.
+- If its source is vendored into this repository, keep its licence file next to
+  it.
+
 ## Debugging
 
 A document is a tree of values, so the debugger can show all of it. Without
 help, though, each level sits under plumbing: the node variant's `.v`, the
 `has_children` base and the `box` around recursive children. The visualisers in
-`tools/debug/` hide that plumbing. A node shows its summary (`heading 1 "Hello
-World!"`, `paragraph [Note] "..."`), its own fields (style, level, url) and its
-children as `[0]`, `[1]`, ...
+`tools/debug/` hide that plumbing. A node shows its summary
+(`heading 1 "Hello World!"`, `paragraph [Note] "..."`), its own fields (style,
+level, url) and its children as `[0]`, `[1]`, ...
 
 - `docsmith_lldb.py`: lldb formatters for CodeLLDB, lldb-dap and the lldb
   command line. Load it with
@@ -53,12 +68,14 @@ VS Code with clang (msys2 clang64, the `dev` preset) and CodeLLDB, in
 
 ```json
 {
-    "type": "lldb",
-    "request": "launch",
-    "name": "Debug CMake Target",
-    "program": "${command:cmake.launchTargetPath}",
-    "cwd": "${workspaceFolder}",
-    "initCommands": ["command script import ${workspaceFolder}/tools/debug/docsmith_lldb.py"]
+  "type": "lldb",
+  "request": "launch",
+  "name": "Debug CMake Target",
+  "program": "${command:cmake.launchTargetPath}",
+  "cwd": "${workspaceFolder}",
+  "initCommands": [
+    "command script import ${workspaceFolder}/tools/debug/docsmith_lldb.py"
+  ]
 }
 ```
 
@@ -70,12 +87,12 @@ VS Code with MSVC (`cppvsdbg`):
 
 ```json
 {
-    "type": "cppvsdbg",
-    "request": "launch",
-    "name": "Debug (MSVC)",
-    "program": "${command:cmake.launchTargetPath}",
-    "cwd": "${workspaceFolder}",
-    "visualizerFile": "${workspaceFolder}/tools/debug/docsmith.natvis"
+  "type": "cppvsdbg",
+  "request": "launch",
+  "name": "Debug (MSVC)",
+  "program": "${command:cmake.launchTargetPath}",
+  "cwd": "${workspaceFolder}",
+  "visualizerFile": "${workspaceFolder}/tools/debug/docsmith.natvis"
 }
 ```
 
