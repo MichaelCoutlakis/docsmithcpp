@@ -50,8 +50,9 @@ Dependencies are a cost to every consumer, so discuss one before adding it (see
 ## Continuous integration
 
 [.github/workflows/ci.yml](.github/workflows/ci.yml) builds and tests every
-push to `main` and every pull request, on Linux with GCC 14 and Clang 18
-(libstdc++), tests, examples and Markdown input included. The `consumer` test
+push to `main` and every pull request, on Linux (libstdc++) with the newest
+compilers on the runner, GCC 14 and Clang 18, and the oldest the README
+supports, GCC 11 and Clang 14. Tests, examples and Markdown input are included. The `consumer` test
 runs; `libreoffice_opens_output` doesn't, as LibreOffice isn't installed.
 
 Dependencies come from vcpkg in classic mode at the commit in `VCPKG_COMMIT`.

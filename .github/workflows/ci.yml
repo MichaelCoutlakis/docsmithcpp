@@ -20,19 +20,34 @@ env:
 jobs:
   linux:
     name: Linux ${{ matrix.compiler }}
-    runs-on: ubuntu-24.04
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
+      # The newest compilers on the runner, and the oldest the README supports.
       matrix:
         include:
           - compiler: gcc-14
+            os: ubuntu-24.04
             package: g++-14
             cc: gcc-14
             cxx: g++-14
+          - compiler: gcc-11
+            os: ubuntu-24.04
+            package: g++-11
+            cc: gcc-11
+            cxx: g++-11
           - compiler: clang-18
+            os: ubuntu-24.04
             package: clang-18
             cc: clang-18
             cxx: clang++-18
+          # Clang uses the newest installed GCC's libstdc++, so Clang 14 runs on
+          # 22.04, where that is GCC 12's rather than one newer than Clang 14.
+          - compiler: clang-14
+            os: ubuntu-22.04
+            package: clang-14
+            cc: clang-14
+            cxx: clang++-14
     env:
       CC: ${{ matrix.cc }}
       CXX: ${{ matrix.cxx }}
