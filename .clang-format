@@ -17,6 +17,8 @@ BreakBeforeBinaryOperators:                 false
 BreakBeforeBraces:                          Allman
 IndentCaseLabels:                           false
 IndentWidth: 4
+# A trailing comma in a braced initializer puts one element per line, with the
+# closing brace on its own line: {.a = 1, .b = 2,}
 Cpp11BracedListStyle:                       true
 #PenaltyBreakContainer: 0
 BinPackArguments: false

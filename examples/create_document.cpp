@@ -24,10 +24,17 @@ void write_example_test_report()
     };
 
     std::vector<test_case_doc> records{
-        {.name = "test case a", .passed = true, .detail = paragraph("some details on test case a")},
-        {.name = "test case b",
+        {
+            .name = "test case a",
+            .passed = true,
+            .detail = paragraph("some details on test case a"),
+        },
+        {
+            .name = "test case b",
             .passed = false,
-            .detail = paragraph("some details on test case b")}};
+            .detail = paragraph("some details on test case b"),
+        },
+    };
 
     text_doc doc;
     doc.meta.title = "DocSmith++ Test Report (meta data title)";
