@@ -29,7 +29,7 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
 find_package(pugixml CONFIG REQUIRED)
-find_package(libzippp CONFIG REQUIRED)
+find_package(miniz CONFIG REQUIRED)
 
 add_subdirectory(src)
 

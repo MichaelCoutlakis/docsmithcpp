@@ -16,7 +16,11 @@ add_library(docsmithcpp
     "../include/docsmithcpp/html/file.h"
 
     # Private: the archive and XML details stay out of the public headers.
+    "bytes.h"
+    "bytes.cpp"
     "format.h"
+    "zip/archive.h"
+    "zip/archive.cpp"
     "odf/package.h"
     "odf/package.cpp"
     "odf/meta.h"
@@ -44,7 +48,7 @@ target_compile_features(docsmithcpp PUBLIC cxx_std_20)
 
 # All private: no public header includes them. A static library still needs
 # them at link time, which CMake propagates and the package config finds.
-target_link_libraries(docsmithcpp PRIVATE pugixml::pugixml libzippp::libzippp)
+target_link_libraries(docsmithcpp PRIVATE pugixml::pugixml miniz::miniz)
 
 if(DOCSMITHCPP_DEBUG_FILES)
     target_compile_definitions(docsmithcpp PRIVATE DOCSMITHCPP_DEBUG_FILES)

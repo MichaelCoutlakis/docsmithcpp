@@ -38,7 +38,10 @@ held in `std::variant`. This is a breaking change to almost every public API.
 - **`text_doc::operator==` compares everything**, the style, list style and resource
   registries included. Compare `a.body == b.body` for content only.
 - **Dependencies are private**: `odt/writer.h` moved out of the public headers, so
-  pugixml and libzippp are no longer exposed to users.
+  pugixml and the zip library are no longer exposed to users.
+- **miniz replaces libzippp and libzip** (and with them zlib and the compression and
+  crypto backends vcpkg pulled in). Archives are read and written in memory by a
+  private, format-neutral layer in `src/zip/`, which DOCX can share.
 - **fmt is no longer a dependency.** The writers format their few numbers with
   `std::to_chars` and string concatenation.
 - `io_writer` streams its output instead of using `std::format`, so the public
@@ -145,7 +148,11 @@ held in `std::variant`. This is a breaking change to almost every public API.
 - The parser now reads heading outline levels and style names.
 - `odt/file.h` was missing `#pragma once`.
 - The installed `DocSmithCppConfig.cmake` now finds its dependencies (pugixml,
-  libzippp, fmt), so `find_package(DocSmithCpp)` works from another project.
+  miniz), so `find_package(DocSmithCpp)` works from another project.
+- `.odt` files with non-ASCII names can be loaded and saved on Windows. Files are
+  opened through `std::filesystem::path`, not `path::string()` (the ANSI code page).
+- The ODT `mimetype` entry has its CRC and sizes in its local header, with no data
+  descriptor or extra field, as ODF requires of the first entry.
 - `gtest_discover_tests` is used with `include(GoogleTest)`. The duplicate catch-all
   `add_test` is gone.
 - A parsed document with images couldn't be saved again: the image path pointed

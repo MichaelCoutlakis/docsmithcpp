@@ -69,8 +69,7 @@ This project uses [CMake](https://cmake.org/) for building and configuring.
 - CMake ≥ 3.20
 - Dependencies (e.g. via [vcpkg](https://vcpkg.io/)):
   - [pugixml](https://pugixml.org/)
-  - [libzippp](https://github.com/ctabin/libzippp) (and
-    [libzip](https://libzip.org/))
+  - [miniz](https://github.com/richgel999/miniz)
   - [gtest](https://github.com/google/googletest) (tests only)
 
 ### Build

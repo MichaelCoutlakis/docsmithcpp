@@ -20,12 +20,13 @@
 #include <sstream>
 #include <stdexcept>
 
-#include <libzippp/libzippp.h>
 #include <pugixml.hpp>
+
+#include "bytes.h"
+#include "zip/archive.h"
 
 namespace docsmith::odf
 {
-namespace lzpp = libzippp;
 namespace fs = std::filesystem;
 
 namespace
@@ -35,23 +36,27 @@ constexpr const char *manifest_path = "META-INF/manifest.xml";
 
 package package::read(const fs::path &p)
 {
-    lzpp::ZipArchive zip(p.string());
-    if(!zip.open(lzpp::ZipArchive::ReadOnly))
-        throw std::runtime_error("Could not open archive: " + p.string());
+    std::vector<zip::entry> entries;
+    try
+    {
+        entries = zip::read(detail::read_bytes(p));
+    }
+    catch(const std::runtime_error &e)
+    {
+        throw std::runtime_error(detail::utf8(p) + ": " + e.what());
+    }
 
     package pkg;
     std::string manifest;
-    for(const auto &e : zip.getEntries())
+    for(auto &e : entries)
     {
-        const std::string name = e.getName();
-        if(name == "mimetype")
-            pkg.m_mimetype = e.readAsText();
-        else if(name == manifest_path)
-            manifest = e.readAsText();
+        if(e.name == "mimetype")
+            pkg.m_mimetype = std::move(e.data);
+        else if(e.name == manifest_path)
+            manifest = std::move(e.data);
         else
-            pkg.m_entries[name] = entry{e.isDirectory() ? std::string{} : e.readAsText()};
+            pkg.m_entries[e.name] = entry{std::move(e.data)};
     }
-    zip.close();
 
     // Attach the manifest's media types. Directories may be listed without a
     // zip entry of their own; listed files that don't exist are ignored.
@@ -82,35 +87,15 @@ package package::read(const fs::path &p)
 
 void package::write(const fs::path &p) const
 {
-    if(p.has_parent_path())
-        fs::create_directories(p.parent_path());
-
-    lzpp::ZipArchive zip(p.string());
-    if(!zip.open(lzpp::ZipArchive::New))
-        throw std::runtime_error("Could not create archive: " + p.string());
+    zip::writer zip;
 
     // ODF: the mimetype must be the first entry, stored uncompressed.
-    zip.setCompressionMethod(lzpp::CompressionMethod::STORE);
-    if(!zip.addData("mimetype", m_mimetype.data(), m_mimetype.size()))
-        throw std::runtime_error("Could not add the mimetype entry");
-
-    // libzip reads the added buffers when the archive is closed, so all the data
-    // (including the manifest below) must stay alive until close().
-    zip.setCompressionMethod(lzpp::CompressionMethod::DEFLATE);
+    zip.add("mimetype", m_mimetype, zip::method::store);
     for(const auto &[name, e] : m_entries)
-    {
-        const bool ok = name.ends_with('/') ? zip.addEntry(name)
-                                            : zip.addData(name, e.data.data(), e.data.size());
-        if(!ok)
-            throw std::runtime_error("Could not add archive entry: " + name);
-    }
+        zip.add(name, e.data);
+    zip.add(manifest_path, manifest_xml());
 
-    const std::string manifest = manifest_xml();
-    if(!zip.addData(manifest_path, manifest.data(), manifest.size()))
-        throw std::runtime_error("Could not add the manifest");
-
-    if(zip.close() != LIBZIPPP_OK)
-        throw std::runtime_error("Could not write archive: " + p.string());
+    detail::write_bytes(p, zip.finish());
 }
 
 const package::entry *package::find(const std::string &name) const

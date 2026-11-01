@@ -59,12 +59,6 @@ depends on this too.
 *inside* tables and lists, and unknown *attributes* on known elements, are
 dropped. So load, edit, save of a real-world file can silently lose content.
 
-### Non-ASCII paths
-libzippp gets `path::string()`, which on Windows is the ANSI code page, so
-Unicode file names may fail. Replacing the zip library (section 5) can fix this:
-read the file into memory through `std::filesystem::path` and hand the archive
-library bytes.
-
 ## 3. Reports that look like reports
 
 `write_example_test_report()` in `examples/create_document.cpp` is the yardstick.
@@ -152,35 +146,22 @@ output has no dependency and stays unconditional.
 This is the format most users of a C++ document library will need. Output
 first, then input. DOCX is an OPC package, a zip like ODF with
 `[Content_Types].xml` in place of the manifest, so it should share the zip layer
-(section 5). Note that pugixml matches namespace *prefixes*, not URIs. That's
+(`src/zip/`). Note that pugixml matches namespace *prefixes*, not URIs. That's
 fine for ODF as LibreOffice writes it, but DOCX reading should not assume `w:`.
 
 ## 5. Dependencies
 
 The goal is a library a consumer can build without a package manager. The
-current dependencies are pugixml, libzippp and libzip (with zlib and, through
-vcpkg's default features, more compression and crypto backends).
-
-### Replace libzippp + libzip
-All zip access is in `src/odf/package.cpp` behind `odf::package`, so the swap
-is local. Move the raw archive part into a format-neutral private layer (e.g.
-`src/zip/`) that ODF and DOCX packages share.
-
-- **[miniz](https://github.com/richgel999/miniz)**: MIT, a single `.c`/`.h`
-  pair with its own deflate and a zip reader and writer that work in memory. It
-  needs no zlib and is in vcpkg, and it can be vendored. Recommended. It replaces
-  libzippp, libzip and zlib.
-- **zlib plus our own zip container**: zlib gives deflate and CRC-32 but not the
-  zip format. A writer is easy (local headers, central directory, end record). A
-  reader for foreign files has to handle data descriptors, stored and deflated
-  entries, and ZIP64. That's about 400 lines to own. Only worth it if zlib is
-  already a given for consumers.
-- The minimum step is to drop just libzippp and use libzip's C API directly.
+dependencies are pugixml and miniz, both MIT and small.
 
 ### Keep pugixml
 It's MIT, one `.cpp`, widely packaged, and private. Writing XML ourselves would
-be easy, but parsing (entities, namespaces, CDATA) isn't worth owning. Offer a
-vendored or FetchContent fallback alongside `find_package`.
+be easy, but parsing (entities, namespaces, CDATA) isn't worth owning.
+
+### Fallbacks for pugixml and miniz
+Offer a vendored or FetchContent fallback for each alongside `find_package`.
+miniz is a single `.c`/`.h` pair, so vendoring it is cheap. Its licence file
+goes next to it (CONTRIBUTING, *Adding a dependency*).
 
 ## 6. Internal quality
 
