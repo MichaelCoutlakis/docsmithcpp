@@ -3,19 +3,12 @@
 Outstanding work, roughly in priority order. Each item says why it matters and
 where to start. See `CHANGELOG.md` for what's done.
 
-The order follows what stops someone else from using the library. First they
-need to be able to get it and build against it. Then it has to be correct. Then
-the headline use case (a generated test report) has to look like a report. More
-formats come after that.
+The library builds, installs and passes CI on Linux and MSVC. What's left for a
+usable first release (0.1.0) is that it doesn't lose content and that the
+headline use case, a generated test report, looks like a report. More formats
+and polish come after that.
 
-## 1. Usable by others (blocks 0.1.0)
-
-### Tag 0.1.0
-
-Do this once CI (`.github/workflows/ci.yml`, see CONTRIBUTING.md) passes on
-Linux and MSVC. Move `[Unreleased]` in `CHANGELOG.md` to `[0.1.0]` and tag it.
-
-## 2. Correctness
+## 1. Correctness (blocks 0.1.0)
 
 ### Content lost inside tables and lists
 
@@ -23,7 +16,20 @@ Linux and MSVC. Move `[Unreleased]` in `CHANGELOG.md` to `[0.1.0]` and tag it.
 children _inside_ tables and lists, and unknown _attributes_ on known elements,
 are dropped. So load, edit, save of a real-world file can silently lose content.
 
-## 3. Reports that look like reports
+In ODT (`parse_table`, `parse_list` in `src/odt/file.cpp`) that includes things
+every LibreOffice table has:
+
+- the table's own `table:style-name` and `table:name`;
+- `table:table-column` (column widths and styles), which the writer replaces
+  with one unstyled column repeated;
+- row styles;
+- a list's `text:list-header`, and an item's `text:start-value`.
+
+The table's style and columns need a place in the model first, which is the
+same change as _Table and cell properties_ below; do the two together. What the
+model still doesn't hold can then be kept as `unknown` or as raw attributes.
+
+## 2. Reports that look like reports (blocks 0.1.0)
 
 `write_example_test_report()` in `examples/create_document.cpp` is the
 yardstick.
@@ -33,22 +39,17 @@ yardstick.
 The style model covers only text, paragraph and graphics properties. It has no
 borders, column widths, cell shading or vertical alignment, so a results table
 in ODT or DOCX has no borders at all. Add table, column and cell style
-properties. The report template (`examples/make_report_template.cpp`) should
-then get a table style.
+properties, and a style and columns on `table` (see _Content lost inside tables
+and lists_). The report template (`examples/make_report_template.cpp`) should
+then get a table style. DOCX reads and writes none of this yet (see _DOCX
+gaps_); a report needs at least the writer.
 
 ### Paragraph spacing and alignment
 
 Paragraph properties are only page breaks, so the template's headings have no
 space above or below them, and a style defined in code replaces LibreOffice's
 spacing for a style of the same name (e.g. Heading 1). Add margins, alignment
-and keep-with-next.
-
-### Page numbers in the table of contents
-
-The ODT writer writes table of contents entries without page numbers, since it
-doesn't lay out pages; LibreOffice adds them when the index is updated. Options:
-a macro-free way to have LibreOffice update indexes on load (check whether a
-setting exists), or a note in the template.
+(`text_align` exists but isn't used) and keep-with-next.
 
 ### Fonts in HTML
 
@@ -57,14 +58,27 @@ declaration, not the font family: LibreOffice declares "Liberation Sans1" for a
 second "Liberation Sans". HTML writes the name as the CSS font family. Read the
 declaration's `svg:font-family` instead.
 
+### Page numbers in the table of contents
+
+The ODT writer writes table of contents entries without page numbers, since it
+doesn't lay out pages; LibreOffice adds them when the index is updated. Options:
+a macro-free way to have LibreOffice update indexes on load (check whether a
+setting exists), or a note in the template.
+
 ### Several page styles
 
 `text_doc::page` is one page style for the whole document. A different first
 page, or a landscape section, needs a registry of page styles and a way to start
 one in the body (ODF master pages, DOCX sections). See DESIGN.md, _Pages,
-headers and footers_.
+headers and footers_. The largest item here; it can follow 0.1.0 if the rest
+is done.
 
-## 4. Formats
+### Tag 0.1.0
+
+Once the above is in, move `[Unreleased]` in `CHANGELOG.md` to `[0.1.0]` and
+tag it.
+
+## 3. Formats
 
 ### DOCX gaps
 
@@ -97,24 +111,7 @@ doesn't do yet, roughly by how much a report or a loaded file would miss it:
   table of contents; a cross-reference to one in `unknown` markup breaks.
 - Strict OOXML (`purl.oclc.org` namespaces) isn't read.
 
-## 5. Dependencies
-
-The goal is a library a consumer can build without a package manager. The
-dependencies are pugixml and miniz, both MIT and small, and md4c (MIT) for the
-optional Markdown input.
-
-### Keep pugixml
-
-It's MIT, one `.cpp`, widely packaged, and private. Writing XML ourselves would
-be easy, but parsing (entities, namespaces, CDATA) isn't worth owning.
-
-### Fallbacks for pugixml and miniz
-
-Offer a vendored or FetchContent fallback for each alongside `find_package`.
-miniz is a single `.c`/`.h` pair, so vendoring it is cheap. Its licence file
-goes next to it (CONTRIBUTING, _Adding a dependency_).
-
-## 6. Internal quality
+## 4. Internal quality
 
 ### Share the image resource plan
 
@@ -187,8 +184,8 @@ Options:
 - **LibreOffice validation in CI.** `libreoffice_opens_output` has LibreOffice
   open every file the tests write, when `soffice` is found. Installing
   LibreOffice (`apt-get install libreoffice-writer`) in one Linux CI job would
-  run it on every change. Word itself is stricter
-  than LibreOffice about element order; nothing checks DOCX output against it.
+  run it on every change. Word itself is stricter than LibreOffice about element
+  order; nothing checks DOCX output against it.
 - **Fixtures:** the old experimental samples were deleted. Add small, targeted
   `.odt` fixtures per feature (lists, figures, bookmarks, page breaks, nested
   tables, header rows) as tests need them. `examples/report_template.odt`, as
@@ -205,23 +202,16 @@ Options:
 
 ## Debugger display
 
-`box<T>` holds a typed `T *`, and `tools/debug/` has an lldb formatter and a
-natvis file (setup in CONTRIBUTING.md). Checked with lldb 23 and CodeLLDB's lldb
-22 (clang64, libc++) and cdb (MSVC). Not yet checked in the VSCodium UI.
+The visualisers in `tools/debug/` (lldb formatter, natvis; setup in
+CONTRIBUTING.md) work with lldb and cdb. Not checked with libstdc++ or gdb;
+revisit if that becomes a pain point.
 
-- Not checked with libstdc++ (no g++ toolchain here). The lldb formatter reads
-  the variant through lldb's own std::variant formatter, so it should work there
-  too.
-- The natvis reads MSVC STL internals. With `cppdbg` (gdb or lldb-mi, other
-  standard libraries) the node variants fall back to showing `.v`, and the child
-  lists don't expand.
-- Possibly gdb pretty printers.
+## Docs
 
-## Docs and project
-
-- Add a Doxygen target. The `///` comments are there, but nothing generates an
-  API reference.
-- The README's "Typical use case scenarios" section is a placeholder.
+The examples are the documentation: each in `examples/` is built in CI, so it
+can't go stale, and the README lists them. Keep the `///` comments in the
+headers for IDE tooltips, and add an example rather than prose when a use case
+isn't covered. A Doxygen reference can wait until someone asks for one.
 
 ## CI (low priority)
 

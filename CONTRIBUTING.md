@@ -32,8 +32,9 @@ Choose names with brevity, meaning, and clarity.
 
 ## Adding a dependency
 
-Dependencies are a cost to every consumer, so discuss one before adding it (see
-[TODO.md](TODO.md), *Dependencies*). When one is added:
+Dependencies are a cost to every consumer, so discuss one before adding it. The
+current ones are pugixml and miniz, plus md4c for the optional Markdown input.
+When one is added:
 
 - Keep it private: no public header includes it, and it is linked `PRIVATE` in
   `src/CMakeLists.txt`. A static library still needs it at link time, so add a
