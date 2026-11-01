@@ -117,3 +117,66 @@ jobs:
       # registered; the consumer test runs.
       - name: Test
         run: ctest --test-dir build --output-on-failure --no-tests=error
+
+  # MSVC with the Visual Studio generator, which finds MSVC itself, so no
+  # vcvars is needed.
+  windows:
+    name: Windows MSVC
+    runs-on: windows-2025
+    defaults:
+      run:
+        shell: pwsh
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up vcpkg
+        id: vcpkg
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          $root = "$HOME\vcpkg"
+          "VCPKG_ROOT=$root" >> $env:GITHUB_ENV
+          "VCPKG_BINARY_SOURCES=clear;files,$HOME\vcpkg-cache,readwrite" >> $env:GITHUB_ENV
+          New-Item -ItemType Directory -Force "$HOME\vcpkg-cache" | Out-Null
+          git init -q $root
+          git -C $root fetch -q --depth 1 https://github.com/microsoft/vcpkg $env:VCPKG_COMMIT
+          git -C $root checkout -q FETCH_HEAD
+          & "$root\bootstrap-vcpkg.bat" -disableMetrics
+          # The image fixes the MSVC version, so it stands in for the compiler
+          # in the cache key.
+          "compiler=$env:ImageVersion" >> $env:GITHUB_OUTPUT
+
+      - name: Restore dependency cache
+        id: restore
+        uses: actions/cache/restore@v6
+        with:
+          path: ~/vcpkg-cache
+          key: vcpkg-msvc-${{ steps.vcpkg.outputs.compiler }}-${{ env.VCPKG_COMMIT }}-${{ hashFiles('.github/workflows/ci.yml') }}
+          restore-keys: vcpkg-msvc-${{ steps.vcpkg.outputs.compiler }}-${{ env.VCPKG_COMMIT }}-
+
+      - name: Install dependencies
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          & "$env:VCPKG_ROOT\vcpkg.exe" install --triplet x64-windows $env:VCPKG_PACKAGES.Split(' ')
+
+      - name: Save dependency cache
+        if: steps.restore.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ~/vcpkg-cache
+          key: ${{ steps.restore.outputs.cache-primary-key }}
+
+      - name: Configure
+        run: >
+          cmake -S . -B build -A x64
+          "-DCMAKE_TOOLCHAIN_FILE=$env:VCPKG_ROOT\scripts\buildsystems\vcpkg.cmake"
+          -DVCPKG_TARGET_TRIPLET=x64-windows
+          -DDOCSMITHCPP_BUILD_TESTS=ON
+          -DDOCSMITHCPP_BUILD_EXAMPLES=ON
+          -DDOCSMITHCPP_MARKDOWN=ON
+
+      - name: Build
+        run: cmake --build build --config Debug --parallel
+
+      - name: Test
+        run: ctest --test-dir build -C Debug --output-on-failure --no-tests=error

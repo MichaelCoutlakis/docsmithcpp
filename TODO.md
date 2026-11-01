@@ -10,21 +10,10 @@ formats come after that.
 
 ## 1. Usable by others (blocks 0.1.0)
 
-### CI
-
-Linux is done (`.github/workflows/ci.yml`, see CONTRIBUTING.md): GCC 11 and 14,
-Clang 14 and 18, with the `consumer` test. Still to add:
-
-- **Windows**: msys2 clang64 (the `dev` setup, libc++) and MSVC, so all three
-  standard libraries the README claims are built.
-- **Clang 14 when ubuntu-22.04 is retired**: it runs there so it gets an older
-  libstdc++ than its own. Keep that pairing by running the job in an
-  `ubuntu:22.04` container on a newer runner.
-
 ### Tag 0.1.0
 
-Do this once the items above pass. Move `[Unreleased]` in `CHANGELOG.md` to
-`[0.1.0]` and tag it.
+Do this once CI (`.github/workflows/ci.yml`, see CONTRIBUTING.md) passes on
+Linux and MSVC. Move `[Unreleased]` in `CHANGELOG.md` to `[0.1.0]` and tag it.
 
 ## 2. Correctness
 
@@ -233,6 +222,14 @@ natvis file (setup in CONTRIBUTING.md). Checked with lldb 23 and CodeLLDB's lldb
 - Add a Doxygen target. The `///` comments are there, but nothing generates an
   API reference.
 - The README's "Typical use case scenarios" section is a placeholder.
+
+## CI (low priority)
+
+- **msys2 clang64**: the only libc++ build, but it's the `dev` setup, so it's
+  built locally all the time.
+- **Clang 14 when ubuntu-22.04 is retired**: it runs there so it gets an older
+  libstdc++ than its own. Keep that pairing by running the job in an
+  `ubuntu:22.04` container on a newer runner.
 
 ## Verifying changes
 
