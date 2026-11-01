@@ -73,7 +73,7 @@ struct deep_visitor
             for(auto &row : n.rows)
                 for(auto &c : row)
                     node(c);
-        // text, bookmark, image, unknown have no children.
+        // text, bookmark, image, page_break, unknown have no children.
     }
 };
 } // namespace detail

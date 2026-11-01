@@ -21,6 +21,7 @@
 // written twice).
 
 #include <map>
+#include <sstream>
 #include <string>
 #include <utility>
 
@@ -154,4 +155,55 @@ TEST(ODT_XML, HeaderRowsAreGrouped)
     EXPECT_EQ(header.select_nodes("table:table-row").size(), 1U);
     EXPECT_EQ(xml_table.select_nodes("table:table-row").size(), 1U);
     EXPECT_EQ(header.previous_sibling().name(), std::string("table:table-column"));
+}
+
+TEST(ODT_XML, WhiteSpaceElements)
+{
+    odt::file(text_doc{paragraph(" a  b\tc\nd")}).save("odt/out/white_space_xml.odt");
+    const part content("odt/out/white_space_xml.odt", "content.xml");
+    std::ostringstream p;
+    content.xml.select_node("//text:p").node().print(p, "", pugi::format_raw);
+    EXPECT_EQ(p.str(), "<text:p><text:s/>a <text:s/>b<text:tab/>c<text:line-break/>d</text:p>");
+}
+
+TEST(ODT_XML, ReadsWhiteSpaceAsOdfDoes)
+{
+    // As LibreOffice writes it: white space in text collapses, and is dropped
+    // at the start of a paragraph.
+    odf::package pkg("application/vnd.oasis.opendocument.text");
+    pkg.set("content.xml",
+        R"(<?xml version="1.0" encoding="UTF-8"?>
+<office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+    xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0" office:version="1.2">
+  <office:body>
+    <office:text>
+      <text:p>  a
+        b <text:span>c</text:span> <text:span>d</text:span><text:s text:c="3"/>e<text:tab/>f<text:line-break/>g</text:p>
+    </office:text>
+  </office:body>
+</office:document-content>)",
+        "text/xml");
+    pkg.write("odt/out/white_space_read.odt");
+
+    const text_doc expected{paragraph("a b ", span("c"), " ", span("d"), "   e\tf\ng")};
+    EXPECT_EQ(odt::file::load("odt/out/white_space_read.odt").doc.body, expected.body);
+}
+
+TEST(ODT_XML, PageBreakFoldsIntoNextParagraph)
+{
+    text_doc doc;
+    auto note = doc.add_style(style("Note", text_props(font_style::italic)));
+    doc.add(paragraph("one")).add(page_break{}).add(paragraph("two").set_style(note));
+    odt::file(doc).save("odt/out/page_break_xml.odt");
+
+    const part content("odt/out/page_break_xml.odt", "content.xml");
+    const auto paragraphs = content.xml.select_nodes("//text:p");
+    ASSERT_EQ(paragraphs.size(), 2U) << "no extra paragraph";
+    EXPECT_STREQ(paragraphs[1].node().attribute("text:style-name").as_string(), "Note.PageBreak");
+
+    auto s = automatic_styles_of(content).find_child_by_attribute(
+        "style:style", "style:name", "Note.PageBreak");
+    EXPECT_STREQ(s.attribute("style:parent-style-name").as_string(), "Note");
+    EXPECT_STREQ(
+        s.child("style:paragraph-properties").attribute("fo:break-before").as_string(), "page");
 }

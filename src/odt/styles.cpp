@@ -186,6 +186,8 @@ void read_into(const pugi::xml_node &container, text_doc &doc)
         const std::string_view tag = c.name();
         if(tag == "style:style")
         {
+            if(page_break_base(c))
+                continue; // made by the writer for a page_break node
             if(auto s = read_style(c); s && !doc.styles().find(s->m_name.get_name()))
                 doc.styles().add(*s);
         }
@@ -301,6 +303,32 @@ void write_xml(pugi::xml_node &n, const graphics_props &props)
             to_odf(horiz_names, *props.m_horiz_pos);
     if(props.m_vert_pos)
         graphic_node.append_attribute("style:vertical-pos") = to_odf(vert_names, *props.m_vert_pos);
+}
+
+constexpr std::string_view page_break_suffix = ".PageBreak";
+
+std::string page_break_style_name(const style_name &base)
+{
+    return base.is_empty() ? std::string(page_break_suffix.substr(1))
+                           : base.get_name() + std::string(page_break_suffix);
+}
+
+std::optional<style_name> page_break_base(const pugi::xml_node &n)
+{
+    const std::string_view name = n.attribute("style:name").as_string();
+    std::optional<style_name> base;
+    if(name == page_break_only || name == page_break_suffix.substr(1))
+        base = style_name{};
+    else if(name.size() > page_break_suffix.size() && name.ends_with(page_break_suffix))
+        base = style_name(std::string(name.substr(0, name.size() - page_break_suffix.size())));
+    if(!base || std::string_view(n.name()) != "style:style")
+        return std::nullopt;
+
+    const auto s = read_style(n);
+    if(!s || s->m_family != style_family::paragraph || !s->m_paragraph_props ||
+        s->m_paragraph_props->m_break_before != break_before{break_type::page})
+        return std::nullopt;
+    return base;
 }
 
 std::optional<style> read_style(const pugi::xml_node &n)

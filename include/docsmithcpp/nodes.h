@@ -80,9 +80,16 @@ public:
     bool operator==(const heading &) const = default;
 };
 
+/// Starts a new page. Writers fold it into the next paragraph or heading where
+/// their format puts page breaks on paragraphs (ODT).
+struct page_break
+{
+    bool operator==(const page_break &) const = default;
+};
+
 struct block_node
 {
-    std::variant<paragraph, heading, list, table, frame, unknown> v;
+    std::variant<paragraph, heading, list, table, frame, page_break, unknown> v;
     bool operator==(const block_node &) const = default;
 };
 

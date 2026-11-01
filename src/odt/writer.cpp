@@ -221,10 +221,11 @@ void writer::write(const text_doc &doc)
     write_styles(doc);
     write_doc(doc);
 
+    // Unindented: indentation between inline elements would be read as spaces.
     auto save = [](const pugi::xml_document &xml)
     {
         std::ostringstream ss;
-        xml.save(ss, "  ");
+        xml.save(ss, "", pugi::format_raw);
         return ss.str();
     };
     m_pkg.set("content.xml", save(m_content), "text/xml");
@@ -345,8 +346,76 @@ std::string writer::resolve_image(const std::string &uri)
 void writer::write_doc(const text_doc &doc)
 {
     auto office_text = m_body.append_child("office:text");
-    for(const auto &b : doc.body)
-        write_block(office_text, b);
+    write_blocks(office_text, doc.body);
+}
+
+void writer::write_blocks(pugi::xml_node parent, const std::vector<block_node> &blocks)
+{
+    for(const auto &b : blocks)
+        write_block(parent, b);
+    flush_page_break(parent); // a page break with no paragraph after it
+}
+
+// ODF has no page break element: a paragraph style's fo:break-before starts the
+// page. So a page_break is folded into the next paragraph or heading, whose
+// style is swapped for a copy (an automatic style) or a child (a common one) of
+// it with the break added.
+std::string writer::page_break_style(const std::string &name, const style_name &base)
+{
+    if(!m_page_break_styles.insert(name).second)
+        return name;
+
+    // A loaded file may have it already, made from base as it was then.
+    if(auto old = find_style(m_automatic_styles, name, style_family::paragraph))
+        m_automatic_styles.remove_child(old);
+
+    pugi::xml_node s;
+    auto automatic = base.is_empty()
+        ? pugi::xml_node{}
+        : find_style(m_automatic_styles, base.get_name(), style_family::paragraph);
+    if(automatic)
+    {
+        s = m_automatic_styles.append_copy(automatic);
+        s.attribute("style:name").set_value(name.c_str());
+    }
+    else
+    {
+        s = m_automatic_styles.append_child("style:style");
+        s.append_attribute("style:name") = name.c_str();
+        s.append_attribute("style:family") = "paragraph";
+        if(!base.is_empty())
+            s.append_attribute("style:parent-style-name") = base.get_name().c_str();
+    }
+    auto props = s.child("style:paragraph-properties");
+    if(!props)
+        props = s.prepend_child("style:paragraph-properties");
+    if(!props.attribute("fo:break-before"))
+        props.append_attribute("fo:break-before");
+    props.attribute("fo:break-before").set_value("page");
+    return name;
+}
+
+void writer::flush_page_break(pugi::xml_node parent)
+{
+    if(!m_page_break_pending)
+        return;
+    m_page_break_pending = false;
+    parent.append_child("text:p").append_attribute("text:style-name") =
+        page_break_style(page_break_only, {}).c_str();
+}
+
+/// The style name to write on a paragraph or heading, taking a pending page
+/// break; null for none.
+const char *writer::block_style(const style_name &sn)
+{
+    if(m_page_break_pending)
+    {
+        m_page_break_pending = false;
+        m_block_style = page_break_style(page_break_style_name(sn), sn);
+    }
+    else
+        m_block_style = sn.get_name();
+    return m_block_style.empty() ? nullptr : m_block_style.c_str();
 }
 
 void writer::write_block(pugi::xml_node parent, const block_node &b)
@@ -362,8 +431,8 @@ void writer::write_inline(pugi::xml_node parent, const inline_node &i)
 void writer::emit(pugi::xml_node parent, const paragraph &p)
 {
     auto n = parent.append_child("text:p");
-    if(!p.style.is_empty())
-        n.append_attribute("text:style-name").set_value(p.style.get_name().c_str());
+    if(const char *style = block_style(p.style))
+        n.append_attribute("text:style-name").set_value(style);
     for(const auto &c : p.children())
         write_inline(n, c);
 }
@@ -372,8 +441,8 @@ void writer::emit(pugi::xml_node parent, const heading &h)
 {
     auto n = parent.append_child("text:h");
     n.append_attribute("text:outline-level").set_value(h.level);
-    if(!h.style.is_empty())
-        n.append_attribute("text:style-name").set_value(h.style.get_name().c_str());
+    if(const char *style = block_style(h.style))
+        n.append_attribute("text:style-name").set_value(style);
     for(const auto &c : h.children())
         write_inline(n, c);
 }
@@ -399,13 +468,63 @@ void writer::emit(pugi::xml_node parent, const hyperlink &h)
         write_inline(n, c);
 }
 
+// ODF collapses white space in text: a run of spaces reads as one, and a space
+// at the start of a paragraph is dropped. So only a single space between two
+// other characters is written as is; other spaces become text:s, and tabs and
+// line breaks their own elements. '\r' is dropped, so "\r\n" is one break.
 void writer::emit(pugi::xml_node parent, const text &t)
 {
-    parent.append_child(pugi::node_pcdata).set_value(t.content.c_str());
+    const std::string &s = t.content;
+    std::string run; // text not yet written
+    auto flush = [&]
+    {
+        if(!run.empty())
+            parent.append_child(pugi::node_pcdata).set_value(run.c_str());
+        run.clear();
+    };
+    auto element = [&](const char *name)
+    {
+        flush();
+        return parent.append_child(name);
+    };
+
+    for(size_t i = 0; i != s.size();)
+    {
+        const char c = s[i];
+        if(c == ' ')
+        {
+            const size_t end = std::min(s.find_first_not_of(' ', i), s.size());
+            size_t n = end - i;
+            const bool between = !run.empty() && run.back() != ' ' && end != s.size() &&
+                s[end] != '\n' && s[end] != '\t' && s[end] != '\r';
+            if(between)
+            {
+                run += ' ';
+                --n;
+            }
+            if(n != 0)
+            {
+                auto e = element("text:s");
+                if(n > 1)
+                    e.append_attribute("text:c") = static_cast<unsigned>(n);
+            }
+            i = end;
+            continue;
+        }
+        if(c == '\n')
+            element("text:line-break");
+        else if(c == '\t')
+            element("text:tab");
+        else if(c != '\r')
+            run += c;
+        ++i;
+    }
+    flush();
 }
 
 void writer::emit(pugi::xml_node parent, const frame &f)
 {
+    flush_page_break(parent);
     auto n = parent.append_child("draw:frame");
     if(!f.style.is_empty())
         n.append_attribute("draw:style-name").set_value(f.style.get_name().c_str());
@@ -430,8 +549,15 @@ void writer::emit(pugi::xml_node parent, const bookmark &b)
     n.append_attribute("text:name").set_value(b.name.c_str());
 }
 
+void writer::emit(pugi::xml_node parent, const page_break &)
+{
+    flush_page_break(parent); // two in a row: the first gets its own paragraph
+    m_page_break_pending = true;
+}
+
 void writer::emit(pugi::xml_node parent, const unknown &u)
 {
+    flush_page_break(parent);
     // Re-emit the captured subtree verbatim.
     pugi::xml_document frag;
     if(frag.load_string(u.xml.c_str()))
@@ -451,12 +577,12 @@ void writer::emit(pugi::xml_node parent, const list &l)
 void writer::emit(pugi::xml_node parent, const list_item &it)
 {
     auto n = parent.append_child("text:list-item");
-    for(const auto &b : it.children())
-        write_block(n, b);
+    write_blocks(n, it.children());
 }
 
 void writer::emit(pugi::xml_node parent, const table &t)
 {
+    flush_page_break(parent); // a break in a cell would have no effect
     auto n = parent.append_child("table:table");
     auto table_column = n.append_child("table:table-column");
     table_column.append_attribute("table:number-columns-repeated")
@@ -488,8 +614,7 @@ void writer::emit(pugi::xml_node parent, const table_cell &c)
     if(c.colspan != 1)
         n.append_attribute("table:number-columns-spanned").set_value(c.colspan);
 
-    for(const auto &b : c.children())
-        write_block(n, b);
+    write_blocks(n, c.children());
 }
 
 } // namespace docsmith::odt

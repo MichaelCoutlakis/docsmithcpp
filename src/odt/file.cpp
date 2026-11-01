@@ -18,10 +18,13 @@
 #include "docsmithcpp/odt/file.h"
 
 #include <fstream>
+#include <map>
 #include <optional>
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <string_view>
+#include <type_traits>
 #include <vector>
 
 #include <pugixml.hpp>
@@ -93,14 +96,68 @@ inline_node parse_inline(const pugi::xml_node &node)
     return inline_node{unknown{serialize(node)}};
 }
 
+/// Appends s to the last node if that is text, so that ODF's space, tab and
+/// line break elements join the text around them.
+void append_text(std::vector<inline_node> &out, const std::string &s)
+{
+    if(!out.empty())
+        if(auto *t = std::get_if<text>(&out.back().v))
+        {
+            t->content += s;
+            return;
+        }
+    out.push_back(inline_node{text{s}});
+}
+
+bool is_space(char c) { return c == ' ' || c == '\t' || c == '\n' || c == '\r'; }
+
+/// Text as ODF reads it: each run of white space is one space, and white
+/// space at the start of a paragraph or heading is dropped.
+std::string collapse_space(std::string_view s, bool at_start)
+{
+    std::string out;
+    bool space = at_start;
+    for(char c : s)
+    {
+        if(is_space(c))
+        {
+            if(!space)
+                out += ' ';
+            space = true;
+        }
+        else
+        {
+            out += c;
+            space = false;
+        }
+    }
+    return out;
+}
+
 std::vector<inline_node> parse_inline_children(const pugi::xml_node &node)
 {
+    const std::string_view tag = node.name();
+    const bool paragraph = tag == "text:p" || tag == "text:h";
+
     std::vector<inline_node> out;
     for(auto child : node.children())
     {
+        const std::string_view name = child.name();
         if(child.type() == pugi::node_pcdata)
-            out.push_back(inline_node{text{child.value()}});
-        else if(child.type() == pugi::node_element)
+        {
+            const bool at_start = paragraph && child == node.first_child();
+            if(auto s = collapse_space(child.value(), at_start); !s.empty())
+                append_text(out, s);
+        }
+        else if(child.type() != pugi::node_element)
+            continue;
+        else if(name == "text:s")
+            append_text(out, std::string(child.attribute("text:c").as_uint(1), ' '));
+        else if(name == "text:tab")
+            append_text(out, "\t");
+        else if(name == "text:line-break")
+            append_text(out, "\n");
+        else
             out.push_back(parse_inline(child));
     }
     return out;
@@ -198,6 +255,59 @@ std::vector<block_node> parse_block_children(const pugi::xml_node &node)
     return out;
 }
 
+/// Undoes the writer's folding of page_break nodes into the next paragraph or
+/// heading (see writer::page_break_style()). styles: the page break styles in
+/// content.xml, and the style each was made from.
+void expand_page_breaks(
+    std::vector<block_node> &blocks, const std::map<std::string, style_name> &styles)
+{
+    std::vector<block_node> out;
+    for(auto &b : blocks)
+    {
+        bool drop = false;
+        std::visit(
+            overloaded{
+                [&](list &l)
+                {
+                    for(auto &it : l.items())
+                        expand_page_breaks(it.children(), styles);
+                    // The writer folds a break before a list into its
+                    // first paragraph; it reads back before the list.
+                    if(auto &items = l.items(); !items.empty() &&
+                        !items.front().children().empty() &&
+                        std::holds_alternative<page_break>(items.front().children().front().v))
+                    {
+                        items.front().children().erase(items.front().children().begin());
+                        out.push_back(block_node{page_break{}});
+                    }
+                },
+                [&](table &t)
+                {
+                    for(auto &row : t.rows)
+                        for(auto &c : row)
+                            expand_page_breaks(c.children(), styles);
+                },
+                [&](auto &n)
+                {
+                    using T = std::decay_t<decltype(n)>;
+                    if constexpr(std::is_same_v<T, paragraph> || std::is_same_v<T, heading>)
+                    {
+                        auto it = styles.find(n.style.get_name());
+                        if(it == styles.end())
+                            return;
+                        out.push_back(block_node{page_break{}});
+                        drop = it->first == page_break_only;
+                        n.style = it->second;
+                    }
+                },
+            },
+            b.v);
+        if(!drop)
+            out.push_back(std::move(b));
+    }
+    blocks = std::move(out);
+}
+
 constexpr const char *odt_mimetype = "application/vnd.oasis.opendocument.text";
 
 } // namespace
@@ -228,12 +338,22 @@ file file::load(const std::filesystem::path &p)
 
     const auto *content = f.m_impl->pkg.find("content.xml");
     pugi::xml_document xml;
-    if(!content || !xml.load_buffer(content->data.data(), content->data.size()))
+    // White space between inline elements is a space, so keep it.
+    if(!content ||
+        !xml.load_buffer(content->data.data(),
+            content->data.size(),
+            pugi::parse_default | pugi::parse_ws_pcdata))
         throw std::runtime_error("Could not read content.xml from " + p.string());
 
-    auto text_node =
-        xml.child("office:document-content").child("office:body").child("office:text");
-    f.doc.body = parse_block_children(text_node);
+    auto root = xml.child("office:document-content");
+    f.doc.body = parse_block_children(root.child("office:body").child("office:text"));
+
+    std::map<std::string, style_name> page_breaks;
+    for(auto s : root.child("office:automatic-styles").children("style:style"))
+        if(auto base = page_break_base(s))
+            page_breaks[s.attribute("style:name").as_string()] = *base;
+    if(!page_breaks.empty())
+        expand_page_breaks(f.doc.body, page_breaks);
     read_styles(f.m_impl->pkg, f.doc);
     if(const auto *meta = f.m_impl->pkg.find("meta.xml"))
         f.doc.meta = odf::read_meta(meta->data);
@@ -261,10 +381,17 @@ void file::save(const std::filesystem::path &p) const
 #ifdef DOCSMITHCPP_DEBUG_FILES
     // Debug aid: content.xml and styles.xml next to the archive, as
     // <name>.content.xml and <name>.styles.xml.
+    // Indented for reading; the package's copies aren't, as indentation between
+    // inline elements would read as spaces.
     for(const char *part : {"content", "styles"})
-        std::ofstream(std::filesystem::path(p).replace_extension(std::string(".") + part + ".xml"),
-            std::ios::binary)
-            << out.find(std::string(part) + ".xml")->data;
+    {
+        const auto &data = out.find(std::string(part) + ".xml")->data;
+        pugi::xml_document xml;
+        xml.load_buffer(data.data(), data.size(), pugi::parse_default | pugi::parse_ws_pcdata);
+        xml.save_file(
+            (std::filesystem::path(p).replace_extension(std::string(".") + part + ".xml")).c_str(),
+            "  ");
+    }
 #endif
 }
 

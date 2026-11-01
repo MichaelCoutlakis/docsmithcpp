@@ -4,7 +4,8 @@
 
 The document tree is a pair of value-type variants — `inline_node` (text-flow
 content: `text`, `span`, `hyperlink`, `frame`, `bookmark`, `unknown`) and
-`block_node` (`paragraph`, `heading`, `list`, `table`, `frame`, `unknown`). It
+`block_node` (`paragraph`, `heading`, `list`, `table`, `frame`, `page_break`,
+`unknown`). It
 is deliberately a _generic_, format-agnostic model: which group may go where is
 encoded by the child sequence's type, so there is no separate per-format
 validation layer. Copy and `operator==` are compiler-generated, and traversal is
@@ -40,11 +41,44 @@ What each node holds, independent of any one format. "Inline" is a sequence of
 | `table` | block | rows of `table_cell`s | every row has `num_cols()` cells; the first `header_rows` rows are header rows |
 | `table_cell` | — | blocks | styled; `rowspan`, `colspan`; a covered slot holds a placeholder cell |
 | `frame` | block, inline | an `image` | styled |
-| `text` | inline | a string | |
+| `page_break` | block | — | starts a new page |
+| `text` | inline | a string | white space as is, `'\t'` a tab, `'\n'` a line break |
 | `span` | inline | inline | styled |
 | `hyperlink` | inline | inline | `target`: a URL or a bookmark |
 | `bookmark` | inline | — | `name` |
 | `unknown` | block, inline | verbatim XML | another format's markup, passed through |
+
+### White space and breaks
+
+`text` holds text as it reads. Spaces are kept as they are, a tab is `'\t'` and
+a line break is `'\n'`, so `paragraph("line 1\nline 2")` is two lines and
+plain-text extraction needs nothing special. They aren't nodes of their own:
+ODF's `text:s` exists only because XML collapses white space, so a node for it
+would be a second way to write the same text, and `operator==` would tell the
+two apart.
+
+- **ODT**: the writer writes a space as is only where ODF would keep it (one,
+  between two other characters); other spaces become `text:s`, `'\t'`
+  `text:tab` and `'\n'` `text:line-break`. The parser reads them back into the
+  text around them, and reads white space in the XML as ODF does: each run is
+  one space, and it's dropped at the start of a paragraph.
+- **HTML**: `'\n'` is `<br>`, a run of spaces keeps all but one as `&nbsp;`,
+  and a tab is kept with `white-space: pre`.
+
+A page break is a block, `page_break`, so it can be put in the body from code:
+`doc.add(page_break{})`. ODF has no page break element: a paragraph style with
+`fo:break-before` starts the page. The ODT writer folds a `page_break` into the
+next paragraph or heading, giving it an automatic style made from its own
+(a copy of an automatic style, or a child of a common one) with the break
+added, named `<style>.PageBreak`. If no paragraph or heading follows (the end,
+a table, an image), it writes an empty paragraph with a break (`PageBreakOnly`).
+The parser turns those styles back into `page_break` nodes, so they aren't
+loaded into `styles()`. A file edited in LibreOffice has its automatic styles
+renamed, and its breaks then stay what they are in ODF, a property of the
+paragraph's style. HTML writes `<div style="break-after: page"></div>`.
+
+The properties `break_before` / `break_after` on a paragraph style still
+describe a break that belongs to a style, e.g. every chapter heading.
 
 ## Styles
 

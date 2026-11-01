@@ -27,6 +27,9 @@
 namespace docsmith
 {
 
+/// Text as it reads: white space is kept as is, '\t' is a tab and '\n' a line
+/// break. Writers encode them as their format needs (e.g. text:s, text:tab and
+/// text:line-break in ODT, <br> in HTML).
 struct text
 {
     std::string content;

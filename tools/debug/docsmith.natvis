@@ -93,6 +93,9 @@
   <Type Name="docsmith::bookmark">
     <DisplayString>bookmark {name}</DisplayString>
   </Type>
+  <Type Name="docsmith::page_break">
+    <DisplayString>page_break</DisplayString>
+  </Type>
 
   <!-- Nodes with children: own fields, then the children as [0], [1], ...
        (has_children keeps a vector, boxed for the recursive nodes). The

@@ -63,6 +63,15 @@ held in `std::variant`. This is a breaking change to almost every public API.
   directory. Generated test files go to `tests/odt/out/`.
 
 ### Added
+- **White space, tabs and line breaks** are kept in `text`: spaces as they are,
+  `'\t'` for a tab and `'\n'` for a line break, so `paragraph("line 1\nline 2")`
+  is two lines. ODT writes them as `text:s`, `text:tab` and `text:line-break` where
+  ODF would otherwise collapse them, and reads them back into the text; they used to
+  become `unknown`. HTML writes `<br>`, `&nbsp;` and a `white-space: pre` tab.
+- **`page_break`** block node: `doc.add(page_break{})` starts a new page. ODT folds it
+  into the next paragraph or heading through an automatic style with
+  `fo:break-before="page"` (or an empty paragraph if none follows), and reads it back.
+  HTML writes `<div style="break-after: page"></div>`.
 - **Table header rows**: `table::header_rows` (and `set_header_rows(n)`) counts the
   rows at the top that are header rows. ODT reads and writes them as
   `table:table-header-rows`, so they repeat on each page; the parser used to flatten
@@ -167,6 +176,12 @@ held in `std::variant`. This is a breaking change to almost every public API.
 - The empty placeholder tests in `test_main.cpp`, and the `architecture/` sketches.
 
 ### Fixed
+- `content.xml` and `styles.xml` are written without indentation. Indentation between
+  two inline elements (e.g. two spans) reads as a space in LibreOffice. The
+  `DOCSMITHCPP_DEBUG_FILES` copies are still indented.
+- The ODT parser dropped a space between two inline elements
+  (`<text:span>a</text:span> <text:span>b</text:span>`), and kept white space that
+  ODF collapses (a run of spaces, a newline in the XML).
 - The ODT writer now owns `styles.xml`. Common styles go there, as ODF requires,
   instead of into `content.xml`; a loaded `styles.xml` is updated in place, so its
   page layouts and master pages survive. Saving a loaded file writes each style

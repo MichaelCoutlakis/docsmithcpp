@@ -51,12 +51,6 @@ The style model covers only text, paragraph and graphics properties. It has no
 borders, column widths, cell shading or vertical alignment, so a results table
 in ODT has no borders at all. Add table, column and cell style properties.
 
-### Line breaks, tabs and spaces
-ODT `text:s` (repeated spaces), `text:tab` and `text:line-break` become
-`unknown`, so extracting the plain text loses them, and there's no way to build
-them in code. You can't put a multi-line log excerpt in a cell. Model them as
-inline nodes.
-
 ### Code / preformatted blocks
 Test reports need monospace blocks for logs and output. This could be a
 paragraph style plus the line-break and space nodes above. In HTML it would be

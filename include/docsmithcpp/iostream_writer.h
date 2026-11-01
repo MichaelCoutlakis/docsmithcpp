@@ -78,6 +78,7 @@ public:
     }
     void operator()(const image &i) { line("Image: uri=", i.uri); }
     void operator()(const bookmark &b) { line("Bookmark: name=", b.name); }
+    void operator()(const page_break &) { line("Page Break"); }
     void operator()(const unknown &) { line("Unknown (pass-through)"); }
 
     void operator()(const list &l)

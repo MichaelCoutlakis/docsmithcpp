@@ -16,6 +16,7 @@
  * limitations under the License.
  *****************************************************************************/
 
+#include <algorithm>
 #include <iostream>
 #include <string>
 
@@ -466,4 +467,62 @@ TEST(ODT, HeaderRowsRoundTrip)
     const text_doc again = odt::file::load("odt/out/header_rows.odt").doc;
     ASSERT_EQ(collect<table>(again).size(), 1U);
     EXPECT_EQ(*collect<table>(again).front(), t);
+}
+
+TEST(ODT, WhiteSpaceRoundTrips)
+{
+    const text_doc doc{
+        paragraph("  leading, a  run,\ta tab,\na line break and trailing "),
+        paragraph("a", span(" b "), " ", span("c"), "\n"),
+        paragraph("log:\n  line 1\n\n\tline 3   "),
+        heading(2, "\t heading"),
+    };
+    odt::file(doc).save("odt/out/white_space.odt");
+    EXPECT_EQ(odt::file::load("odt/out/white_space.odt").doc.body, doc.body);
+}
+
+TEST(ODT, PageBreaksRoundTrip)
+{
+    text_doc doc;
+    auto note = doc.add_style(style("Note", text_props(font_style::italic)));
+    doc.add(paragraph("one"))
+        .add(page_break{})
+        .add(paragraph("two").set_style(note))
+        .add(page_break{})
+        .add(heading(1, "three"))
+        .add(page_break{})
+        .add(page_break{})
+        .add(table(1, 1))
+        .add(page_break{})
+        .add(list(list_item("in a list")))
+        .add(page_break{})
+        .add(paragraph()) // an empty paragraph after a break stays
+        .add(page_break{});
+    odt::file(doc).save("odt/out/page_breaks.odt");
+
+    const auto again = odt::file::load("odt/out/page_breaks.odt");
+    print_compare(doc, again.doc);
+    EXPECT_EQ(again.doc.body, doc.body);
+    EXPECT_EQ(again.doc.styles().size(), 1U) << "the writer's break styles aren't loaded";
+
+    // Saved again, same again.
+    again.save("odt/out/page_breaks_resaved.odt");
+    EXPECT_EQ(odt::file::load("odt/out/page_breaks_resaved.odt").doc, again.doc);
+}
+
+TEST(ODT, PageBreakBeforeLoadedParagraph)
+{
+    // P4, the second heading's style, is an automatic style: the break goes
+    // on a copy of it.
+    auto f = odt::file::load("odt/moderate.odt");
+    auto pos = std::find_if(f.doc.body.begin(),
+        f.doc.body.end(),
+        [](const block_node &b)
+        { return std::holds_alternative<heading>(b.v) && std::get<heading>(b.v).level == 2; });
+    ASSERT_NE(pos, f.doc.body.end());
+    f.doc.body.insert(pos, block_node{page_break{}});
+    f.save("odt/out/moderate_page_break.odt");
+
+    const auto again = odt::file::load("odt/out/moderate_page_break.odt");
+    EXPECT_EQ(again.doc, f.doc);
 }

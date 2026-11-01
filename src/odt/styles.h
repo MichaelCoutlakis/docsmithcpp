@@ -51,6 +51,16 @@ std::optional<style> read_style(const pugi::xml_node &n);
 /// numbering) are left out.
 list_style read_list_style(const pugi::xml_node &n);
 
+/// The automatic paragraph styles the writer makes for a page_break: base's
+/// definition (or base as parent) plus a break before. page_break_only is for
+/// an empty paragraph standing in for a page break with no paragraph after it.
+std::string page_break_style_name(const style_name &base);
+inline constexpr const char *page_break_only = "PageBreakOnly";
+
+/// Whether n is one of the page break styles above, and if so the name of the
+/// style it was made from (empty for none, or for page_break_only).
+std::optional<style_name> page_break_base(const pugi::xml_node &n);
+
 /// Adds the definitions in pkg's styles.xml (common styles) and content.xml
 /// (common and automatic styles) to doc's registries. A name already defined
 /// keeps its first definition: ODF names are unique only per family.

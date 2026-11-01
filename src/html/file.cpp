@@ -471,10 +471,34 @@ private:
         img(f);
         m_os << '\n';
     }
+    void emit_block(const page_break &)
+    {
+        indent();
+        m_os << "<div style=\"break-after: page\"></div>\n";
+    }
     void emit_block(const unknown &) {} // another format's markup; no HTML meaning
 
     // Inline level: no added whitespace.
-    void emit_inline(const text &t) { escape(m_os, t.content); }
+    // HTML collapses white space, so outside <pre> a run of spaces keeps all but
+    // one as &nbsp;, a tab is kept by white-space: pre, and '\n' is <br>.
+    void emit_inline(const text &t)
+    {
+        if(m_pre)
+            return escape(m_os, t.content);
+        const std::string &s = t.content;
+        for(size_t i = 0; i != s.size(); ++i)
+        {
+            const char c = s[i];
+            if(c == '\n')
+                m_os << "<br>";
+            else if(c == '\t')
+                m_os << "<span style=\"white-space: pre\">\t</span>";
+            else if(c == ' ' && i + 1 != s.size() && s[i + 1] == ' ')
+                m_os << "&nbsp;";
+            else if(c != '\r')
+                escape(m_os, std::string_view(&s[i], 1));
+        }
+    }
     void emit_inline(const span &s)
     {
         if(s.style.is_empty())
@@ -561,6 +585,7 @@ private:
     const text_doc &m_doc;
     const resource_plan &m_plan;
     int m_depth{0};
+    bool m_pre{false};                       //!< Inside <pre>: text is written as is
     std::vector<const list_style *> m_lists; //!< Enclosing lists' styles, innermost last
 };
 

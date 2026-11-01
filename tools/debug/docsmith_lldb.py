@@ -330,6 +330,7 @@ def __lldb_init_module(debugger, internal_dict):
         f'type summary add -e -w docsmith "docsmith::table" -F {m}.table_summary',
         f'type summary add -w docsmith "docsmith::text" -F {m}.text_summary',
         f'type summary add -w docsmith "docsmith::bookmark" -F {m}.bookmark_summary',
+        'type summary add -w docsmith "docsmith::page_break" -s "page_break"',
         f'type summary add -w docsmith "docsmith::url_target" -F {m}.url_target_summary',
         f'type summary add -w docsmith "docsmith::bookmark_target" -F {m}.bookmark_target_summary',
         f'type summary add -w docsmith "docsmith::style_name" -F {m}.style_name_summary',

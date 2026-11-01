@@ -344,3 +344,17 @@ TEST(HTML, HeaderRows)
     const auto only = html::file(text_doc{table(1, 1).set_header_rows(1)}).to_string();
     EXPECT_TRUE(has(only, "</thead>\n</table>"));
 }
+
+TEST(HTML, WhiteSpace)
+{
+    const auto html = html::file(text_doc{paragraph("a  b\tc\nd   e")}).to_string();
+    EXPECT_TRUE(has(
+        html, "<p>a&nbsp; b<span style=\"white-space: pre\">\t</span>c<br>d&nbsp;&nbsp; e</p>"));
+}
+
+TEST(HTML, PageBreak)
+{
+    const auto html =
+        html::file(text_doc{paragraph("one"), page_break{}, paragraph("two")}).to_string();
+    EXPECT_TRUE(has(html, "<p>one</p>\n<div style=\"break-after: page\"></div>\n<p>two</p>"));
+}

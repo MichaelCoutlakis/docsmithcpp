@@ -19,7 +19,9 @@
 
 // Private: serialises the document model to an ODT's content.xml and styles.xml.
 
+#include <set>
 #include <string>
+#include <vector>
 
 #include <pugixml.hpp>
 
@@ -56,7 +58,11 @@ private:
     void load_styles_xml();
     void write_styles(const text_doc &doc);
     void write_doc(const text_doc &doc);
+    void write_blocks(pugi::xml_node parent, const std::vector<block_node> &blocks);
     void write_block(pugi::xml_node parent, const block_node &b);
+    std::string page_break_style(const std::string &name, const style_name &base);
+    void flush_page_break(pugi::xml_node parent);
+    const char *block_style(const style_name &sn);
     void write_inline(pugi::xml_node parent, const inline_node &i);
     std::string resolve_image(const std::string &uri);
 
@@ -68,6 +74,7 @@ private:
     void emit(pugi::xml_node parent, const frame &f);
     void emit(pugi::xml_node parent, const image &i);
     void emit(pugi::xml_node parent, const bookmark &b);
+    void emit(pugi::xml_node parent, const page_break &);
     void emit(pugi::xml_node parent, const unknown &u);
     void emit(pugi::xml_node parent, const list &l);
     void emit(pugi::xml_node parent, const list_item &it);
@@ -82,6 +89,10 @@ private:
     pugi::xml_node m_styles;           //!< styles.xml's office:styles
     pugi::xml_node m_automatic_styles; //!< content.xml's office:automatic-styles
     pugi::xml_node m_body;        //!< office:body
+    /// A page_break waiting for the next paragraph or heading.
+    bool m_page_break_pending{false};
+    std::set<std::string> m_page_break_styles; //!< Made in this write
+    std::string m_block_style;                 //!< Storage for block_style()
 };
 
 } // namespace docsmith::odt
