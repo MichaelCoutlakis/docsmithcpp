@@ -74,7 +74,12 @@ private:
 namespace builtin
 {
 inline const style_name title{"Title"};
-}
+/// A monospace paragraph for code and logs, with its lines separated by '\n':
+/// LibreOffice's Preformatted Text, and <pre> in HTML.
+inline const style_name preformatted{"Preformatted_20_Text"};
+/// Monospace text within a line: LibreOffice's Source Text, and <code> in HTML.
+inline const style_name source_text{"Source_20_Text"};
+} // namespace builtin
 
 struct font_name
 {

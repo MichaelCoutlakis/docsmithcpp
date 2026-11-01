@@ -146,6 +146,22 @@ style resolved(const style &s, const style_registry &styles)
     return out;
 }
 
+/// Whether sn is base, or a style defined (through its parents) from base.
+bool based_on(const style_name &sn, const style_name &base, const style_registry &styles)
+{
+    style_name s = sn;
+    for(int depth = 0; !s.is_empty() && depth != 32; ++depth) // guards against a cycle
+    {
+        if(s == base)
+            return true;
+        const style *def = styles.find(s.get_name());
+        if(!def)
+            return false;
+        s = def->m_parent_style;
+    }
+    return false;
+}
+
 /// CSS rules for the style definitions in the document, sorted by name so the
 /// output is stable.
 std::string generated_css(const text_doc &doc)
@@ -369,6 +385,19 @@ private:
     void emit_block(const paragraph &p)
     {
         indent();
+        if(based_on(p.style, builtin::preformatted, m_doc.styles()))
+        {
+            open("pre", p.style);
+            std::string t;
+            plain_text(p.children(), t);
+            if(t.starts_with('\n'))
+                m_os << '\n'; // a newline straight after <pre> is dropped
+            m_pre = true;
+            flow(p.children());
+            m_pre = false;
+            m_os << "</pre>\n";
+            return;
+        }
         open("p", p.style);
         flow(p.children());
         m_os << "</p>\n";
@@ -503,9 +532,10 @@ private:
     {
         if(s.style.is_empty())
             return flow(s.children()); // an unstyled span adds nothing
-        open("span", s.style);
+        const char *tag = based_on(s.style, builtin::source_text, m_doc.styles()) ? "code" : "span";
+        open(tag, s.style);
         flow(s.children());
-        m_os << "</span>";
+        m_os << "</" << tag << '>';
     }
     void emit_inline(const hyperlink &h)
     {

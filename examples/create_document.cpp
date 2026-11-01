@@ -32,7 +32,12 @@ void write_example_test_report()
         {
             .name = "test case b",
             .passed = false,
-            .detail = paragraph("some details on test case b"),
+            .detail = text_doc{paragraph("some details on test case b, from ",
+                                   span("ctest").set_style(builtin::source_text),
+                                   ":"),
+                paragraph("1/2 Test #1: a ...   Passed    0.01 sec\n"
+                          "2/2 Test #2: b ...***Failed    0.02 sec")
+                    .set_style(builtin::preformatted)},
         },
     };
 

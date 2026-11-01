@@ -63,6 +63,12 @@ held in `std::variant`. This is a breaking change to almost every public API.
   directory. Generated test files go to `tests/odt/out/`.
 
 ### Added
+- **Code blocks**: `builtin::preformatted` (LibreOffice's Preformatted Text) styles a
+  monospace paragraph for code and logs, with lines separated by `'\n'`, and
+  `builtin::source_text` (Source Text) monospace text in a line. ODT defines them as
+  LibreOffice does when the document uses them and doesn't define them; HTML writes
+  `<pre>` and `<code>`, also for styles based on them. The example test report has a
+  log excerpt.
 - **White space, tabs and line breaks** are kept in `text`: spaces as they are,
   `'\t'` for a tab and `'\n'` for a line break, so `paragraph("line 1\nline 2")`
   is two lines. ODT writes them as `text:s`, `text:tab` and `text:line-break` where

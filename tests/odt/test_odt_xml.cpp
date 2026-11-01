@@ -207,3 +207,27 @@ TEST(ODT_XML, PageBreakFoldsIntoNextParagraph)
     EXPECT_STREQ(
         s.child("style:paragraph-properties").attribute("fo:break-before").as_string(), "page");
 }
+
+TEST(ODT_XML, BuiltinStylesDefinedOnce)
+{
+    const text_doc doc{paragraph("log\nlines").set_style(builtin::preformatted),
+        paragraph(span("code").set_style(builtin::source_text))};
+    odt::file(doc).save("odt/out/builtin_styles.odt");
+    odt::file::load("odt/out/builtin_styles.odt").save("odt/out/builtin_styles_resaved.odt");
+
+    for(const char *file : {"odt/out/builtin_styles.odt", "odt/out/builtin_styles_resaved.odt"})
+    {
+        const auto defs = definitions(styles_of(part(file, "styles.xml")));
+        EXPECT_EQ((defs.at({"Preformatted_20_Text", "paragraph"})), 1) << file;
+        EXPECT_EQ((defs.at({"Source_20_Text", "text"})), 1) << file;
+        EXPECT_FALSE(defs.contains({"Title", "paragraph"})) << "only the builtins used";
+    }
+
+    // moderate.odt defines Source Text already.
+    auto f = odt::file::load("odt/moderate.odt");
+    f.doc.add(paragraph(span("x").set_style(builtin::source_text)));
+    f.save("odt/out/moderate_source_text.odt");
+    EXPECT_EQ((definitions(styles_of(part("odt/out/moderate_source_text.odt", "styles.xml")))
+                      .at({"Source_20_Text", "text"})),
+        1);
+}

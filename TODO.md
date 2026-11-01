@@ -51,11 +51,6 @@ The style model covers only text, paragraph and graphics properties. It has no
 borders, column widths, cell shading or vertical alignment, so a results table
 in ODT has no borders at all. Add table, column and cell style properties.
 
-### Code / preformatted blocks
-Test reports need monospace blocks for logs and output. This could be a
-paragraph style plus the line-break and space nodes above. In HTML it would be
-`<pre>`.
-
 ### Table of contents
 - ODT: `text:table-of-content`. LibreOffice shows the entries stored in the file
   and doesn't regenerate them on load, so the writer has to write the entries

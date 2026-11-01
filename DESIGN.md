@@ -146,8 +146,19 @@ file must keep it where it was. `find_title()` returns the first one, wherever
 it is.
 
 Names in `builtin` are styles writers know without a definition in
-`text_doc::styles()`. ODT defines Title as LibreOffice does when the document
-doesn't; HTML writes the class and leaves its look to `html::file::css`.
+`text_doc::styles()`: `title`, `preformatted` (a monospace paragraph for code
+and logs) and `source_text` (monospace text within a line). They are
+LibreOffice's own Title, Preformatted Text and Source Text, so ODT defines each
+as LibreOffice does when the document uses it and neither the document nor the
+loaded file defines it. HTML writes the class and leaves its look to
+`html::file::css`, except that a preformatted paragraph is `<pre>` and a source
+text span `<code>`, as is anything styled with a style based on them.
+
+A code block is a paragraph, not a node of its own: its lines are separated by
+`'\n'` in the text, and its white space is kept like any other text's (see
+*White space and breaks*). So `paragraph(log).set_style(builtin::preformatted)`
+is the whole of it, and a format without code blocks still gets a monospace
+paragraph.
 
 - `author` is one string, since only Markdown front matter holds a list; several
   authors go in it as e.g. `"A; B"`.

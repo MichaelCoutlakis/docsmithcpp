@@ -105,10 +105,29 @@ constexpr const char *base_styles = R"~~(<?xml version="1.0" encoding="UTF-8"?>
 )~~";
 
 // LibreOffice's Title, its Heading parent's properties included.
-constexpr const char *title_style = R"~~(<style:style style:name="Title" style:family="paragraph" style:class="chapter">
-    <style:paragraph-properties fo:margin-top="0.423cm" fo:margin-bottom="0.212cm" fo:keep-with-next="always" fo:text-align="center"/>
-    <style:text-properties fo:font-family="'Liberation Sans'" style:font-family-generic="swiss" fo:font-size="28pt" fo:font-weight="bold" style:font-size-asian="28pt" style:font-weight-asian="bold" style:font-size-complex="28pt" style:font-weight-complex="bold"/>
-</style:style>)~~";
+constexpr const char *title_style =
+    R"~~(<style:style style:name="Title" style:family="paragraph" style:class="chapter"><style:paragraph-properties fo:margin-top="0.423cm" fo:margin-bottom="0.212cm" fo:keep-with-next="always" fo:text-align="center"/><style:text-properties fo:font-family="'Liberation Sans'" style:font-family-generic="swiss" fo:font-size="28pt" fo:font-weight="bold" style:font-size-asian="28pt" style:font-weight-asian="bold" style:font-size-complex="28pt" style:font-weight-complex="bold"/></style:style>)~~";
+
+// LibreOffice's Preformatted Text and Source Text.
+constexpr const char *preformatted_style =
+    R"~~(<style:style style:name="Preformatted_20_Text" style:display-name="Preformatted Text" style:family="paragraph" style:class="html"><style:paragraph-properties fo:margin-top="0cm" fo:margin-bottom="0cm"/><style:text-properties fo:font-family="'Liberation Mono'" style:font-family-generic="modern" style:font-pitch="fixed" fo:font-size="10pt" style:font-size-asian="10pt" style:font-size-complex="10pt"/></style:style>)~~";
+constexpr const char *source_text_style =
+    R"~~(<style:style style:name="Source_20_Text" style:display-name="Source Text" style:family="text"><style:text-properties fo:font-family="'Liberation Mono'" style:font-family-generic="modern" style:font-pitch="fixed"/></style:style>)~~";
+
+/// The builtin styles the writer defines when the document uses one and
+/// neither it nor the loaded file defines it. LibreOffice knows them without a
+/// definition; other readers may not.
+struct builtin_def
+{
+    const style_name &name;
+    style_family family;
+    const char *xml;
+};
+const builtin_def builtin_defs[] = {
+    {builtin::title, style_family::paragraph, title_style},
+    {builtin::preformatted, style_family::paragraph, preformatted_style},
+    {builtin::source_text, style_family::text, source_text_style},
+};
 
 /// The families each style name is used with in the body.
 std::map<std::string, std::set<style_family>> used_families(const text_doc &doc)
@@ -308,10 +327,10 @@ void writer::write_styles(const text_doc &doc)
             existing, m_automatic_styles, *ls, existing && read_list_style(existing) == *ls);
     }
 
-    // LibreOffice knows Title without a definition; other readers may not.
-    if(doc.find_title() &&
-        !find_style(m_styles, builtin::title.get_name(), style_family::paragraph))
-        m_styles.append_buffer(title_style, std::strlen(title_style));
+    for(const auto &b : builtin_defs)
+        if(auto it = used.find(b.name.get_name()); it != used.end() &&
+            it->second.contains(b.family) && !find_style(m_styles, b.name.get_name(), b.family))
+            m_styles.append_buffer(b.xml, std::strlen(b.xml));
 }
 
 // Archive path for an image. A document resource is embedded under its name; an

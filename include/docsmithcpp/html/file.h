@@ -29,7 +29,9 @@ namespace docsmith::html
 ///
 /// Style names on nodes become CSS classes, and the definitions in
 /// doc.styles() become rules in an embedded style sheet. A list is written as
-/// <ol> or <ul> according to its style in doc.list_styles(). unknown
+/// <ol> or <ul> according to its style in doc.list_styles(). A paragraph styled
+/// builtin::preformatted (or a style based on it) is <pre>, and a span styled
+/// builtin::source_text is <code>. unknown
 /// (pass-through) nodes hold another format's markup and are left out.
 ///
 ///     html::file page(doc);

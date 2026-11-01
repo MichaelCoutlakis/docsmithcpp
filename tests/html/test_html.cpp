@@ -358,3 +358,19 @@ TEST(HTML, PageBreak)
         html::file(text_doc{paragraph("one"), page_break{}, paragraph("two")}).to_string();
     EXPECT_TRUE(has(html, "<p>one</p>\n<div style=\"break-after: page\"></div>\n<p>two</p>"));
 }
+
+TEST(HTML, Preformatted)
+{
+    text_doc doc{paragraph("\n<a>\n  b\tc").set_style(builtin::preformatted),
+        paragraph("Run ", span("make").set_style(builtin::source_text), ".")};
+    style log("Log");
+    log.m_parent_style = builtin::preformatted;
+    doc.add_style(log);
+    doc.add(paragraph("x  y").set_style(log));
+    const auto html = html::file(doc).to_string();
+
+    // As is inside <pre>; the extra newline keeps the leading one.
+    EXPECT_TRUE(has(html, "<pre class=\"Preformatted_20_Text\">\n\n&lt;a&gt;\n  b\tc</pre>"));
+    EXPECT_TRUE(has(html, "<p>Run <code class=\"Source_20_Text\">make</code>.</p>"));
+    EXPECT_TRUE(has(html, "<pre class=\"Log\">x  y</pre>")) << "a style based on it";
+}

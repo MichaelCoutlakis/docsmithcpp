@@ -526,3 +526,21 @@ TEST(ODT, PageBreakBeforeLoadedParagraph)
     const auto again = odt::file::load("odt/out/moderate_page_break.odt");
     EXPECT_EQ(again.doc, f.doc);
 }
+
+TEST(ODT, PreformattedRoundTrips)
+{
+    const text_doc doc{
+        paragraph("Run ", span("ctest").set_style(builtin::source_text), ":"),
+        paragraph("$ ctest\n  1/2 Test #1: a ...   Passed\n  2/2 Test #2: b ...***Failed")
+            .set_style(builtin::preformatted),
+    };
+    odt::file(doc).save("odt/out/preformatted.odt");
+
+    const auto again = odt::file::load("odt/out/preformatted.odt");
+    EXPECT_EQ(again.doc.body, doc.body);
+    const style *pre = again.doc.styles().find(builtin::preformatted.get_name());
+    ASSERT_NE(pre, nullptr) << "the writer defines it";
+    EXPECT_EQ(pre->m_text_props->m_font_size, font_size(10));
+    EXPECT_EQ(
+        again.doc.styles().find(builtin::source_text.get_name())->m_family, style_family::text);
+}
