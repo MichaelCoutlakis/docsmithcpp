@@ -22,7 +22,10 @@
 
 #include <charconv>
 #include <chrono>
+#include <cstdio>
+#include <optional>
 #include <string>
+#include <string_view>
 
 #include "docsmithcpp/style.h"
 
@@ -67,6 +70,44 @@ inline std::string today()
     return zero_pad(static_cast<int>(ymd.year()), 4) + "-" +
         zero_pad(static_cast<unsigned>(ymd.month()), 2) + "-" +
         zero_pad(static_cast<unsigned>(ymd.day()), 2);
+}
+
+/// An xsd:dateTime ("2025-06-16T13:50:22.567", optionally ending in Z or
+/// +hh:mm), to the second. Without a zone it is read as UTC.
+inline std::optional<std::chrono::sys_seconds> parse_datetime(std::string_view s)
+{
+    using namespace std::chrono;
+    int y = 0, mo = 0, d = 0, h = 0, mi = 0, sec = 0;
+    const std::string str(s);
+    if(std::sscanf(str.c_str(), "%d-%d-%dT%d:%d:%d", &y, &mo, &d, &h, &mi, &sec) < 3)
+        return std::nullopt;
+    const year_month_day ymd{year{y}, month(static_cast<unsigned>(mo)), day(static_cast<unsigned>(d))};
+    if(!ymd.ok())
+        return std::nullopt;
+    sys_seconds t = sys_days{ymd} + hours{h} + minutes{mi} + seconds{sec};
+
+    // The zone follows the time (and any fraction of a second).
+    if(const auto tpos = s.find('T'); tpos != std::string_view::npos)
+        if(const auto zpos = s.find_first_of("+-", tpos); zpos != std::string_view::npos)
+        {
+            int zh = 0, zm = 0;
+            if(std::sscanf(str.c_str() + zpos + 1, "%d:%d", &zh, &zm) >= 1)
+                t -= (s[zpos] == '-' ? -1 : 1) * (hours{zh} + minutes{zm});
+        }
+    return t;
+}
+
+/// t as an xsd:dateTime in UTC, e.g. "2025-06-16T13:50:22Z".
+inline std::string format_datetime(std::chrono::sys_seconds t)
+{
+    using namespace std::chrono;
+    const auto days = floor<std::chrono::days>(t);
+    const year_month_day ymd{days};
+    const hh_mm_ss hms{t - days};
+    return zero_pad(static_cast<int>(ymd.year()), 4) + "-" +
+        zero_pad(static_cast<unsigned>(ymd.month()), 2) + "-" +
+        zero_pad(static_cast<unsigned>(ymd.day()), 2) + "T" + zero_pad(hms.hours().count(), 2) +
+        ":" + zero_pad(hms.minutes().count(), 2) + ":" + zero_pad(hms.seconds().count(), 2) + "Z";
 }
 
 } // namespace docsmith::detail

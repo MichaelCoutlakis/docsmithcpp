@@ -17,7 +17,6 @@
  *****************************************************************************/
 #include "odf/meta.h"
 
-#include <cstdio>
 #include <sstream>
 #include <string_view>
 
@@ -43,42 +42,6 @@ constexpr const char *base_meta = R"~~(<?xml version="1.0" encoding="UTF-8"?>
 </office:document-meta>
 )~~";
 
-/// An xsd:dateTime ("2025-06-16T13:50:22.567", optionally ending in Z or
-/// +hh:mm), to the second.
-std::optional<sys_seconds> parse_date(std::string_view s)
-{
-    int y = 0, mo = 0, d = 0, h = 0, mi = 0, sec = 0;
-    const std::string str(s);
-    if(std::sscanf(str.c_str(), "%d-%d-%dT%d:%d:%d", &y, &mo, &d, &h, &mi, &sec) < 3)
-        return std::nullopt;
-    const year_month_day ymd{year{y}, month(static_cast<unsigned>(mo)), day(static_cast<unsigned>(d))};
-    if(!ymd.ok())
-        return std::nullopt;
-    sys_seconds t = sys_days{ymd} + hours{h} + minutes{mi} + seconds{sec};
-
-    // The zone follows the time (and any fraction of a second).
-    if(const auto tpos = s.find('T'); tpos != std::string_view::npos)
-        if(const auto zpos = s.find_first_of("+-", tpos); zpos != std::string_view::npos)
-        {
-            int zh = 0, zm = 0;
-            if(std::sscanf(str.c_str() + zpos + 1, "%d:%d", &zh, &zm) >= 1)
-                t -= (s[zpos] == '-' ? -1 : 1) * (hours{zh} + minutes{zm});
-        }
-    return t;
-}
-
-std::string format_date(sys_seconds t)
-{
-    const auto days = floor<std::chrono::days>(t);
-    const year_month_day ymd{days};
-    const hh_mm_ss hms{t - days};
-    using detail::zero_pad;
-    return zero_pad(static_cast<int>(ymd.year()), 4) + "-" +
-        zero_pad(static_cast<unsigned>(ymd.month()), 2) + "-" +
-        zero_pad(static_cast<unsigned>(ymd.day()), 2) + "T" + zero_pad(hms.hours().count(), 2) +
-        ":" + zero_pad(hms.minutes().count(), 2) + ":" + zero_pad(hms.seconds().count(), 2) + "Z";
-}
-
 /// Sets the one child element name to value, or removes it if value is empty.
 void set_text(pugi::xml_node parent, const char *name, const std::string &value)
 {
@@ -98,9 +61,9 @@ void set_text(pugi::xml_node parent, const char *name, const std::string &value)
 void set_date(pugi::xml_node parent, const char *name, const std::optional<sys_seconds> &value)
 {
     // An unchanged date keeps its original form, fraction of a second included.
-    if(auto n = parent.child(name); n && value && parse_date(n.text().get()) == value)
+    if(auto n = parent.child(name); n && value && detail::parse_datetime(n.text().get()) == value)
         return;
-    set_text(parent, name, value ? format_date(*value) : std::string());
+    set_text(parent, name, value ? detail::format_datetime(*value) : std::string());
 }
 
 void set_keywords(pugi::xml_node parent, const std::vector<std::string> &keywords)
@@ -170,8 +133,8 @@ metadata read_meta(const std::string &xml)
         m.author = meta.child("dc:creator").text().get();
     for(auto k : meta.children("meta:keyword"))
         m.keywords.emplace_back(k.text().get());
-    m.created = parse_date(meta.child("meta:creation-date").text().get());
-    m.modified = parse_date(meta.child("dc:date").text().get());
+    m.created = detail::parse_datetime(meta.child("meta:creation-date").text().get());
+    m.modified = detail::parse_datetime(meta.child("dc:date").text().get());
     for(auto u : meta.children("meta:user-defined"))
         m.custom.emplace(u.attribute("meta:name").as_string(), u.text().get());
     return m;

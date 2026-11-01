@@ -8,7 +8,9 @@ add_executable(docsmithcpp_tests
     odt/test_package.cpp
     zip/test_zip.cpp
     html/test_html.cpp
-    md/test_md.cpp)
+    md/test_md.cpp
+    docx/test_docx_write.cpp
+    docx/test_ooxml.cpp)
 target_link_libraries(docsmithcpp_tests PRIVATE docsmithcpp GTest::gtest pugixml::pugixml)
 
 # White-box tests (odt/test_odt_xml.cpp, the zip and package tests) read the
@@ -21,6 +23,24 @@ target_compile_definitions(docsmithcpp_tests PRIVATE
     DOCSMITHCPP_TEST_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
 
 gtest_discover_tests(docsmithcpp_tests WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+
+# Whether LibreOffice opens the files the tests write, when it is installed.
+# It found a bug no unit test did (an office:version mismatch). Skip it with
+# ctest -LE libreoffice.
+find_program(DOCSMITHCPP_SOFFICE NAMES soffice.com soffice
+    PATHS "C:/Program Files/LibreOffice/program" "/Applications/LibreOffice.app/Contents/MacOS")
+if(DOCSMITHCPP_SOFFICE)
+    add_test(NAME libreoffice_opens_output
+        COMMAND ${CMAKE_COMMAND}
+            "-DSOFFICE=${DOCSMITHCPP_SOFFICE}"
+            "-DTESTS=$<TARGET_FILE:docsmithcpp_tests>"
+            "-DTEST_DIR=${CMAKE_CURRENT_SOURCE_DIR}"
+            "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/libreoffice"
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/libreoffice.cmake)
+    # It runs the test executable itself, so it doesn't race the other tests
+    # for the files they write.
+    set_tests_properties(libreoffice_opens_output PROPERTIES LABELS libreoffice TIMEOUT 600 RUN_SERIAL TRUE)
+endif()
 
 # Install the library and build a separate project against it, the way a
 # consumer would with find_package. Configures and builds from scratch, so it

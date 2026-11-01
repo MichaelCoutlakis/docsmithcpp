@@ -4,9 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  *****************************************************************************/
 
-// Build a document in code and save it as .odt and .html.
+// Build a document in code and save it as .odt, .docx and .html.
 //
-//   example_create_document [name]     (writes <name>.odt and <name>.html)
+//   example_create_document [name]     (writes <name>.odt, <name>.docx and <name>.html)
 
 #include <algorithm>
 #include <iostream>
@@ -80,6 +80,8 @@ void write_example_test_report()
     doc.replace(bookmark{"details"}, details);
 
     f.save("Example DocSmith++ Test Report.odt");
+    // The same document, its styles and page included, as Word has it.
+    docx::file(doc).save("Example DocSmith++ Test Report.docx");
 
     html::file page(doc);
     // A page has no page numbers: its footer is the template's without them.
@@ -127,6 +129,7 @@ int main(int argc, char **argv)
     doc.add(heading(2, bookmark{"results"}, "A table")).add(results);
 
     odt::file(doc).save(name + ".odt");
+    docx::file(doc).save(name + ".docx");
 
     html::file page(doc);
     page.css =
@@ -134,6 +137,6 @@ int main(int argc, char **argv)
         "table { border-collapse: collapse; } td { border: 1px solid #999; padding: 0.3em; }\n";
     page.save(name + ".html");
 
-    std::cout << "Wrote " << name << ".odt and " << name << ".html\n";
+    std::cout << "Wrote " << name << ".odt, " << name << ".docx and " << name << ".html\n";
     return 0;
 }

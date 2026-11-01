@@ -817,6 +817,8 @@ void writer::emit(pugi::xml_node parent, const page_break &)
 
 void writer::emit(pugi::xml_node parent, const unknown &u)
 {
+    if(u.source != markup::odf)
+        return; // another format's markup
     flush_page_break(parent);
     // Re-emit the captured subtree verbatim.
     pugi::xml_document frag;

@@ -141,13 +141,22 @@ struct field
     bool operator==(const field &) const = default;
 };
 
+/// The XML vocabulary an unknown node's markup is in.
+enum class markup
+{
+    odf,   //!< ODT
+    ooxml, //!< DOCX (WordprocessingML)
+};
+
 // Pass-through for content the parser does not model: verbatim serialized XML,
-// re-emitted unchanged by the writer. NOTE: only block- and inline-level foreign
-// content round-trips this way; unrecognized children *inside* a table or list,
-// and unknown attributes on known elements, are not yet captured.
+// re-emitted unchanged by the writer of the format it came from, and left out
+// by the others. NOTE: only block- and inline-level foreign content round-trips
+// this way; unrecognized children *inside* a table or list, and unknown
+// attributes on known elements, are not yet captured.
 struct unknown
 {
     std::string xml;
+    markup source{markup::odf};
     bool operator==(const unknown &) const = default;
 };
 
