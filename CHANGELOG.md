@@ -88,6 +88,24 @@ held in `std::variant`. This is a breaking change to almost every public API.
   document title. ODT writes and reads `text:page-number`, `text:page-count`,
   `text:date` and `text:title`; HTML writes the title and date, and leaves page
   numbers out.
+- **Markdown output**: `md::file(doc).to_string()` / `save()` write GitHub Flavored
+  Markdown, with no dependency. Bold and italic styles become `**strong**` and
+  `*emphasis*`, `builtin::source_text` code spans, `builtin::preformatted` fenced
+  code blocks and `Quotations` block quotes. Lists are ordered or not from their list
+  style, tables are GFM tables (an empty header row without `header_rows`), bookmarks
+  are `<a id>` anchors, `'\n'` is a hard break and `page_break` a thematic break.
+  Markdown's special characters are escaped. Images are written next to the file, as
+  for HTML. See DESIGN.md, *Markdown*.
+- **Markdown input** (CMake option `DOCSMITHCPP_MARKDOWN`, off by default and on in
+  the `dev` preset): `md::parse(std::string_view)` and `md::file::load()` read
+  CommonMark with GFM tables, strikethrough and autolinks, using md4c. md4c is linked
+  privately, and the package config looks for it only when the option is on. Parsed
+  emphasis, strong, code and quotes get LibreOffice's style names, so the result
+  writes back to the same Markdown and looks right as `.odt`; it can be added to a
+  document with `text_doc::append()`. Raw HTML is dropped, apart from bookmark
+  anchors and `<br>`.
+- `example_md`: builds a test report as Markdown, converts `.odt` to `.md`, and `.md`
+  to `.odt` and `.html`.
 - **Code blocks**: `builtin::preformatted` (LibreOffice's Preformatted Text) styles a
   monospace paragraph for code and logs, with lines separated by `'\n'`, and
   `builtin::source_text` (Source Text) monospace text in a line. ODT defines them as

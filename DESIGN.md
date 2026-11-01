@@ -256,3 +256,75 @@ paragraph.
   form.
 - **HTML**: `<html lang>`, `<title>` (`html::file::title`, else `meta.title`,
   else the first heading) and `author`, `description` and `keywords` meta tags.
+- **Markdown**: not written. Front matter isn't part of CommonMark or GFM.
+
+## Markdown
+
+`md::file` writes GitHub Flavored Markdown with no dependency. `md::parse` and
+`md::file::load` read it with md4c, and are built only with
+`DOCSMITHCPP_MARKDOWN`. They live in their own namespace, like `odt::file` and
+`html::file`, rather than on `text_doc`, so the core stays format-agnostic. A
+parsed snippet goes into another document with `text_doc::append()`.
+
+Markdown has fewer things than the model, and no styles at all, so the writer
+maps what it can and keeps the content of the rest. The parser maps each
+Markdown construct to the node and style a document built in code or loaded
+from ODT would have, using LibreOffice's style names, so a parsed document
+looks right in an `.odt` and writes back to the same Markdown.
+
+| Model | Markdown | Read back as |
+|---|---|---|
+| `heading` | `#` to `######` (level clamped) | the same |
+| `builtin::title` paragraph | `# ` | a level 1 heading |
+| `paragraph` | a paragraph, its style dropped | the same, unstyled |
+| span with a bold style | `**strong**` | span styled `Strong_20_Emphasis` (bold, defined in `styles()`) |
+| span with an italic or oblique style | `*emphasis*` | span styled `Emphasis` (italic, defined) |
+| span based on `builtin::source_text` | `` `code` `` | span styled `builtin::source_text` |
+| other spans | their content | text |
+| `builtin::preformatted` paragraph | fenced code block | the same; the info string is dropped |
+| paragraph based on `Quotations` | `>` block quote | `Quotations` paragraphs |
+| `'\n'` in text | hard break, `\` at the end of the line | `'\n'`; a soft break is a space |
+| `hyperlink` | `[text](url)`, `<url>` when the text is the URL, `(#id)` for a bookmark | the same |
+| `bookmark` | `<a id="name"></a>` | a bookmark |
+| `list` | `-` or `1.` (with the start number) from its list style at that level | list styled `List_20_1` or `Numbering_20_123[_start_N]` |
+| `table` | GFM table | the same, see below |
+| `frame` | `![](uri)`; a block frame is a paragraph of its own | a paragraph holding only an image is a block frame |
+| `page_break` | thematic break `---` | `page_break` |
+| `unknown` | left out (it holds another format's markup) | — |
+
+- **Styles**: a span's style counts as bold or italic if it, or a style it is
+  based on, says so. The names `Emphasis` and `Strong_20_Emphasis` count even
+  without a definition, as builtin styles do. Other text properties (font, size,
+  colour) have no Markdown form. Emphasis next to punctuation inside a word
+  (`a**"b"**c`) doesn't open under CommonMark's flanking rules; that case isn't
+  worked around.
+- **Code blocks** lose their info string (```` ```c++ ````), since a code block
+  is a paragraph; see TODO.md, *Model gaps*.
+- **Escaping**: `\`, `` ` ``, `*`, `[`, `]`, `<`, `|` and `~` are always
+  escaped, `_` at a word boundary (so `snake_case` stays as is), and `&` where it
+  would read as an entity. At the start of a line, so are `#`, `>`, `-`, `+`,
+  `=` and the `.` or `)` after a number; leading spaces and tabs become `&#32;`
+  and `&#9;`, which would otherwise be dropped or start a code block. A URL
+  written as text becomes a link when read back, since autolinks are on.
+- **Lists** are tight (no blank lines) when every item is one plain paragraph,
+  optionally followed by a list, and loose otherwise. Two lists of the same kind
+  in a row are kept apart with an empty `<!-- -->` comment, which the parser
+  drops. When parsing, a nested list of the same kind and start as its parent's
+  style at that level stays unstyled, as nested lists from ODT do.
+- **Tables**: GFM tables always have one header row. With `header_rows` of 1 or
+  more the first row is the header (others are body rows); with 0 the header row
+  is written empty, and the parser reads an all-empty header row back as
+  `header_rows = 0`. A cell is one line: its paragraphs are joined with `<br>`,
+  nested lists and tables become their text, and a spanned cell's content goes in
+  its first slot, with the covered ones empty. The parser reads `<br>` back as
+  `'\n'`.
+- **Raw HTML** is dropped when parsing, apart from `<a id>` (or `<a name>`)
+  anchors and `<br>`. Putting it in `unknown` would make the ODT writer write it
+  into `content.xml` as XML.
+- **Strikethrough** is parsed, but the model has no strikethrough, so only its
+  text is kept. Task lists are not enabled, so `[ ]` stays text.
+- **Images**: `save()` writes the resources an image refers to under
+  `resource_dir`, and copies image files from disk, as HTML does. `load()`
+  reads images given by a relative path that exists into `resources()`, so the
+  document can be saved as `.odt` or `.html` elsewhere. `parse()` leaves image
+  uris as written. Alt text and titles are dropped.

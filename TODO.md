@@ -65,32 +65,6 @@ headers and footers*.
 
 ## 4. Formats
 
-### Markdown output
-Writing Markdown is cheap and fits the test report case: CI job summaries and PR
-comments are Markdown. It's also the first format that isn't ODF or HTML, so it
-tests whether the model really is format-agnostic. Write it ourselves (GFM
-tables, links, bookmarks as anchors). Styles have no Markdown form, so decide
-which ones map to emphasis or code.
-
-### Markdown input
-Shape the API like the others, e.g. `md::parse(std::string_view) -> text_doc`
-and `md::file::load/save/to_string`, rather than `text_doc::from_md`, so the core
-stays format-agnostic. A parsed snippet can then be added with
-`text_doc::append()`.
-
-Use [md4c](https://github.com/mity/md4c) for parsing rather than our own parser.
-It's MIT, two C files with no dependencies, supports CommonMark and the GFM
-extensions (tables, strikethrough, task lists), and is in vcpkg. Its SAX-style
-callbacks (`enter_block`, `leave_block`, `text`) map directly to building the
-tree with a stack. Reasons not to write our own: CommonMark's edge cases
-(emphasis delimiter runs, lazy continuation lines, tight and loose lists, link
-reference definitions) are where hand-written parsers go wrong, and a subset
-parser would quietly define its own dialect.
-
-Link md4c privately, like pugixml, and put Markdown input behind an option,
-`DOCSMITHCPP_MARKDOWN`, so consumers who don't need it don't need md4c. Markdown
-output has no dependency and stays unconditional.
-
 ### DOCX
 This is the format most users of a C++ document library will need. Output
 first, then input. DOCX is an OPC package, a zip like ODF with
@@ -101,7 +75,8 @@ fine for ODF as LibreOffice writes it, but DOCX reading should not assume `w:`.
 ## 5. Dependencies
 
 The goal is a library a consumer can build without a package manager. The
-dependencies are pugixml and miniz, both MIT and small.
+dependencies are pugixml and miniz, both MIT and small, and md4c (MIT) for
+the optional Markdown input.
 
 ### Keep pugixml
 It's MIT, one `.cpp`, widely packaged, and private. Writing XML ourselves would
@@ -113,6 +88,11 @@ miniz is a single `.c`/`.h` pair, so vendoring it is cheap. Its licence file
 goes next to it (CONTRIBUTING, *Adding a dependency*).
 
 ## 6. Internal quality
+
+### Share the image resource plan
+`src/resource_plan.{h,cpp}` (where images go when a file is saved with its
+images next to it) is used by Markdown. `src/html/file.cpp` still has its own
+copy of the same code in an anonymous namespace; switch it to the shared one.
 
 ### Separate HTML serialisation from the document mapping
 `src/html/file.cpp` currently mixes two concerns. One is mapping nodes to
@@ -152,6 +132,12 @@ Options:
 - Package entries that no `image` referred to at load (e.g. pictures used only by
   `unknown` markup) stay in the ODT package and are carried over on save, even if
   nothing uses them any more. Resources whose image was removed are dropped.
+- Code blocks are paragraphs styled `builtin::preformatted`, so a Markdown
+  fence's info string (```` ```c++ ````) has nowhere to go and is dropped. Code
+  blocks are now as common as headings, so a `code_block` block node (text plus
+  `language`) would make them first class. ODT would still write it as a
+  Preformatted Text paragraph, keeping the language in a derived style or an
+  attribute, and HTML as `<pre><code class="language-…">`.
 - `frame` holds only an image. ODF frames can also hold text boxes and objects.
 - HTML: images can only be written as files. A `data:` URI mode would give a
   single self-contained page.

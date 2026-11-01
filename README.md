@@ -1,9 +1,9 @@
 # DocSmith++ (⚠️ 🚧 Note: This is a work in progress 🚧)
 
 **DocSmith++** is a modern C++20 library for reading, modifying, and generating
-structured document formats like `.odt` and `.html`. It aims to provide a clean,
-idiomatic C++ API for working with rich-text documents, with future support for
-`.docx`, Markdown, and PDF.
+structured document formats like `.odt`, `.html` and Markdown. It aims to
+provide a clean, idiomatic C++ API for working with rich-text documents, with
+future support for `.docx` and PDF.
 
 ## Typical use case scenarios
 
@@ -43,6 +43,8 @@ Test software written in C++ could use `docsmithcpp` to generate test reports.
 | :white_check_mark: | Basic .odt output                     |
 | :x:                | Basic .docx output                    |
 | :white_check_mark: | HTML output                           |
+| :white_check_mark: | Markdown output                       |
+| :white_check_mark: | Markdown input (optional, md4c)       |
 
 ## Features
 
@@ -50,11 +52,13 @@ Test software written in C++ could use `docsmithcpp` to generate test reports.
   the parts of the file the model doesn't represent (styles, metadata, images).
 - 🌐 Write HTML5 pages: styles become CSS classes, list styles pick
   `<ol>`/`<ul>`, and images are written next to the page
+- 📄 Write GitHub Flavored Markdown (CI job summaries, PR comments): bold and
+  italic styles become emphasis, code styles code spans and fenced blocks, and
+  tables GFM tables. Read Markdown into the model with md4c (optional)
 - 🔍 Query support: search paragraphs, headings, styles, etc.
 - ⚙️ Built with modern C++ idioms (the document tree is plain value types in
   `std::variant`, with `std::visit`-based traversal)
-- 🔌 Format-agnostic document model: more formats (e.g. `.docx`, Markdown, PDF)
-  planned
+- 🔌 Format-agnostic document model: more formats (e.g. `.docx`, PDF) planned
 
 ---
 
@@ -70,6 +74,7 @@ This project uses [CMake](https://cmake.org/) for building and configuring.
 - Dependencies (e.g. via [vcpkg](https://vcpkg.io/)):
   - [pugixml](https://pugixml.org/)
   - [miniz](https://github.com/richgel999/miniz)
+  - [md4c](https://github.com/mity/md4c) (only with `DOCSMITHCPP_MARKDOWN`)
   - [gtest](https://github.com/google/googletest) (tests only)
 
 ### Build
@@ -97,13 +102,17 @@ ctest --test-dir build
 | `DOCSMITHCPP_BUILD_TESTS`    | ON when top-level | Build the GoogleTest suite                                |
 | `DOCSMITHCPP_BUILD_EXAMPLES` | ON when top-level | Build `examples/`                                         |
 | `DOCSMITHCPP_DEBUG_FILES`    | OFF (ON in `dev`) | Also write `<name>.content.xml` next to each saved `.odt` |
+| `DOCSMITHCPP_MARKDOWN`       | OFF (ON in `dev`) | Markdown input (`md::parse`, `md::file::load`), with md4c |
 
 ### Using it from another CMake project
 
 Whichever route you take, link `docsmith::docsmithcpp`, the same target name in
 every case. pugixml and miniz are linked privately, but a static library still
 needs them at link time, so they must be findable (e.g. through the same vcpkg
-toolchain).
+toolchain). So must md4c when the library is built with `DOCSMITHCPP_MARKDOWN`:
+the package config then looks for it, and the `docsmith::docsmithcpp` target
+defines `DOCSMITHCPP_MARKDOWN` for its users, which `md/file.h` uses to declare
+the input functions. Markdown output needs nothing, so it is always built.
 
 Installed, with `find_package`:
 
@@ -158,6 +167,9 @@ iterating.
   header and footer with page numbers, table of contents, placeholders).
 - `example_read_odt <in.odt>`: parse a file, print its tree and list its links.
 - `example_odt_to_html <in.odt> [out.html]`: convert through the document model.
+- `example_md [in.odt|in.md] [out]`: with no arguments, build a small test report
+  and save `report.md`; convert an `.odt` to `.md`, or (with
+  `DOCSMITHCPP_MARKDOWN`) an `.md` to `.odt` and `.html`.
 
 📚 Example Usage
 
@@ -180,6 +192,7 @@ int main() {
     };
     odt::file(hello).save("hello_world.odt");
     html::file(hello).save("hello_world.html");
+    md::file(hello).save("hello_world.md");
 
     // Load, query and edit. Saving keeps the parts of the package the model
     // doesn't represent (styles.xml, meta.xml, embedded images, ...).
@@ -202,6 +215,9 @@ int main() {
         }, b.v);
 
     doc.add(paragraph("Appended from C++."));
+#ifdef DOCSMITHCPP_MARKDOWN
+    doc.append(md::parse("Appended from *Markdown*."));
+#endif
     f.save("example_edited.odt");
 
     // Fill in a template: put content in place of its placeholders, found by
