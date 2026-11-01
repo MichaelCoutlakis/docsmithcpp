@@ -587,3 +587,23 @@ TEST(ODT, TableOfContentsRoundTrip)
     odt::file(doc).save("odt/out/toc.odt");
     EXPECT_EQ(odt::file::load("odt/out/toc.odt").doc.body, doc.body);
 }
+
+TEST(ODT, LoadReportTemplate)
+{
+    // Made by example_make_report_template and saved again by LibreOffice.
+    auto f = odt::file::load("../examples/report_template.odt");
+    const paragraph header(field{field_type::title});
+    ASSERT_EQ(f.doc.page.header.size(), 1U);
+    EXPECT_EQ(std::get<paragraph>(f.doc.page.header.front().v).children(), header.children());
+    EXPECT_FALSE(collect<field>(f.doc).empty());
+    EXPECT_EQ(collect<table_of_contents>(f.doc).size(), 1U);
+    EXPECT_EQ(collect<table_of_contents>(f.doc).front()->title, "Contents");
+    ASSERT_NE(f.doc.styles().find("Pass"), nullptr);
+
+    EXPECT_TRUE(f.doc.replace(text{"{{summary}}"}, heading(2, "Filled in")));
+    EXPECT_TRUE(f.doc.replace(bookmark{"details"}, paragraph("details")));
+    f.save("odt/out/report_template_filled.odt");
+    const auto again = odt::file::load("odt/out/report_template_filled.odt");
+    EXPECT_EQ(again.doc.body, f.doc.body);
+    EXPECT_EQ(again.doc.page, f.doc.page);
+}

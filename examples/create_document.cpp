@@ -8,6 +8,7 @@
 //
 //   example_create_document [name]     (writes <name>.odt and <name>.html)
 
+#include <algorithm>
 #include <iostream>
 
 #include "docsmithcpp/docsmith.h"
@@ -41,44 +42,51 @@ void write_example_test_report()
         },
     };
 
-    text_doc doc;
-    doc.meta.title = "DocSmith++ Test Report (meta data title)";
+    // The template has the styles, the header and footer (title and page
+    // numbers), a table of contents and placeholders to fill in.
+    auto f = odt::file::load(DOCSMITHCPP_EXAMPLES_DIR "/report_template.odt");
+    text_doc &doc = f.doc;
+    doc.meta.title = "DocSmith++ Test Report";
     doc.meta.author = "Example Test Application";
-    doc.set_title("DocSmith++ Test Report");
-    doc.add(heading(1, "Test Case Summary"));
 
-    auto pass_style =
-        doc.add_style(style("pass-style", text_props(font_weight::bold, colour::rgb(0, 128, 0))));
-    auto fail_style =
-        doc.add_style(style("fail-style", text_props(font_weight::bold, colour::rgb(192, 0, 0))));
+    // The template's Pass and Fail text styles.
+    auto result = [](bool passed)
+    { return paragraph(span(passed ? "Passed" : "Failed").set_style(passed ? "Pass" : "Fail")); };
 
-    auto pass_summary = paragraph("Passed").set_style(pass_style);
-    auto fail_summary = paragraph("Failed").set_style(fail_style);
     auto summary_table = table::from_cells({{{"Test Case"}, {"Result"}}}).set_header_rows(1);
     for(auto &r : records)
     {
         summary_table.add_row({
             // Test case with link to detail section
             paragraph(hyperlink(bookmark{r.name}, r.name)),
-            // Pass or Fail
-            {r.passed ? pass_summary : fail_summary},
+            {result(r.passed)},
         });
     }
+    const auto passed = std::count_if(records.begin(), records.end(), [](auto &r) { return r.passed; });
+    doc.replace(text{"{{summary}}"},
+        {paragraph(std::to_string(passed) + " of " + std::to_string(records.size()) +
+             " test cases passed.")
+                .set_style("Text_20_body"),
+            summary_table});
 
-    doc.add(summary_table);
-    doc.add(heading(1, "Test Case Detail"));
-
+    text_doc details;
     for(auto &r : records)
     {
         // Heading with link target from summary table
-        doc.add(heading(2, span(r.name, bookmark(r.name))));
-        doc.append(r.detail);
+        details.add(heading(2, span(r.name, bookmark(r.name))).set_style("Heading_20_2"));
+        details.append(r.detail);
     }
+    doc.replace(bookmark{"details"}, details);
 
-    if(auto t = doc.find_title(); t)
-        t->add(" - Updated");
+    f.save("Example DocSmith++ Test Report.odt");
 
-    odt::file(doc).save("Example DocSmith++ Test Report.odt");
+    html::file page(doc);
+    // A page has no page numbers: its footer is the template's without them.
+    page.doc.page.set_footer(paragraph("Generated test report").set_style("Footer"));
+    page.css = "body { max-width: 50em; margin: auto; }\n"
+               "table { border-collapse: collapse; } td, th { border: 1px solid #999; padding: 0.3em; }\n"
+               "header, footer { color: #595959; font-size: 9pt; }\n";
+    page.save("Example DocSmith++ Test Report.html");
 }
 
 int main(int argc, char **argv)

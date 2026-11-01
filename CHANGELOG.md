@@ -63,6 +63,12 @@ held in `std::variant`. This is a breaking change to almost every public API.
   directory. Generated test files go to `tests/odt/out/`.
 
 ### Added
+- **Template-driven test report**: `examples/report_template.odt` (built by
+  `example_make_report_template`, then saved by LibreOffice) has heading, body,
+  header, footer and pass / fail styles, a header with the title, a footer with
+  page numbers, a table of contents and placeholders. `example_create_document`
+  fills it in and writes `.odt` and `.html`; `example_fill_template` shows
+  replace and insert on their own.
 - **Filling in a template**: `text_doc::replace()`, `insert_after()` and
   `insert_before()` put a document's body in place of, after or before a
   `placeholder`: the first paragraph or heading holding a `bookmark`, with a

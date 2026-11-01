@@ -151,7 +151,11 @@ iterating.
 ### Examples
 
 - `example_create_document [name]`: build a document in code and save it as
-  `<name>.odt` and `<name>.html`.
+  `<name>.odt` and `<name>.html`. It also fills in the test report template,
+  `examples/report_template.odt`, and saves the report as `.odt` and `.html`.
+- `example_fill_template`: replace and insert on the report template.
+- `example_make_report_template [out.odt]`: build the report template (styles,
+  header and footer with page numbers, table of contents, placeholders).
 - `example_read_odt <in.odt>`: parse a file, print its tree and list its links.
 - `example_odt_to_html <in.odt> [out.html]`: convert through the document model.
 
@@ -199,6 +203,13 @@ int main() {
 
     doc.add(paragraph("Appended from C++."));
     f.save("example_edited.odt");
+
+    // Fill in a template: put content in place of its placeholders, found by
+    // their text, a bookmark or a style.
+    auto report = odt::file::load("report_template.odt");
+    report.doc.replace(text{"{{summary}}"}, {heading(1, "Summary"), paragraph("All passed.")});
+    report.doc.page.set_footer(paragraph("Page ", field{field_type::page_number}));
+    report.save("report.odt");
 }
 ```
 

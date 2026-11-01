@@ -32,41 +32,36 @@ dropped. So load, edit, save of a real-world file can silently lose content.
 
 `write_example_test_report()` in `examples/create_document.cpp` is the yardstick.
 
-### The test report example loads a template
-The example should load a template `.odt` (e.g. `examples/report_template.odt`)
-that already has basic styling: fonts, heading styles, a table style, and a
-header and footer. It then fills in the body and saves. This is the "load a
-template, fill in data, save" scenario from the README. It needs style
-definitions to be parsed (section 2) so that HTML output from the same document
-gets the template's look too.
-
-### Filling in a template
-There is no fill-in mechanism. Today, filling a template means searching `body`
-by hand. Options: replace a bookmark, or a paragraph with a placeholder style or
-text, with a sequence of nodes. Insert-after or replace helpers on `text_doc`
-would cover most of it.
-
 ### Table and cell properties
 The style model covers only text, paragraph and graphics properties. It has no
 borders, column widths, cell shading or vertical alignment, so a results table
-in ODT has no borders at all. Add table, column and cell style properties.
+in ODT has no borders at all. Add table, column and cell style properties. The
+report template (`examples/make_report_template.cpp`) should then get a table
+style.
 
-### Table of contents
-- ODT: `text:table-of-content`. LibreOffice shows the entries stored in the file
-  and doesn't regenerate them on load, so the writer has to write the entries
-  itself, built from the headings.
-- HTML: a `<nav>` list of links to the headings, which need ids or bookmarks.
+### Paragraph spacing and alignment
+Paragraph properties are only page breaks, so the template's headings have no
+space above or below them, and a style defined in code replaces LibreOffice's
+spacing for a style of the same name (e.g. Heading 1). Add margins, alignment
+and keep-with-next.
 
-### Headers, footers and page numbers
-- ODT: headers and footers belong to a master page (`style:master-page` with
-  `style:header` / `style:footer`) in `styles.xml`. A template already has them,
-  and the writer keeps a loaded `styles.xml`, so they work today without a model.
-  Creating them from code needs a page / master-page model; the writer already
-  owns `styles.xml` (`writer::load_styles_xml()` in `src/odt/writer.cpp`).
-- Page numbers are fields (`text:page-number`, `text:page-count`). They need a
-  small field node, which also suits dates and the document title.
-- HTML has no pages. Write an optional `<header>` / `<footer>` and leave page
-  numbers out, or use print CSS.
+### Page numbers in the table of contents
+The ODT writer writes table of contents entries without page numbers, since it
+doesn't lay out pages; LibreOffice adds them when the index is updated. Options:
+a macro-free way to have LibreOffice update indexes on load (check whether a
+setting exists), or a note in the template.
+
+### Fonts in HTML
+A style's `font_name` is ODF's `style:font-name`, the name of a font
+declaration, not the font family: LibreOffice declares "Liberation Sans1" for
+a second "Liberation Sans". HTML writes the name as the CSS font family. Read
+the declaration's `svg:font-family` instead.
+
+### Several page styles
+`text_doc::page` is one page style for the whole document. A different first
+page, or a landscape section, needs a registry of page styles and a way to
+start one in the body (ODF master pages, DOCX sections). See DESIGN.md, *Pages,
+headers and footers*.
 
 ## 4. Formats
 
@@ -172,7 +167,8 @@ Options:
   `tests/odt/out/` (see *Verifying* below).
 - **Fixtures:** the old experimental samples were deleted. Add small, targeted
   `.odt` fixtures per feature (lists, figures, bookmarks, page breaks, nested
-  tables, header rows, headers and footers) as tests need them.
+  tables, header rows) as tests need them. `examples/report_template.odt`, as
+  LibreOffice saved it, covers headers, footers, fields and a table of contents.
 
 ## Performance (deferred)
 - `box<T>` costs one heap allocation per span, hyperlink, list item and table cell.
