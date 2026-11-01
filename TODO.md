@@ -51,11 +51,6 @@ The style model covers only text, paragraph and graphics properties. It has no
 borders, column widths, cell shading or vertical alignment, so a results table
 in ODT has no borders at all. Add table, column and cell style properties.
 
-### Table header rows
-The parser flattens `table:table-header-rows` into ordinary rows, so header rows
-are lost: in ODT they don't repeat on each page, and HTML has no
-`<thead>`/`<th>`. Model them.
-
 ### Line breaks, tabs and spaces
 ODT `text:s` (repeated spaces), `text:tab` and `text:line-break` become
 `unknown`, so extracting the plain text loses them, and there's no way to build
@@ -211,9 +206,6 @@ file (setup in CONTRIBUTING.md). Checked with lldb 23 and CodeLLDB's lldb 22
 - Possibly gdb pretty printers.
 
 ## Docs and project
-- Write a short spec of the generic document model in `DESIGN.md`: which nodes
-  exist and which may contain which, independent of any one format. It would
-  guide new nodes and new formats.
 - Add a Doxygen target. The `///` comments are there, but nothing generates an
   API reference.
 - The README's "Typical use case scenarios" section is a placeholder.

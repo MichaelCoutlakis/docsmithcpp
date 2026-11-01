@@ -49,7 +49,7 @@ void write_example_test_report()
 
     auto pass_summary = paragraph("Passed").set_style(pass_style);
     auto fail_summary = paragraph("Failed").set_style(fail_style);
-    auto summary_table = table::from_cells({{{"Test Case"}, {"Result"}}});
+    auto summary_table = table::from_cells({{{"Test Case"}, {"Result"}}}).set_header_rows(1);
     for(auto &r : records)
     {
         summary_table.add_row({

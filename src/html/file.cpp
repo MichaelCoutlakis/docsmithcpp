@@ -412,11 +412,30 @@ private:
     }
     void emit_block(const table &t)
     {
+        // <thead> / <tbody> only when there are header rows, so a plain table
+        // stays plain.
+        const size_t header_rows = std::min(t.header_rows, t.num_rows());
+        auto section = [&](size_t r)
+        {
+            if(header_rows == 0 || (r != 0 && r != header_rows))
+                return;
+            if(r != 0)
+            {
+                --m_depth;
+                indent();
+                m_os << "</thead>\n";
+            }
+            indent();
+            m_os << (r == 0 ? "<thead>\n" : "<tbody>\n");
+            ++m_depth;
+        };
+
         indent();
         m_os << "<table>\n";
         ++m_depth;
         for(size_t r = 0; r != t.num_rows(); ++r)
         {
+            section(r);
             indent();
             m_os << "<tr>\n";
             ++m_depth;
@@ -430,11 +449,17 @@ private:
                     attrs += " rowspan=\"" + std::to_string(cell.rowspan) + "\"";
                 if(cell.colspan != 1)
                     attrs += " colspan=\"" + std::to_string(cell.colspan) + "\"";
-                container("td", cell.style, cell.children(), attrs);
+                container(r < header_rows ? "th" : "td", cell.style, cell.children(), attrs);
             }
             --m_depth;
             indent();
             m_os << "</tr>\n";
+        }
+        if(header_rows != 0)
+        {
+            --m_depth;
+            indent();
+            m_os << (header_rows == t.num_rows() ? "</thead>\n" : "</tbody>\n");
         }
         --m_depth;
         indent();

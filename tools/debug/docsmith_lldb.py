@@ -147,7 +147,8 @@ def table_summary(valobj, internal_dict):
     rows = _synthetic(valobj.GetChildMemberWithName("rows"))
     n = rows.GetNumChildren()
     cols = _synthetic(rows.GetChildAtIndex(0)).GetNumChildren() if n else 0
-    return "table %dx%d" % (n, cols)
+    header = valobj.GetChildMemberWithName("header_rows").GetValueAsUnsigned(0)
+    return "table %dx%d" % (n, cols) + (", %d header" % header if header else "")
 
 
 def text_summary(valobj, internal_dict):

@@ -63,6 +63,12 @@ held in `std::variant`. This is a breaking change to almost every public API.
   directory. Generated test files go to `tests/odt/out/`.
 
 ### Added
+- **Table header rows**: `table::header_rows` (and `set_header_rows(n)`) counts the
+  rows at the top that are header rows. ODT reads and writes them as
+  `table:table-header-rows`, so they repeat on each page; the parser used to flatten
+  them into ordinary rows. HTML writes them in `<thead>` with `<th>` cells, and the
+  other rows in `<tbody>`. The example test report's summary table has one.
+- `DESIGN.md` lists the nodes and what each may contain.
 - **Loading style definitions**: `odt::file::load()` reads the styles and list styles
   of `styles.xml` and `content.xml` (common and automatic) into `text_doc::styles()` /
   `list_styles()`, as far as the model holds their properties. HTML from a parsed

@@ -325,3 +325,22 @@ TEST(HTML, CssIncludesInheritedProperties)
     const auto html = html::file(doc).to_string();
     EXPECT_TRUE(has(html, ".Child { font-size: 12pt; font-style: italic; }"));
 }
+
+TEST(HTML, HeaderRows)
+{
+    table t = table::from_cells({{{"Name"}, {"Value"}}, {{"a"}, {"1"}}}).set_header_rows(1);
+    const auto html = html::file(text_doc{t}).to_string();
+
+    EXPECT_TRUE(has(html, "<table>\n  <thead>\n    <tr>\n      <th>Name</th>"));
+    EXPECT_TRUE(has(html, "</tr>\n  </thead>\n  <tbody>\n    <tr>\n      <td>a</td>"));
+    EXPECT_TRUE(has(html, "</tr>\n  </tbody>\n</table>"));
+    EXPECT_EQ(count(html, "<th>"), 2U);
+
+    // Without header rows, no sections.
+    const auto plain = html::file(text_doc{table(1, 1)}).to_string();
+    EXPECT_FALSE(has(plain, "<thead>") || has(plain, "<tbody>"));
+
+    // Only header rows.
+    const auto only = html::file(text_doc{table(1, 1).set_header_rows(1)}).to_string();
+    EXPECT_TRUE(has(only, "</thead>\n</table>"));
+}

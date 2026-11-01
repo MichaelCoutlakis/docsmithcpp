@@ -106,40 +106,44 @@ std::vector<inline_node> parse_inline_children(const pugi::xml_node &node)
     return out;
 }
 
+std::vector<table_cell> parse_row(const pugi::xml_node &row_node)
+{
+    std::vector<table_cell> row;
+    for(auto cell_node : row_node.children())
+    {
+        std::string ct = cell_node.name();
+        if(ct == "table:table-cell")
+        {
+            table_cell c;
+            c.rowspan = cell_node.attribute("table:number-rows-spanned").as_int(1);
+            c.colspan = cell_node.attribute("table:number-columns-spanned").as_int(1);
+            c.style = style_of(cell_node, "table:style-name");
+            c.children() = parse_block_children(cell_node);
+            row.push_back(std::move(c));
+        }
+        else if(ct == "table:covered-table-cell")
+            row.push_back(table_cell{}); // placeholder for a spanned-over slot
+    }
+    return row;
+}
+
 table parse_table(const pugi::xml_node &node)
 {
     table t;
-
-    auto parse_rows_in = [&t](const pugi::xml_node &container, auto &&self) -> void
+    for(auto child : node.children())
     {
-        for(auto child : container.children())
+        std::string tag = child.name();
+        if(tag == "table:table-header-rows")
         {
-            std::string tag = child.name();
-            if(tag == "table:table-header-rows")
-                self(child, self); // flatten header rows into the body
-            else if(tag == "table:table-row")
-            {
-                std::vector<table_cell> row;
-                for(auto cell_node : child.children())
-                {
-                    std::string ct = cell_node.name();
-                    if(ct == "table:table-cell")
-                    {
-                        table_cell c;
-                        c.rowspan = cell_node.attribute("table:number-rows-spanned").as_int(1);
-                        c.colspan = cell_node.attribute("table:number-columns-spanned").as_int(1);
-                        c.style = style_of(cell_node, "table:style-name");
-                        c.children() = parse_block_children(cell_node);
-                        row.push_back(std::move(c));
-                    }
-                    else if(ct == "table:covered-table-cell")
-                        row.push_back(table_cell{}); // placeholder for a spanned-over slot
-                }
-                t.rows.push_back(std::move(row));
-            }
+            for(auto row : child.children("table:table-row"))
+                t.rows.push_back(parse_row(row));
+            // The model has header rows only at the top; later ones are ordinary.
+            if(t.header_rows == 0 && t.rows.size() == child.select_nodes("table:table-row").size())
+                t.header_rows = t.rows.size();
         }
-    };
-    parse_rows_in(node, parse_rows_in);
+        else if(tag == "table:table-row")
+            t.rows.push_back(parse_row(child));
+    }
     return t;
 }
 

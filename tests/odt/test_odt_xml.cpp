@@ -141,3 +141,17 @@ TEST(ODT_XML, LoadedStylesXmlIsKept)
             .child("office:master-styles")
             .child("style:master-page"));
 }
+
+TEST(ODT_XML, HeaderRowsAreGrouped)
+{
+    table t = table::from_cells({{{"Name"}, {"Value"}}, {{"a"}, {"1"}}}).set_header_rows(1);
+    odt::file(text_doc{t}).save("odt/out/header_rows_xml.odt");
+
+    const part content("odt/out/header_rows_xml.odt", "content.xml");
+    auto xml_table = content.xml.select_node("//table:table").node();
+    auto header = xml_table.child("table:table-header-rows");
+    ASSERT_TRUE(header);
+    EXPECT_EQ(header.select_nodes("table:table-row").size(), 1U);
+    EXPECT_EQ(xml_table.select_nodes("table:table-row").size(), 1U);
+    EXPECT_EQ(header.previous_sibling().name(), std::string("table:table-column"));
+}

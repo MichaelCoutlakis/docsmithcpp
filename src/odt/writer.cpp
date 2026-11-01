@@ -462,9 +462,10 @@ void writer::emit(pugi::xml_node parent, const table &t)
     table_column.append_attribute("table:number-columns-repeated")
         .set_value(static_cast<unsigned>(t.num_cols()));
 
+    auto header = t.header_rows ? n.append_child("table:table-header-rows") : pugi::xml_node{};
     for(size_t r = 0; r != t.num_rows(); ++r)
     {
-        auto xml_row = n.append_child("table:table-row");
+        auto xml_row = (r < t.header_rows ? header : n).append_child("table:table-row");
         for(size_t c = 0; c != t.num_cols(); ++c)
         {
             if(t.is_cell_covered(r, c))

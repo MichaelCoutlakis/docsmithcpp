@@ -187,6 +187,7 @@
     </Expand>
   </Type>
   <Type Name="docsmith::table">
+    <DisplayString Condition="header_rows != 0">table {rows._Mypair._Myval2._Mylast - rows._Mypair._Myval2._Myfirst} rows, {header_rows} header</DisplayString>
     <DisplayString>table {rows._Mypair._Myval2._Mylast - rows._Mypair._Myval2._Myfirst} rows</DisplayString>
     <Expand>
       <ArrayItems>

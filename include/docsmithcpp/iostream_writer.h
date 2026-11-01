@@ -99,7 +99,7 @@ public:
 
     void operator()(const table &t)
     {
-        line("Table: (", t.num_rows(), "x", t.num_cols(), ")");
+        line("Table: (", t.num_rows(), "x", t.num_cols(), "), header rows=", t.header_rows);
         ++m_indent;
         for(size_t r = 0; r != t.num_rows(); ++r)
             for(size_t c = 0; c != t.num_cols(); ++c)

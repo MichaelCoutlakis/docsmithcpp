@@ -25,6 +25,27 @@ libc++ and the MSVC STL.
 `text_doc::operator==` compares everything: the body and the style, list style
 and resource registries. To compare content only, compare `a.body == b.body`.
 
+### Nodes
+
+What each node holds, independent of any one format. "Inline" is a sequence of
+`inline_node`, "blocks" a sequence of `block_node`.
+
+| Node | Group | Holds | Notes |
+|---|---|---|---|
+| `text_doc` | root | blocks (`body`) | plus `meta` and the style, list style and resource registries |
+| `paragraph` | block | inline | styled |
+| `heading` | block | inline | styled; `level` |
+| `list` | block | `list_item`s | styled with a list style |
+| `list_item` | — | blocks | |
+| `table` | block | rows of `table_cell`s | every row has `num_cols()` cells; the first `header_rows` rows are header rows |
+| `table_cell` | — | blocks | styled; `rowspan`, `colspan`; a covered slot holds a placeholder cell |
+| `frame` | block, inline | an `image` | styled |
+| `text` | inline | a string | |
+| `span` | inline | inline | styled |
+| `hyperlink` | inline | inline | `target`: a URL or a bookmark |
+| `bookmark` | inline | — | `name` |
+| `unknown` | block, inline | verbatim XML | another format's markup, passed through |
+
 ## Styles
 
 A `style` is a named definition in `text_doc::styles()`; nodes refer to it by

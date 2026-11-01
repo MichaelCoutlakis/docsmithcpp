@@ -253,7 +253,7 @@ TEST(ODT, ParseTable)
     ASSERT_FALSE(tables.empty());
     table actual_table = *tables.front();
 
-    table t(2, 2);
+    table t = table(2, 2).set_header_rows(1);
     t.row(0).assign(paragraph("Col 0"), paragraph("Col 1"));
     t.cell(1, 0).add(paragraph()); // LO empty table cell defaults to empty paragraph
     t.cell(1, 1).add(paragraph("Some text value"));
@@ -445,4 +445,25 @@ TEST(ODT, CodeBuiltStylesRoundTrip)
     EXPECT_EQ(*again.styles().find("Big"), expected_big);
     EXPECT_EQ(*again.styles().find("Pic"), *doc.styles().find("Pic"));
     EXPECT_EQ(*again.list_styles().find("Steps"), *doc.list_styles().find("Steps"));
+}
+
+TEST(ODT, ParseHeaderRows)
+{
+    const text_doc doc = odt::file::load("odt/table-intermediate.odt").doc;
+    const auto tables = collect<table>(doc);
+    ASSERT_EQ(tables.size(), 2U);
+    EXPECT_EQ(tables[0]->header_rows, 1U);
+    EXPECT_EQ(tables[0]->num_rows(), 5U) << "header rows are rows too";
+    EXPECT_EQ(tables[1]->header_rows, 0U);
+}
+
+TEST(ODT, HeaderRowsRoundTrip)
+{
+    table t = table::from_cells({{{"Name"}, {"Value"}}, {{"Unit"}, {"-"}}, {{"a"}, {"1"}}});
+    t.set_header_rows(2);
+    odt::file(text_doc{t}).save("odt/out/header_rows.odt");
+
+    const text_doc again = odt::file::load("odt/out/header_rows.odt").doc;
+    ASSERT_EQ(collect<table>(again).size(), 1U);
+    EXPECT_EQ(*collect<table>(again).front(), t);
 }

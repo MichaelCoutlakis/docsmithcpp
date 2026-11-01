@@ -87,6 +87,9 @@ public:
     /// Every row has num_cols() cells. A slot spanned over by an earlier cell
     /// still holds a (placeholder) cell; writers skip it (is_cell_covered()).
     std::vector<std::vector<table_cell>> rows;
+    /// The first header_rows rows are header rows: they repeat on each page in
+    /// ODT, and are <thead> / <th> in HTML.
+    std::size_t header_rows{0};
 
     table() = default;
     table(size_t num_rows, size_t num_cols);
@@ -108,6 +111,12 @@ public:
     /// number for the first row).
     void add_row(std::vector<table_cell> cells);
     void add_cell(table_cell c) { rows.back().push_back(std::move(c)); }
+
+    table &set_header_rows(size_t n)
+    {
+        header_rows = n;
+        return *this;
+    }
 
     bool is_cell_covered(size_t row, size_t col) const;
 
