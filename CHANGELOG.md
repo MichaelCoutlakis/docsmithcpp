@@ -201,6 +201,8 @@ held in `std::variant`. This is a breaking change to almost every public API.
 - The empty placeholder tests in `test_main.cpp`, and the `architecture/` sketches.
 
 ### Fixed
+- A font set on a style from code (`font_name`) is declared in `office:font-face-decls`,
+  which `style:font-name` refers to. It wasn't declared before.
 - `content.xml` and `styles.xml` are written without indentation. Indentation between
   two inline elements (e.g. two spans) reads as a space in LibreOffice. The
   `DOCSMITHCPP_DEBUG_FILES` copies are still indented.

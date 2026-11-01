@@ -303,3 +303,18 @@ TEST(ODT_XML, TableOfContentsEntries)
     EXPECT_EQ((defs[{"Contents_20_Heading", "paragraph"}]), 1);
     EXPECT_EQ((defs[{"Contents_20_2", "paragraph"}]), 1);
 }
+
+TEST(ODT_XML, FontsAreDeclared)
+{
+    text_doc doc;
+    doc.add(paragraph("x").set_style(doc.add_style(style("Body", text_props(font_name("Liberation Serif"))))));
+    odt::file(doc).save("odt/out/font_faces.odt");
+
+    for(const char *name : {"styles.xml", "content.xml"})
+    {
+        part p("odt/out/font_faces.odt", name);
+        auto face = p.xml.select_node("//office:font-face-decls/style:font-face").node();
+        EXPECT_STREQ(face.attribute("style:name").as_string(), "Liberation Serif") << name;
+        EXPECT_STREQ(face.attribute("svg:font-family").as_string(), "'Liberation Serif'") << name;
+    }
+}

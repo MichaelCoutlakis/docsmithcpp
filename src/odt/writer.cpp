@@ -229,6 +229,16 @@ void replace_or_add(
     }
 }
 
+/// Declares the font style:font-name refers to, unless decls has it.
+void add_font_face(pugi::xml_node decls, const std::string &name)
+{
+    if(decls.find_child_by_attribute("style:font-face", "style:name", name.c_str()))
+        return;
+    auto f = decls.append_child("style:font-face");
+    f.append_attribute("style:name") = name.c_str();
+    f.append_attribute("svg:font-family") = ("'" + name + "'").c_str();
+}
+
 /// A registry's definitions in name order, so the output is stable.
 template <typename Registry>
 auto sorted(const Registry &r)
@@ -351,6 +361,16 @@ void writer::write_styles(const text_doc &doc)
         replace_or_add(
             existing, m_automatic_styles, *ls, existing && read_list_style(existing) == *ls);
     }
+
+    // Both parts, as their styles may each use the font.
+    auto root = m_styles_xml.child("office:document-styles");
+    auto fonts = root.child("office:font-face-decls");
+    if(!fonts)
+        fonts = root.prepend_child("office:font-face-decls");
+    for(const style *s : sorted(doc.styles()))
+        if(s->m_text_props && s->m_text_props->m_font_name)
+            for(auto decls : {fonts, m_font_faces})
+                add_font_face(decls, s->m_text_props->m_font_name->get_name());
 
     for(const auto &b : builtin_defs)
         if(auto it = used.find(b.name.get_name()); it != used.end() &&
