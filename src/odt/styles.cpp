@@ -17,6 +17,7 @@
  *****************************************************************************/
 #include "odt/styles.h"
 
+#include <cctype>
 #include <charconv>
 #include <string>
 #include <string_view>
@@ -200,8 +201,36 @@ void read_into(const pugi::xml_node &container, text_doc &doc)
 }
 } // namespace
 
+namespace
+{
+/// The name shown to users: LibreOffice spells characters a name can't hold
+/// as _xx_ in hex (Text_20_body is "Text body"). It finds its own styles by
+/// that name, so a style named Heading_20_1 without it would be a new style.
+std::string display_name(const std::string &name)
+{
+    auto hex = [](char c) { return std::isxdigit(static_cast<unsigned char>(c)) != 0; };
+    std::string out;
+    for(size_t i = 0; i != name.size(); ++i)
+    {
+        if(name[i] == '_' && i + 3 < name.size() && hex(name[i + 1]) && hex(name[i + 2]) &&
+            name[i + 3] == '_')
+        {
+            out += static_cast<char>(std::stoi(name.substr(i + 1, 2), nullptr, 16));
+            i += 3;
+        }
+        else
+            out += name[i];
+    }
+    return out;
+}
+} // namespace
+
 void write_xml(pugi::xml_node &n, const style_name &sn)
-{ n.append_attribute("style:name").set_value(sn.get_name().c_str()); }
+{
+    n.append_attribute("style:name").set_value(sn.get_name().c_str());
+    if(const std::string shown = display_name(sn.get_name()); shown != sn.get_name())
+        n.append_attribute("style:display-name").set_value(shown.c_str());
+}
 
 void write_xml(pugi::xml_node &n, const style &s)
 { write_xml(n, s, s.m_family.value_or(style_family::paragraph)); }

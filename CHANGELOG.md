@@ -201,6 +201,9 @@ held in `std::variant`. This is a breaking change to almost every public API.
 - The empty placeholder tests in `test_main.cpp`, and the `architecture/` sketches.
 
 ### Fixed
+- A style whose name spells characters as `_xx_` (`Text_20_body`) gets a
+  `style:display-name` ("Text body"). Without it, LibreOffice took a code-built
+  `Heading_20_1` for a new style rather than its own Heading 1.
 - A font set on a style from code (`font_name`) is declared in `office:font-face-decls`,
   which `style:font-name` refers to. It wasn't declared before.
 - `content.xml` and `styles.xml` are written without indentation. Indentation between

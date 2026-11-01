@@ -318,3 +318,18 @@ TEST(ODT_XML, FontsAreDeclared)
         EXPECT_STREQ(face.attribute("svg:font-family").as_string(), "'Liberation Serif'") << name;
     }
 }
+
+TEST(ODT_XML, DisplayNamesForEncodedStyleNames)
+{
+    text_doc doc;
+    doc.add(paragraph("x").set_style(doc.add_style(style("Text_20_body", text_props(font_size(11))))));
+    doc.add(paragraph("y").set_style(doc.add_style(style("Plain", text_props(font_size(11))))));
+    odt::file(doc).save("odt/out/display_names.odt");
+
+    part styles("odt/out/display_names.odt", "styles.xml");
+    auto body = styles_of(styles).find_child_by_attribute("style:style", "style:name", "Text_20_body");
+    EXPECT_STREQ(body.attribute("style:display-name").as_string(), "Text body")
+        << "so LibreOffice takes it as its own Text Body";
+    auto plain = styles_of(styles).find_child_by_attribute("style:style", "style:name", "Plain");
+    EXPECT_FALSE(plain.attribute("style:display-name"));
+}
