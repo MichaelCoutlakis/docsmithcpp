@@ -25,6 +25,17 @@ libc++ and the MSVC STL.
 `text_doc::operator==` compares everything: the body and the style, list style
 and resource registries. To compare content only, compare `a.body == b.body`.
 
+## Styles
+
+A `style` is a named definition in `text_doc::styles()`; nodes refer to it by
+name. Its family (`style_family`) says what kind of node it applies to, as ODF
+and DOCX require: paragraph (`paragraph`, `heading`), text (`span`), graphic
+(`frame`), and the table families. ODF names are unique per family. A style
+built in code may leave the family empty: the ODT writer then works it out from
+the nodes that use it, and writes it once for each family it's used with, so
+the same style can be set on a span and on a paragraph. HTML has no families: a
+style is a CSS class either way.
+
 ## Resources
 
 Anything more than one format needs lives in `text_doc`, not in a format's file

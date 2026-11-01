@@ -23,11 +23,6 @@ Do this once the items above pass. Move `[Unreleased]` in `CHANGELOG.md` to
 
 ## 2. Correctness
 
-### Style family on text styles
-The writer always uses `style:family="paragraph"` (FIXME in `write_xml(style)`
-in `src/odt/writer.cpp`). A style on a `span` needs `"text"`, so styled spans
-don't work in ODT. The style model needs to know its family.
-
 ### Load style definitions when parsing ODT
 The parser keeps style *names* on nodes but not their *definitions*, so
 `text_doc::styles()` / `list_styles()` are empty after `odt::file::load()`. This is

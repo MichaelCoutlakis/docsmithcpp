@@ -368,3 +368,15 @@ TEST(ODT, LinkTargetsRoundTrip)
     EXPECT_EQ(links[0]->target, link_target(bookmark_target{"Bookmark 1"}));
     EXPECT_EQ(links[1]->target, link_target(url_target{"https://example.com"}));
 }
+
+TEST(ODT, StyleFamilies)
+{
+    text_doc doc;
+    auto red = doc.add_style(style("Red", text_props(colour::rgb(255, 0, 0))));
+    auto note = doc.add_style(style("Note", style_family::paragraph, text_props(font_style::italic)));
+    // Used on a span and on a paragraph, so written once for each family.
+    auto both = doc.add_style(style("Both", text_props(font_weight::bold)));
+    doc.add(paragraph("Some ", span("red").set_style(red), " text.").set_style(note));
+    doc.add(paragraph("Bold ", span("span").set_style(both)).set_style(both));
+    odt::file(doc).save("odt/out/style_families.odt");
+}

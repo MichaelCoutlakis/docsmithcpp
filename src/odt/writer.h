@@ -41,7 +41,9 @@ namespace docsmith::odt
 std::string write_content(const text_doc &doc, odf::package &pkg);
 
 void write_xml(pugi::xml_node &n, const style_name &sn);
+/// Writes s in its own family, or paragraph if it has none.
 void write_xml(pugi::xml_node &n, const style &s);
+void write_xml(pugi::xml_node &n, const style &s, style_family family);
 void write_xml(pugi::xml_node &n, const list_style &ls);
 void write_xml(pugi::xml_node &n, const list_style_bullet &b);
 void write_xml(pugi::xml_node &n, const list_style_num &b);

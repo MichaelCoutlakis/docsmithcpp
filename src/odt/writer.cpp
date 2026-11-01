@@ -23,6 +23,8 @@
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <map>
+#include <set>
 #include <sstream>
 #include <stdexcept>
 #include <string_view>
@@ -41,6 +43,7 @@ std::string to_string(font_style fs);
 std::string to_string(font_weight fw);
 std::string to_string(text_align ta);
 std::string to_string(break_type b);
+std::string to_string(style_family f);
 
 namespace
 {
@@ -95,6 +98,43 @@ constexpr const char *title_style = R"~~(<style:style style:name="Title" style:f
     <style:paragraph-properties fo:margin-top="0.423cm" fo:margin-bottom="0.212cm" fo:keep-with-next="always" fo:text-align="center"/>
     <style:text-properties fo:font-family="'Liberation Sans'" style:font-family-generic="swiss" fo:font-size="28pt" fo:font-weight="bold" style:font-size-asian="28pt" style:font-weight-asian="bold" style:font-size-complex="28pt" style:font-weight-complex="bold"/>
 </style:style>)~~";
+
+/// The families each style name is used with in the body.
+std::map<std::string, std::set<style_family>> used_families(const text_doc &doc)
+{
+    std::map<std::string, std::set<style_family>> out;
+    walk(doc,
+        [&out](const auto &n)
+        {
+            using T = std::decay_t<decltype(n)>;
+            auto use = [&](const style_name &sn, style_family f)
+            {
+                if(!sn.is_empty())
+                    out[sn.get_name()].insert(f);
+            };
+            if constexpr(std::is_same_v<T, paragraph> || std::is_same_v<T, heading>)
+                use(n.style, style_family::paragraph);
+            else if constexpr(std::is_same_v<T, span>)
+                use(n.style, style_family::text);
+            else if constexpr(std::is_same_v<T, frame>)
+                use(n.style, style_family::graphic);
+            else if constexpr(std::is_same_v<T, table_cell>)
+                use(n.style, style_family::table_cell);
+        });
+    return out;
+}
+
+/// The families to write s in: its own, else those it's used with, else
+/// paragraph.
+std::set<style_family> families_of(
+    const style &s, const std::map<std::string, std::set<style_family>> &used)
+{
+    if(s.m_family)
+        return {*s.m_family};
+    if(auto it = used.find(s.m_name.get_name()); it != used.end())
+        return it->second;
+    return {style_family::paragraph};
+}
 
 /// Whether the package's styles.xml (a loaded file's) defines the style.
 bool defines_style(const odf::package &pkg, const style_name &name)
@@ -194,8 +234,10 @@ void writer::write_doc(const text_doc &doc)
     for(auto &[name, s] : doc.list_styles())
         write_xml(m_automatic_styles, s);
     // Add any text styles:
+    const auto used = used_families(doc);
     for(auto &[name, s] : doc.styles())
-        write_xml(m_styles, s);
+        for(style_family f : families_of(s, used))
+            write_xml(m_styles, s, f);
     // LibreOffice knows Title without a definition; other readers may not.
     if(doc.find_title() && !doc.styles().find(builtin::title.get_name()) &&
         !defines_style(m_pkg, builtin::title))
@@ -354,11 +396,14 @@ void write_xml(pugi::xml_node &n, const style_name &sn)
 
 void write_xml(pugi::xml_node &n, const style &s)
 {
+    write_xml(n, s, s.m_family.value_or(style_family::paragraph));
+}
+
+void write_xml(pugi::xml_node &n, const style &s, style_family family)
+{
     auto style_node = n.append_child("style:style");
     write_xml(style_node, s.m_name);
-
-    // FIXME
-    style_node.append_attribute("style:family") = "paragraph";
+    style_node.append_attribute("style:family") = to_string(family).c_str();
 
     if(!s.m_parent_style.is_empty())
         style_node.append_attribute("style:parent-style-name") =
@@ -510,6 +555,21 @@ std::string to_string(break_type b)
     case break_type::page: return "page";
     case break_type::even_page: return "even-page";
     case break_type::odd_page: return "odd-page";
+    default: return {};
+    }
+}
+
+std::string to_string(style_family f)
+{
+    switch(f)
+    {
+    case style_family::paragraph: return "paragraph";
+    case style_family::text: return "text";
+    case style_family::graphic: return "graphic";
+    case style_family::table: return "table";
+    case style_family::table_column: return "table-column";
+    case style_family::table_row: return "table-row";
+    case style_family::table_cell: return "table-cell";
     default: return {};
     }
 }

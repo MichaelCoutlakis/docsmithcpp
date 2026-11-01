@@ -248,6 +248,19 @@ public:
     std::optional<align_vert> m_vert_pos;
 };
 
+/// What kind of node a style applies to. ODF and DOCX keep styles of different
+/// families apart, so the same name may be defined once per family.
+enum class style_family
+{
+    paragraph, //!< paragraph, heading
+    text,      //!< span
+    graphic,   //!< frame
+    table,
+    table_column,
+    table_row,
+    table_cell
+};
+
 ///
 class style
 {
@@ -260,6 +273,11 @@ public:
         (set(args), ...);
     }
 
+    style &set(style_family f)
+    {
+        m_family = f;
+        return *this;
+    }
     style &set(const graphics_props &props)
     {
         m_graphics_props = props;
@@ -279,6 +297,9 @@ public:
     bool operator==(const style &rhs) const = default;
 
     style_name m_name;
+    /// Empty: writers that need a family work it out from the nodes that use
+    /// the style, writing it once per family if they differ.
+    std::optional<style_family> m_family;
     style_name m_parent_style;
     std::optional<graphics_props> m_graphics_props;
     std::optional<text_props> m_text_props;

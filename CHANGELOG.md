@@ -63,6 +63,12 @@ held in `std::variant`. This is a breaking change to almost every public API.
   directory. Generated test files go to `tests/odt/out/`.
 
 ### Added
+- **Style families**: `style::m_family` (`style_family`: paragraph, text, graphic,
+  table, table column, row and cell), set like the other parts:
+  `style("Code", style_family::text, ...)`. When it's empty, the ODT writer works it
+  out from the nodes that use the style (a `span` → text, a `paragraph` → paragraph,
+  ...), and writes a style used on both spans and paragraphs once per family. Styled
+  spans now work in ODT; the writer used to write every style as a paragraph style.
 - `hyperlink::target` is a `link_target` variant: `url_target` (used as is) or
   `bookmark_target` (a bookmark in the same document). `hyperlink(bookmark{"x"}, ...)`
   links to a bookmark; writers add the `#`, and the ODT parser turns `#x` back into a
@@ -181,7 +187,6 @@ held in `std::variant`. This is a breaking change to almost every public API.
   them in `styles.xml`; LibreOffice accepts this.
 - `set_style(style)` keeps only the name. The definition must also be added to
   `text_doc::styles()`.
-- The ODT writer always uses `style:family="paragraph"`.
 
 ## Pre-release history (untagged)
 
