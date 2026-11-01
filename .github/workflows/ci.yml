@@ -1,0 +1,103 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# A newer push to the same branch cancels the run it replaces.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # vcpkg in classic mode, pinned so dependency versions only change when this
+  # does. Update it to move to newer versions.
+  VCPKG_COMMIT: a2f9862da6d88040a8537fb9b8cb24deaa9a196b
+  VCPKG_PACKAGES: pugixml miniz md4c gtest
+
+jobs:
+  linux:
+    name: Linux ${{ matrix.compiler }}
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - compiler: gcc-14
+            package: g++-14
+            cc: gcc-14
+            cxx: g++-14
+          - compiler: clang-18
+            package: clang-18
+            cc: clang-18
+            cxx: clang++-18
+    env:
+      CC: ${{ matrix.cc }}
+      CXX: ${{ matrix.cxx }}
+
+    steps:
+      - uses: actions/checkout@v7
+
+      # The compilers come with the runner image; --no-upgrade only installs
+      # what is missing.
+      - name: Install tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends --no-upgrade ninja-build ${{ matrix.package }}
+          $CXX --version
+
+      - name: Set up vcpkg
+        id: vcpkg
+        run: |
+          echo "VCPKG_ROOT=$HOME/vcpkg" >> "$GITHUB_ENV"
+          echo "VCPKG_BINARY_SOURCES=clear;files,$HOME/vcpkg-cache,readwrite" >> "$GITHUB_ENV"
+          mkdir -p "$HOME/vcpkg-cache"
+          git init -q "$HOME/vcpkg"
+          git -C "$HOME/vcpkg" fetch -q --depth 1 https://github.com/microsoft/vcpkg "$VCPKG_COMMIT"
+          git -C "$HOME/vcpkg" checkout -q FETCH_HEAD
+          "$HOME/vcpkg/bootstrap-vcpkg.sh" -disableMetrics
+          # A compiler update changes the binaries vcpkg wants, so it is part of
+          # the cache key.
+          echo "compiler=$($CXX --version | head -n1 | sha256sum | cut -c1-12)" >> "$GITHUB_OUTPUT"
+
+      # Built dependencies, so they are only rebuilt when the vcpkg commit, the
+      # package list or the compiler changes.
+      - name: Restore dependency cache
+        id: restore
+        uses: actions/cache/restore@v6
+        with:
+          path: ~/vcpkg-cache
+          key: vcpkg-${{ matrix.compiler }}-${{ steps.vcpkg.outputs.compiler }}-${{ env.VCPKG_COMMIT }}-${{ hashFiles('.github/workflows/ci.yml') }}
+          restore-keys: vcpkg-${{ matrix.compiler }}-${{ steps.vcpkg.outputs.compiler }}-${{ env.VCPKG_COMMIT }}-
+
+      - name: Install dependencies
+        run: |
+          "$VCPKG_ROOT/vcpkg" install --triplet x64-linux $VCPKG_PACKAGES
+
+      # Saved straight away, so a failing build further on still keeps them.
+      - name: Save dependency cache
+        if: steps.restore.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ~/vcpkg-cache
+          key: ${{ steps.restore.outputs.cache-primary-key }}
+
+      - name: Configure
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" \
+            -DVCPKG_TARGET_TRIPLET=x64-linux \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DDOCSMITHCPP_BUILD_TESTS=ON \
+            -DDOCSMITHCPP_BUILD_EXAMPLES=ON \
+            -DDOCSMITHCPP_MARKDOWN=ON
+
+      - name: Build
+        run: cmake --build build
+
+      # LibreOffice isn't installed, so libreoffice_opens_output isn't
+      # registered; the consumer test runs.
+      - name: Test
+        run: ctest --test-dir build --output-on-failure --no-tests=error

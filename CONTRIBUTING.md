@@ -44,6 +44,20 @@ Dependencies are a cost to every consumer, so discuss one before adding it (see
   [NOTICE](NOTICE). Other licences don't use `NOTICE`.
 - If its source is vendored into this repository, keep its licence file next to
   it.
+- If it comes from vcpkg, add it to `VCPKG_PACKAGES` in
+  [.github/workflows/ci.yml](.github/workflows/ci.yml).
+
+## Continuous integration
+
+[.github/workflows/ci.yml](.github/workflows/ci.yml) builds and tests every
+push to `main` and every pull request, on Linux with GCC 14 and Clang 18
+(libstdc++), tests, examples and Markdown input included. The `consumer` test
+runs; `libreoffice_opens_output` doesn't, as LibreOffice isn't installed.
+
+Dependencies come from vcpkg in classic mode at the commit in `VCPKG_COMMIT`.
+Their built binaries are cached, so they are only rebuilt when that commit,
+`VCPKG_PACKAGES` or the compiler changes. Bump `VCPKG_COMMIT` to move to newer
+dependency versions.
 
 ## Debugging
 
