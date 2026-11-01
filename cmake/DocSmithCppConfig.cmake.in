@@ -1,11 +1,10 @@
 @PACKAGE_INIT@
 
-# The library links these (fmt privately, but a static library still needs it
-# at link time), so consumers must be able to find them too.
+# The library links these privately, but a static library still needs them at
+# link time, so consumers must be able to find them too.
 include(CMakeFindDependencyMacro)
 find_dependency(pugixml CONFIG)
 find_dependency(libzippp CONFIG)
-find_dependency(fmt CONFIG)
 
 include("${CMAKE_CURRENT_LIST_DIR}/DocSmithCppTargets.cmake")
 check_required_components(DocSmithCpp)

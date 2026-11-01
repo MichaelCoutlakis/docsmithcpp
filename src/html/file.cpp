@@ -30,7 +30,7 @@
 #include <variant>
 #include <vector>
 
-#include <fmt/format.h>
+#include "format.h"
 
 // The page is written directly rather than built as an XML tree: HTML is not
 // XML. An empty <p/> or <a id="x"/> is an *open* tag to an HTML parser, so
@@ -125,22 +125,22 @@ std::string generated_css(const text_doc &doc)
         if(const auto &tp = s->m_text_props)
         {
             if(tp->m_font_size)
-                decls += fmt::format(" font-size: {}pt;", tp->m_font_size->m_points);
+                decls += " font-size: " + detail::to_string(tp->m_font_size->m_points) + "pt;";
             if(tp->m_font_style)
-                decls += fmt::format(" font-style: {};", css_value(*tp->m_font_style));
+                decls += std::string(" font-style: ") + css_value(*tp->m_font_style) + ";";
             if(tp->m_font_name)
-                decls += fmt::format(" font-family: \"{}\";", tp->m_font_name->get_name());
+                decls += " font-family: \"" + tp->m_font_name->get_name() + "\";";
             if(tp->m_font_weight)
-                decls += fmt::format(" font-weight: {};", css_value(*tp->m_font_weight));
+                decls += std::string(" font-weight: ") + css_value(*tp->m_font_weight) + ";";
             if(const auto &c = tp->m_colour)
-                decls += fmt::format(" color: #{:02x}{:02x}{:02x};", c->m_r, c->m_g, c->m_b);
+                decls += " color: " + detail::to_hex(*c) + ";";
         }
         if(const auto &pp = s->m_paragraph_props)
         {
             if(pp->m_break_before)
-                decls += fmt::format(" break-before: {};", css_value(pp->m_break_before->m_break_type));
+                decls += std::string(" break-before: ") + css_value(pp->m_break_before->m_break_type) + ";";
             if(pp->m_break_after)
-                decls += fmt::format(" break-after: {};", css_value(pp->m_break_after->m_break_type));
+                decls += std::string(" break-after: ") + css_value(pp->m_break_after->m_break_type) + ";";
         }
         if(!decls.empty())
             css += "." + css_class(s->m_name.get_name()) + " {" + decls + " }\n";
@@ -387,9 +387,9 @@ private:
                 const auto &cell = t.cell(r, c);
                 std::string attrs;
                 if(cell.rowspan != 1)
-                    attrs += fmt::format(" rowspan=\"{}\"", cell.rowspan);
+                    attrs += " rowspan=\"" + std::to_string(cell.rowspan) + "\"";
                 if(cell.colspan != 1)
-                    attrs += fmt::format(" colspan=\"{}\"", cell.colspan);
+                    attrs += " colspan=\"" + std::to_string(cell.colspan) + "\"";
                 container("td", cell.style, cell.children(), attrs);
             }
             --m_depth;

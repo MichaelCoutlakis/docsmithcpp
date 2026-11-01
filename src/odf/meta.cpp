@@ -21,9 +21,9 @@
 #include <sstream>
 #include <string_view>
 
-#include <fmt/format.h>
 #include <pugixml.hpp>
 
+#include "format.h"
 #include "odf/package.h"
 
 namespace docsmith::odf
@@ -72,9 +72,11 @@ std::string format_date(sys_seconds t)
     const auto days = floor<std::chrono::days>(t);
     const year_month_day ymd{days};
     const hh_mm_ss hms{t - days};
-    return fmt::format("{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z", static_cast<int>(ymd.year()),
-        static_cast<unsigned>(ymd.month()), static_cast<unsigned>(ymd.day()), hms.hours().count(),
-        hms.minutes().count(), hms.seconds().count());
+    using detail::zero_pad;
+    return zero_pad(static_cast<int>(ymd.year()), 4) + "-" +
+        zero_pad(static_cast<unsigned>(ymd.month()), 2) + "-" +
+        zero_pad(static_cast<unsigned>(ymd.day()), 2) + "T" + zero_pad(hms.hours().count(), 2) +
+        ":" + zero_pad(hms.minutes().count(), 2) + ":" + zero_pad(hms.seconds().count(), 2) + "Z";
 }
 
 /// Sets the one child element name to value, or removes it if value is empty.

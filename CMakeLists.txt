@@ -30,7 +30,6 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
 find_package(pugixml CONFIG REQUIRED)
 find_package(libzippp CONFIG REQUIRED)
-find_package(fmt CONFIG REQUIRED)
 
 add_subdirectory(src)
 

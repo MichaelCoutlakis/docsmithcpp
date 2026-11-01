@@ -71,7 +71,6 @@ This project uses [CMake](https://cmake.org/) for building and configuring.
   - [pugixml](https://pugixml.org/)
   - [libzippp](https://github.com/ctabin/libzippp) (and
     [libzip](https://libzip.org/))
-  - [fmt](https://fmt.dev/)
   - [gtest](https://github.com/google/googletest) (tests only)
 
 ### Build

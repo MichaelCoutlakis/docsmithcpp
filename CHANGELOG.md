@@ -39,6 +39,10 @@ held in `std::variant`. This is a breaking change to almost every public API.
   registries included. Compare `a.body == b.body` for content only.
 - **Dependencies are private**: `odt/writer.h` moved out of the public headers, so
   pugixml and libzippp are no longer exposed to users.
+- **fmt is no longer a dependency.** The writers format their few numbers with
+  `std::to_chars` and string concatenation.
+- `io_writer` streams its output instead of using `std::format`, so the public
+  headers don't need `<format>` (GCC 13, libc++ 17).
 - ODT entries other than `mimetype` are now deflated. Previously everything was
   stored uncompressed.
 - **Headers** split by concept: `nodes_fwd.h` (forward declarations and mixins),

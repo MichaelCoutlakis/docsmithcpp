@@ -16,7 +16,6 @@
  * limitations under the License.
  *****************************************************************************/
 #pragma once
-#include <format>
 #include <ostream>
 #include <variant>
 
@@ -49,41 +48,41 @@ public:
 
     void operator()(const paragraph &p)
     {
-        line("Paragraph: style={}", p.style.get_name());
+        line("Paragraph: style=", p.style.get_name());
         kids(p.children());
     }
     void operator()(const heading &h)
     {
-        line("Heading: level {}", h.level);
+        line("Heading: level ", h.level);
         kids(h.children());
     }
     void operator()(const span &s)
     {
-        line("Span: style={}", s.style.get_name());
+        line("Span: style=", s.style.get_name());
         kids(s.children());
     }
     void operator()(const hyperlink &h)
     {
-        std::visit(overloaded{[&](const url_target &u) { line("Hyperlink: {}", u.url); },
-                       [&](const bookmark_target &b) { line("Hyperlink: bookmark {}", b.name); }},
+        std::visit(overloaded{[&](const url_target &u) { line("Hyperlink: ", u.url); },
+                       [&](const bookmark_target &b) { line("Hyperlink: bookmark ", b.name); }},
             h.target);
         kids(h.children());
     }
-    void operator()(const text &t) { line("Text: {}", t.content); }
+    void operator()(const text &t) { line("Text: ", t.content); }
     void operator()(const frame &f)
     {
-        line("Frame: style={}", f.style.get_name());
+        line("Frame: style=", f.style.get_name());
         ++m_indent;
         (*this)(f.img);
         --m_indent;
     }
-    void operator()(const image &i) { line("Image: uri={}", i.uri); }
-    void operator()(const bookmark &b) { line("Bookmark: name={}", b.name); }
+    void operator()(const image &i) { line("Image: uri=", i.uri); }
+    void operator()(const bookmark &b) { line("Bookmark: name=", b.name); }
     void operator()(const unknown &) { line("Unknown (pass-through)"); }
 
     void operator()(const list &l)
     {
-        line("List: style {}", l.style.get_name());
+        line("List: style ", l.style.get_name());
         ++m_indent;
         for(const auto &it : l.items())
             (*this)(it);
@@ -100,7 +99,7 @@ public:
 
     void operator()(const table &t)
     {
-        line("Table: ({}x{})", t.num_rows(), t.num_cols());
+        line("Table: (", t.num_rows(), "x", t.num_cols(), ")");
         ++m_indent;
         for(size_t r = 0; r != t.num_rows(); ++r)
             for(size_t c = 0; c != t.num_cols(); ++c)
@@ -109,7 +108,7 @@ public:
     }
     void operator()(const table_cell &c)
     {
-        line("Cell: rowspan={}, colspan={}, style={}", c.rowspan, c.colspan, c.style.get_name());
+        line("Cell: rowspan=", c.rowspan, ", colspan=", c.colspan, ", style=", c.style.get_name());
         ++m_indent;
         for(const auto &b : c.children())
             (*this)(b);
@@ -126,11 +125,13 @@ private:
         --m_indent;
     }
 
-    template <typename... Args>
-    void line(std::format_string<Args...> fmt, Args &&...args)
+    /// Writes the indent, then each of parts, then a newline.
+    template <typename... Parts>
+    void line(const Parts &...parts)
     {
-        m_os << std::string(m_indent * 2, ' ') << std::format(fmt, std::forward<Args>(args)...)
-             << '\n';
+        m_os << std::string(m_indent * 2, ' ');
+        (m_os << ... << parts);
+        m_os << '\n';
     }
 
     std::ostream &m_os;

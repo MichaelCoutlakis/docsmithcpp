@@ -28,8 +28,7 @@
 #include <string_view>
 #include <variant>
 
-#include <fmt/format.h>
-
+#include "format.h"
 #include "odf/package.h"
 
 namespace docsmith::odt
@@ -399,9 +398,9 @@ void write_xml(pugi::xml_node &n, const list_style_num &s)
         n.append_attribute("text:style-name").set_value(s.m_style_name.get_name().c_str());
 
     num_node.append_attribute("text:level") = s.m_level;
-    num_node.append_attribute("loext:num-list-format") = fmt::format("%{}%.", s.m_level).c_str();
+    num_node.append_attribute("loext:num-list-format") = ("%" + std::to_string(s.m_level) + "%.").c_str();
     num_node.append_attribute("style:num-format") =
-        fmt::format("{}", static_cast<char>(s.m_format)).c_str();
+        std::string(1, static_cast<char>(s.m_format)).c_str();
     num_node.append_attribute("text:start-value") = s.m_start_from;
     num_node.append_attribute("style:num-suffix") = s.m_num_suffix.c_str();
     num_node.append_attribute("style:num-prefix") = s.m_num_prefix.c_str();
@@ -413,7 +412,7 @@ void write_xml(pugi::xml_node &n, const text_props &tp)
 
     if(tp.m_font_size)
         text_props_node.append_attribute("fo:font-size") =
-            fmt::format("{}pt", tp.m_font_size->m_points).c_str();
+            (detail::to_string(tp.m_font_size->m_points) + "pt").c_str();
 
     if(tp.m_font_style)
         text_props_node.append_attribute("fo:font-style") =
@@ -428,8 +427,7 @@ void write_xml(pugi::xml_node &n, const text_props &tp)
 
     if(tp.m_colour)
         text_props_node.append_attribute("fo:color") =
-            fmt::format("#{:02x}{:02x}{:02x}", tp.m_colour->m_r, tp.m_colour->m_g, tp.m_colour->m_b)
-                .c_str();
+            detail::to_hex(*tp.m_colour).c_str();
 }
 void write_xml(pugi::xml_node &n, const paragraph_props &props)
 {
