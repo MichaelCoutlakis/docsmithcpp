@@ -253,8 +253,9 @@ std::optional<block_node> parse_block(const pugi::xml_node &node)
     {
         // The entries are left out: the writer makes them from the headings.
         auto source = node.child("text:table-of-content-source");
-        return block_node{table_of_contents(source.child("text:index-title-template").text().as_string(),
-            source.attribute("text:outline-level").as_int(10))};
+        return block_node{
+            table_of_contents(source.child("text:index-title-template").text().as_string(),
+                source.attribute("text:outline-level").as_int(10))};
     }
 
     return block_node{unknown{serialize(node)}};
@@ -330,7 +331,9 @@ page_style parse_page(const odf::package &pkg)
     page_style page;
     const auto *e = pkg.find("styles.xml");
     pugi::xml_document xml;
-    if(!e || !xml.load_buffer(e->data.data(), e->data.size(), pugi::parse_default | pugi::parse_ws_pcdata))
+    if(!e ||
+        !xml.load_buffer(
+            e->data.data(), e->data.size(), pugi::parse_default | pugi::parse_ws_pcdata))
         return page;
     auto masters = xml.child("office:document-styles").child("office:master-styles");
     auto master = masters.find_child_by_attribute("style:master-page", "style:name", "Standard");

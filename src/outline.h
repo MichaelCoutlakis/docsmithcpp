@@ -33,12 +33,13 @@ namespace docsmith::detail
 inline void plain_text(const std::vector<inline_node> &kids, std::string &out)
 {
     for(const auto &k : kids)
-        std::visit(overloaded{
-                       [&](const text &t) { out += t.content; },
-                       [&](const span &s) { plain_text(s.children(), out); },
-                       [&](const hyperlink &h) { plain_text(h.children(), out); },
-                       [](const auto &) {},
-                   },
+        std::visit(
+            overloaded{
+                [&](const text &t) { out += t.content; },
+                [&](const span &s) { plain_text(s.children(), out); },
+                [&](const hyperlink &h) { plain_text(h.children(), out); },
+                [](const auto &) { },
+            },
             k.v);
 }
 

@@ -43,26 +43,37 @@ int main(int argc, char **argv)
     // LibreOffice's own style names, so the template's look replaces its
     // defaults for Heading 1, Text Body and so on.
     const colour accent = colour::rgb(31, 56, 100);
-    auto heading_1 = doc.add_style(style("Heading_20_1", style_family::paragraph,
+    auto heading_1 = doc.add_style(style("Heading_20_1",
+        style_family::paragraph,
         text_props(font_name("Liberation Sans"), font_size(18), font_weight::bold, accent)));
     // For the filled-in report's test case headings.
-    doc.add_style(style("Heading_20_2", style_family::paragraph,
+    doc.add_style(style("Heading_20_2",
+        style_family::paragraph,
         text_props(font_name("Liberation Sans"), font_size(14), font_weight::bold, accent)));
-    auto body = doc.add_style(style("Text_20_body", style_family::paragraph,
+    auto body = doc.add_style(style("Text_20_body",
+        style_family::paragraph,
         text_props(font_name("Liberation Serif"), font_size(11))));
-    auto header = doc.add_style(style("Header", style_family::paragraph,
+    auto header = doc.add_style(style("Header",
+        style_family::paragraph,
         text_props(font_name("Liberation Sans"), font_size(9), colour::rgb(89, 89, 89))));
-    auto footer = doc.add_style(style("Footer", style_family::paragraph,
-        text_props(font_name("Liberation Sans"), font_size(9), font_style::italic,
+    auto footer = doc.add_style(style("Footer",
+        style_family::paragraph,
+        text_props(font_name("Liberation Sans"),
+            font_size(9),
+            font_style::italic,
             colour::rgb(89, 89, 89))));
     // Used by the filled-in report for test results.
-    doc.add_style(style("Pass", style_family::text, text_props(font_weight::bold, colour::rgb(0, 128, 0))));
-    doc.add_style(style("Fail", style_family::text, text_props(font_weight::bold, colour::rgb(192, 0, 0))));
+    doc.add_style(
+        style("Pass", style_family::text, text_props(font_weight::bold, colour::rgb(0, 128, 0))));
+    doc.add_style(
+        style("Fail", style_family::text, text_props(font_weight::bold, colour::rgb(192, 0, 0))));
 
     doc.page.set_header(paragraph(field{field_type::title}).set_style(header));
     doc.page.set_footer(paragraph("Generated test report \xE2\x80\x93 page ",
-        field{field_type::page_number}, " of ", field{field_type::page_count})
-                            .set_style(footer));
+        field{field_type::page_number},
+        " of ",
+        field{field_type::page_count})
+            .set_style(footer));
 
     doc.add(paragraph(field{field_type::title}).set_style(builtin::title))
         .add(paragraph("Generated on ", field{field_type::date}, ".").set_style(body))
@@ -71,7 +82,8 @@ int main(int argc, char **argv)
         // Placeholders: one by its text, one by a bookmark.
         .add(paragraph("{{summary}}").set_style(body))
         .add(heading(1, "Details").set_style(heading_1))
-        .add(paragraph(bookmark{"details"}, "The details of each test case go here.").set_style(body));
+        .add(paragraph(bookmark{"details"}, "The details of each test case go here.")
+                .set_style(body));
 
     odt::file(doc).save(out);
     std::cout << "Wrote " << out << "\n";

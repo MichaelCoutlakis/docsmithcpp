@@ -547,8 +547,13 @@ TEST(ODT, PreformattedRoundTrips)
 
 TEST(ODT, FieldsRoundTrip)
 {
-    text_doc doc{paragraph("Page ", field{field_type::page_number}, " of ",
-        field{field_type::page_count}, ", ", field{field_type::title}, ", ",
+    text_doc doc{paragraph("Page ",
+        field{field_type::page_number},
+        " of ",
+        field{field_type::page_count},
+        ", ",
+        field{field_type::title},
+        ", ",
         field{field_type::date})};
     doc.meta.title = "Report";
     odt::file(doc).save("odt/out/fields.odt");
@@ -582,7 +587,9 @@ TEST(ODT, NoHeaderNoMasterPage)
 
 TEST(ODT, TableOfContentsRoundTrip)
 {
-    const text_doc doc{table_of_contents("Contents", 2), heading(1, "One"), heading(2, "Two"),
+    const text_doc doc{table_of_contents("Contents", 2),
+        heading(1, "One"),
+        heading(2, "Two"),
         heading(3, "Three")};
     odt::file(doc).save("odt/out/toc.odt");
     EXPECT_EQ(odt::file::load("odt/out/toc.odt").doc.body, doc.body);

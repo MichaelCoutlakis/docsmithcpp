@@ -62,7 +62,8 @@ void write_example_test_report()
             {result(r.passed)},
         });
     }
-    const auto passed = std::count_if(records.begin(), records.end(), [](auto &r) { return r.passed; });
+    const auto passed =
+        std::count_if(records.begin(), records.end(), [](auto &r) { return r.passed; });
     doc.replace(text{"{{summary}}"},
         {paragraph(std::to_string(passed) + " of " + std::to_string(records.size()) +
              " test cases passed.")
@@ -83,9 +84,10 @@ void write_example_test_report()
     html::file page(doc);
     // A page has no page numbers: its footer is the template's without them.
     page.doc.page.set_footer(paragraph("Generated test report").set_style("Footer"));
-    page.css = "body { max-width: 50em; margin: auto; }\n"
-               "table { border-collapse: collapse; } td, th { border: 1px solid #999; padding: 0.3em; }\n"
-               "header, footer { color: #595959; font-size: 9pt; }\n";
+    page.css =
+        "body { max-width: 50em; margin: auto; }\n"
+        "table { border-collapse: collapse; } td, th { border: 1px solid #999; padding: 0.3em; }\n"
+        "header, footer { color: #595959; font-size: 9pt; }\n";
     page.save("Example DocSmith++ Test Report.html");
 }
 

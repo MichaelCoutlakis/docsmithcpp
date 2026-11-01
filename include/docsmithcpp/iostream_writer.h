@@ -85,9 +85,7 @@ public:
     }
     void operator()(const page_break &) { line("Page Break"); }
     void operator()(const table_of_contents &t)
-    {
-        line("Table of Contents: title=", t.title, ", levels=", t.levels);
-    }
+    { line("Table of Contents: title=", t.title, ", levels=", t.levels); }
     void operator()(const unknown &) { line("Unknown (pass-through)"); }
 
     void operator()(const list &l)

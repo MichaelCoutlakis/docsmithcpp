@@ -135,7 +135,8 @@ std::string contents_style(int level)
         R"~~(" style:family="paragraph" style:class="index"><style:paragraph-properties fo:margin-left=")~~" +
         detail::to_string(0.5f * static_cast<float>(level - 1)) +
         R"~~(cm" fo:margin-right="0cm" fo:text-indent="0cm"><style:tab-stops><style:tab-stop style:position=")~~" +
-        detail::to_string(17 - 0.5f * static_cast<float>(level - 1)) + R"~~(cm" style:type="right" style:leader-style="dotted" style:leader-text="."/></style:tab-stops></style:paragraph-properties></style:style>)~~";
+        detail::to_string(17 - 0.5f * static_cast<float>(level - 1)) +
+        R"~~(cm" style:type="right" style:leader-style="dotted" style:leader-text="."/></style:tab-stops></style:paragraph-properties></style:style>)~~";
 }
 
 /// The builtin styles the writer defines when the document uses one and
@@ -434,14 +435,20 @@ void writer::write_page(const page_style &page)
     if(!master)
     {
         std::string name = "pm1";
-        for(int i = 2; automatic.find_child_by_attribute("style:page-layout", "style:name", name.c_str()); ++i)
+        for(int i = 2;
+            automatic.find_child_by_attribute("style:page-layout", "style:name", name.c_str());
+            ++i)
             name = "pm" + std::to_string(i);
         auto layout = automatic.append_child("style:page-layout");
         layout.append_attribute("style:name") = name.c_str();
         auto props = layout.append_child("style:page-layout-properties");
-        for(auto [attr, value] : {std::pair{"fo:page-width", "21.001cm"}, {"fo:page-height", "29.7cm"},
-                {"style:print-orientation", "portrait"}, {"fo:margin-top", "2cm"},
-                {"fo:margin-bottom", "2cm"}, {"fo:margin-left", "2cm"}, {"fo:margin-right", "2cm"}})
+        for(auto [attr, value] : {std::pair{"fo:page-width", "21.001cm"},
+                {"fo:page-height", "29.7cm"},
+                {"style:print-orientation", "portrait"},
+                {"fo:margin-top", "2cm"},
+                {"fo:margin-bottom", "2cm"},
+                {"fo:margin-left", "2cm"},
+                {"fo:margin-right", "2cm"}})
             props.append_attribute(attr) = value;
         master = masters.append_child("style:master-page");
         master.append_attribute("style:name") = "Standard";

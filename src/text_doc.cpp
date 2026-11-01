@@ -57,12 +57,13 @@ void add_all(Registry &to, const Registry &from)
 bool has_bookmark(const std::vector<inline_node> &kids, const bookmark &b)
 {
     for(const auto &k : kids)
-        if(std::visit(overloaded{
-                          [&](const bookmark &x) { return x == b; },
-                          [&](const span &s) { return has_bookmark(s.children(), b); },
-                          [&](const hyperlink &h) { return has_bookmark(h.children(), b); },
-                          [](const auto &) { return false; },
-                      },
+        if(std::visit(
+               overloaded{
+                   [&](const bookmark &x) { return x == b; },
+                   [&](const span &s) { return has_bookmark(s.children(), b); },
+                   [&](const hyperlink &h) { return has_bookmark(h.children(), b); },
+                   [](const auto &) { return false; },
+               },
                k.v))
             return true;
     return false;
@@ -100,8 +101,16 @@ found_block find_placeholder(std::vector<block_node> &blocks, const placeholder 
     {
         found_block f = std::visit(
             overloaded{
-                [&](paragraph &n) { return matches(p, n.children(), n.style) ? found_block{&blocks, i} : found_block{}; },
-                [&](heading &n) { return matches(p, n.children(), n.style) ? found_block{&blocks, i} : found_block{}; },
+                [&](paragraph &n)
+                {
+                    return matches(p, n.children(), n.style) ? found_block{&blocks, i}
+                                                             : found_block{};
+                },
+                [&](heading &n)
+                {
+                    return matches(p, n.children(), n.style) ? found_block{&blocks, i}
+                                                             : found_block{};
+                },
                 [&](list &l)
                 {
                     for(auto &it : l.items())

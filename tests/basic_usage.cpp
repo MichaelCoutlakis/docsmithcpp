@@ -167,7 +167,8 @@ TEST(BASIC_USAGE, AddRowChecksWidth)
 
 TEST(BASIC_USAGE, ReplacePlaceholders)
 {
-    text_doc doc{heading(1, "Report"), paragraph(" {{summary}} "),
+    text_doc doc{heading(1, "Report"),
+        paragraph(" {{summary}} "),
         paragraph(bookmark{"details"}, "Details go here"),
         paragraph("Placeholder style").set_style("Placeholder")};
 
@@ -176,8 +177,8 @@ TEST(BASIC_USAGE, ReplacePlaceholders)
     EXPECT_TRUE(doc.replace(style_name("Placeholder"), text_doc{}));
     EXPECT_FALSE(doc.replace(text{"{{summary}}"}, paragraph("again"))) << "already replaced";
 
-    const text_doc expected{heading(1, "Report"), heading(2, "Summary"), table(1, 1),
-        paragraph("details")};
+    const text_doc expected{
+        heading(1, "Report"), heading(2, "Summary"), table(1, 1), paragraph("details")};
     EXPECT_EQ(doc.body, expected.body);
 }
 
@@ -186,8 +187,12 @@ TEST(BASIC_USAGE, InsertAroundPlaceholder)
     text_doc doc{paragraph("a"), paragraph("{{x}}"), paragraph("b")};
     EXPECT_TRUE(doc.insert_after(text{"{{x}}"}, {paragraph("after 1"), paragraph("after 2")}));
     EXPECT_TRUE(doc.insert_before(text{"{{x}}"}, paragraph("before")));
-    const text_doc expected{paragraph("a"), paragraph("before"), paragraph("{{x}}"),
-        paragraph("after 1"), paragraph("after 2"), paragraph("b")};
+    const text_doc expected{paragraph("a"),
+        paragraph("before"),
+        paragraph("{{x}}"),
+        paragraph("after 1"),
+        paragraph("after 2"),
+        paragraph("b")};
     EXPECT_EQ(doc.body, expected.body);
 }
 

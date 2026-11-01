@@ -123,7 +123,12 @@ public:
     page_style page; //!< The header and footer on the body's pages
 
 private:
-    enum class fill_mode { replace, after, before };
+    enum class fill_mode
+    {
+        replace,
+        after,
+        before
+    };
     bool fill(const placeholder &p, const text_doc &content, fill_mode mode);
     /// Adds other's registries, or throws (changing nothing) on a clash.
     void merge_registries(const text_doc &other);

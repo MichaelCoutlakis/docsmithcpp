@@ -377,8 +377,12 @@ TEST(HTML, Preformatted)
 
 TEST(HTML, Fields)
 {
-    text_doc doc{paragraph("[", field{field_type::title}, "] page ",
-        field{field_type::page_number}, " of ", field{field_type::page_count})};
+    text_doc doc{paragraph("[",
+        field{field_type::title},
+        "] page ",
+        field{field_type::page_number},
+        " of ",
+        field{field_type::page_count})};
     doc.meta.title = "Report";
     EXPECT_TRUE(has(html::file(doc).to_string(), "<p>[Report] page  of </p>"))
         << "no pages, so no page numbers";
@@ -390,14 +394,18 @@ TEST(HTML, HeaderAndFooter)
     doc.page.set_header(paragraph("Top"));
     doc.page.set_footer(paragraph("Bottom"));
     EXPECT_TRUE(has(html::file(doc).to_string(),
-        "<body>\n<header>\n  <p>Top</p>\n</header>\n<p>Body</p>\n<footer>\n  <p>Bottom</p>\n</footer>\n</body>"));
+        "<body>\n<header>\n  <p>Top</p>\n</header>\n<p>Body</p>\n<footer>\n  "
+        "<p>Bottom</p>\n</footer>\n</body>"));
     EXPECT_FALSE(has(html::file(text_doc{paragraph("x")}).to_string(), "<header>"));
 }
 
 TEST(HTML, TableOfContents)
 {
-    const text_doc doc{table_of_contents("Contents"), heading(1, "Intro"),
-        heading(2, bookmark{"r"}, "Results"), heading(2, "Intro"), heading(1, "End")};
+    const text_doc doc{table_of_contents("Contents"),
+        heading(1, "Intro"),
+        heading(2, bookmark{"r"}, "Results"),
+        heading(2, "Intro"),
+        heading(1, "End")};
     const auto html = html::file(doc).to_string();
     EXPECT_TRUE(has(html,
         "<nav class=\"toc\">\n"
@@ -414,7 +422,8 @@ TEST(HTML, TableOfContents)
         "    <li><a href=\"#end\">End</a>\n"
         "    </li>\n"
         "  </ul>\n"
-        "</nav>\n")) << html;
+        "</nav>\n"))
+        << html;
     EXPECT_TRUE(has(html, "<h1 id=\"intro\">Intro</h1>"));
     EXPECT_TRUE(has(html, "<h2><a id=\"r\"></a>Results</h2>")) << "linked by its bookmark";
     EXPECT_TRUE(has(html, "<h2 id=\"intro-2\">Intro</h2>"));

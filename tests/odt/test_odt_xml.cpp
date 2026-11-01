@@ -234,8 +234,10 @@ TEST(ODT_XML, BuiltinStylesDefinedOnce)
 
 TEST(ODT_XML, FieldElements)
 {
-    text_doc doc{paragraph(field{field_type::page_number}, field{field_type::page_count},
-        field{field_type::title}, field{field_type::date})};
+    text_doc doc{paragraph(field{field_type::page_number},
+        field{field_type::page_count},
+        field{field_type::title},
+        field{field_type::date})};
     doc.meta.title = "Report";
     odt::file(doc).save("odt/out/field_elements.odt");
 
@@ -244,7 +246,8 @@ TEST(ODT_XML, FieldElements)
     EXPECT_STREQ(p.child("text:page-number").attribute("text:select-page").as_string(), "current");
     EXPECT_STREQ(p.child("text:page-count").text().as_string(), "1");
     EXPECT_STREQ(p.child("text:title").text().as_string(), "Report") << "the value it shows";
-    EXPECT_EQ(std::string(p.child("text:date").attribute("text:date-value").as_string()).size(), 10U);
+    EXPECT_EQ(
+        std::string(p.child("text:date").attribute("text:date-value").as_string()).size(), 10U);
 }
 
 TEST(ODT_XML, HeaderAndFooterGoOnTheMasterPage)
@@ -261,7 +264,8 @@ TEST(ODT_XML, HeaderAndFooterGoOnTheMasterPage)
     EXPECT_STREQ(master.first_child().name(), "style:header");
     EXPECT_STREQ(master.child("style:footer").child("text:p").text().as_string(), "Bottom");
     auto layout = root.child("office:automatic-styles")
-                      .find_child_by_attribute("style:page-layout", "style:name",
+                      .find_child_by_attribute("style:page-layout",
+                          "style:name",
                           master.attribute("style:page-layout-name").as_string());
     ASSERT_TRUE(layout);
     EXPECT_TRUE(layout.child("style:header-style").child("style:header-footer-properties"));
@@ -274,19 +278,23 @@ TEST(ODT_XML, HeaderAndFooterGoOnTheMasterPage)
     auto masters = again.xml.child("office:document-styles").child("office:master-styles");
     EXPECT_EQ(masters.select_nodes("style:master-page").size(), 1U);
     EXPECT_STREQ(masters.child("style:master-page").last_child().name(), "style:footer");
-    EXPECT_STREQ(masters.select_node("//style:footer/text:p").node().text().as_string(), "New bottom");
+    EXPECT_STREQ(
+        masters.select_node("//style:footer/text:p").node().text().as_string(), "New bottom");
 }
 
 TEST(ODT_XML, TableOfContentsEntries)
 {
-    const text_doc doc{table_of_contents("Contents", 2), heading(1, "Intro"),
-        heading(2, span(bookmark{"results"}, "Results")), heading(3, "Too deep")};
+    const text_doc doc{table_of_contents("Contents", 2),
+        heading(1, "Intro"),
+        heading(2, span(bookmark{"results"}, "Results")),
+        heading(3, "Too deep")};
     odt::file(doc).save("odt/out/toc_entries.odt");
 
     part content("odt/out/toc_entries.odt", "content.xml");
     auto toc = content.xml.select_node("//text:table-of-content").node();
     ASSERT_TRUE(toc);
-    EXPECT_EQ(toc.child("text:table-of-content-source").attribute("text:outline-level").as_int(), 2);
+    EXPECT_EQ(
+        toc.child("text:table-of-content-source").attribute("text:outline-level").as_int(), 2);
     auto body = toc.child("text:index-body");
     EXPECT_STREQ(body.child("text:index-title").child("text:p").text().as_string(), "Contents");
 
@@ -307,7 +315,8 @@ TEST(ODT_XML, TableOfContentsEntries)
 TEST(ODT_XML, FontsAreDeclared)
 {
     text_doc doc;
-    doc.add(paragraph("x").set_style(doc.add_style(style("Body", text_props(font_name("Liberation Serif"))))));
+    doc.add(paragraph("x").set_style(
+        doc.add_style(style("Body", text_props(font_name("Liberation Serif"))))));
     odt::file(doc).save("odt/out/font_faces.odt");
 
     for(const char *name : {"styles.xml", "content.xml"})
@@ -322,12 +331,14 @@ TEST(ODT_XML, FontsAreDeclared)
 TEST(ODT_XML, DisplayNamesForEncodedStyleNames)
 {
     text_doc doc;
-    doc.add(paragraph("x").set_style(doc.add_style(style("Text_20_body", text_props(font_size(11))))));
+    doc.add(
+        paragraph("x").set_style(doc.add_style(style("Text_20_body", text_props(font_size(11))))));
     doc.add(paragraph("y").set_style(doc.add_style(style("Plain", text_props(font_size(11))))));
     odt::file(doc).save("odt/out/display_names.odt");
 
     part styles("odt/out/display_names.odt", "styles.xml");
-    auto body = styles_of(styles).find_child_by_attribute("style:style", "style:name", "Text_20_body");
+    auto body =
+        styles_of(styles).find_child_by_attribute("style:style", "style:name", "Text_20_body");
     EXPECT_STREQ(body.attribute("style:display-name").as_string(), "Text body")
         << "so LibreOffice takes it as its own Text Body";
     auto plain = styles_of(styles).find_child_by_attribute("style:style", "style:name", "Plain");
