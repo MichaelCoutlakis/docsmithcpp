@@ -319,6 +319,7 @@ and `save()` (plus `to_string()` for text formats).
 | Format | Read | Write | Kept from a loaded file |
 |---|---|---|---|
 | ODT | `odt::file::load()` | `odt::file::save()` | the rest of the package: `styles.xml` and `meta.xml` are updated in place, settings, the thumbnail and pictures only `unknown` uses are carried over; `content.xml` is regenerated |
+| DOCX | `docx::file::load()` | `docx::file::save()` | the rest of the package: `styles.xml`, `numbering.xml`, `settings.xml` and `docProps/core.xml` are updated in place, other parts carried over, direct formatting and image drawings written back as they were; `document.xml` is regenerated (see *DOCX*) |
 | HTML | — | `html::file::save()`, `to_string()` | — |
 | Markdown | `md::parse()`, `md::file::load()`, with `DOCSMITHCPP_MARKDOWN` | `md::file::save()`, `to_string()` | — |
 
@@ -346,10 +347,14 @@ Everything under `src/` is private:
 | `zip/` | a zip archive read from and written to bytes (miniz), knowing nothing of its contents |
 | `odf/` | the ODF package (manifest, mimetype) and `meta.xml`, shared by the ODF formats |
 | `odt/` | the ODT parser (`file.cpp`), writer and style XML |
+| `opc/` | the OPC package of the Office Open XML formats: parts, content types, relationships |
+| `xml/` | renaming namespace prefixes by URI, so readers don't depend on the prefixes a file declares |
+| `docx/` | the DOCX reader, writer, style and numbering XML, and metadata |
 | `html/`, `md/` | the HTML writer, and the Markdown writer and md4c parser |
 | `outline.h` | plain text of inline content, the body's headings, and heading ids for a table of contents |
 | `format.h` | number, colour and date formatting without a formatting library |
 | `bytes.h` | whole files as bytes, through `std::filesystem::path` so non-ASCII names work on Windows |
+| `image_size.h` | an image's pixel size and resolution from its PNG, JPEG or GIF header |
 | `resource_plan.h` | where a text format's images go when it is saved with its images next to it |
 
 ## Extending
