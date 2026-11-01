@@ -109,8 +109,9 @@ jobs:
             -DDOCSMITHCPP_BUILD_EXAMPLES=ON \
             -DDOCSMITHCPP_MARKDOWN=ON
 
+      # Keeps going after a failure, so one run shows every file that fails.
       - name: Build
-        run: cmake --build build
+        run: cmake --build build -- -k 0
 
       # LibreOffice isn't installed, so libreoffice_opens_output isn't
       # registered; the consumer test runs.

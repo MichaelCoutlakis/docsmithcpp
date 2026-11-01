@@ -72,12 +72,14 @@ public:
 
 struct bullet_type
 {
-    constexpr static inline std::string bullet() { return "•"; }
-    constexpr static inline std::string black_circ() { return "●"; }
-    constexpr static inline std::string heavy_check_mark() { return "✔"; }
-    constexpr static inline std::string ballot_x() { return "✗"; }
-    constexpr static inline std::string right_arrow() { return "➔"; }
-    constexpr static inline std::string three_d_right_arrow() { return "➢"; }
+    // Not constexpr: std::string only became a literal type in GCC 12's
+    // libstdc++, and GCC 11 is supported.
+    static std::string bullet() { return "•"; }
+    static std::string black_circ() { return "●"; }
+    static std::string heavy_check_mark() { return "✔"; }
+    static std::string ballot_x() { return "✗"; }
+    static std::string right_arrow() { return "➔"; }
+    static std::string three_d_right_arrow() { return "➢"; }
 };
 
 class list_style_bullet
