@@ -80,20 +80,38 @@ struct resaved
 const std::string smiley = R"(<draw:image xlink:href="Pictures/smiley.png"/>)";
 } // namespace
 
-// A number cell holds its value (office:value) and, as its paragraph, the
-// value formatted. Carrying office:value over as is would let the two disagree
-// once the text is edited.
-// To decide: model a cell's value (number, date, formula), or keep cells text.
-TEST(ODT_Loss, CellValueIsDropped)
+// A cell can hold a value (office:value-type, office:value) and a formula
+// (table:formula) as well as its paragraphs. Writer shows the paragraphs: a
+// value with none shows an empty cell, though a formula can still use it. A
+// formula cell holds the formula, its result as a number and the result as
+// text, so carrying any of these over as is would let them disagree with the
+// text once it's edited.
+// Decided: cells are text. The value and formula are dropped, so a formula
+// cell becomes its last result. Modelling them is a TODO.md item (Model gaps).
+TEST(ODT_Loss, CellValuesAndFormulasAreDropped)
 {
+    // A number cell; a value with no text; a formula using it, as LibreOffice
+    // saves one.
     const resaved r("cell_value",
-        R"(<table:table table:name="T"><table:table-column/><table:table-row>)"
-        R"(<table:table-cell office:value-type="float" office:value="123">)"
-        R"(<text:p>123</text:p></table:table-cell></table:table-row></table:table>)");
-    auto cell = r.node("//table:table-cell");
-    EXPECT_STREQ(cell.child("text:p").text().as_string(), "123");
-    EXPECT_FALSE(cell.attribute("office:value"));
-    EXPECT_STREQ(cell.attribute("office:value-type").as_string(), "string") << "it becomes text";
+        R"(<table:table table:name="T"><table:table-column/>)"
+        R"(<table:table-row><table:table-cell office:value-type="float" office:value="123">)"
+        R"(<text:p>123</text:p></table:table-cell></table:table-row>)"
+        R"(<table:table-row><table:table-cell office:value-type="float" office:value="123"/>)"
+        R"(</table:table-row>)"
+        R"(<table:table-row><table:table-cell table:formula="ooow:&lt;A2&gt;" )"
+        R"(office:value-type="float" office:value="123"><text:p>123</text:p>)"
+        R"(</table:table-cell></table:table-row></table:table>)");
+    const auto cells = r.xml.select_nodes("//table:table-cell");
+    ASSERT_EQ(cells.size(), 3U);
+    for(const auto &c : cells)
+    {
+        EXPECT_FALSE(c.node().attribute("office:value-type"));
+        EXPECT_FALSE(c.node().attribute("office:value"));
+        EXPECT_FALSE(c.node().attribute("table:formula"));
+    }
+    EXPECT_STREQ(cells[0].node().child("text:p").text().as_string(), "123");
+    EXPECT_STREQ(cells[1].node().child("text:p").text().as_string(), "") << "empty, as shown";
+    EXPECT_STREQ(cells[2].node().child("text:p").text().as_string(), "123") << "its result";
 }
 
 // A frame's anchor goes with its position (svg:x, svg:y) and how text wraps

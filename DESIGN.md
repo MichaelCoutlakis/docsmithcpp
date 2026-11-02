@@ -325,6 +325,10 @@ and alignment are in its style too.
   last column) break with spanned cells.
 - **Markdown**: GFM tables have no formatting, so all of it is left out.
 
+A cell's content is its blocks: there are no cell values or formulas. ODT's
+`office:value-type`, `office:value` and `table:formula` are dropped when
+reading, so a formula cell keeps the result it showed (TODO.md, _Model gaps_).
+
 ## Resources
 
 Anything more than one format needs lives in `text_doc`, not in a format's file

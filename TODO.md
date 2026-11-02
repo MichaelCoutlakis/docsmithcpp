@@ -18,15 +18,15 @@ are dropped. So load, edit, save of a real-world file can silently lose content.
 
 Done: a table's name, style, row styles and column widths; list numbering (a
 list header, an item's start value, a list continuing the count); an image's
-size.
+size. Decided: cells are text, so a cell's value and formula
+(`office:value-type`, `office:value`, `table:formula`) are dropped and a formula
+cell becomes its last result (_Model gaps_ has modelling them).
 
 The rule (DESIGN.md, _Document model_): what the model could hold in every
 format is modelled; the rest is dropped on purpose, not carried over half
 modelled. `tests/odt/test_odt_loss.cpp` has a test per case left, recording what
 happens today. To decide, each, then change its test to match:
 
-- **Cell values and formulas** (`office:value`, `table:formula`): model typed
-  cell values, or keep cells as text.
 - **Frame anchoring and position** (`text:anchor-type`, `svg:x`/`svg:y`, wrap in
   the graphic style): model them together, or keep frames inline.
 - **Alternative text** for images (`svg:title`, `svg:desc`) and tables
@@ -197,6 +197,16 @@ Options:
 - Font sizes are points only, so a parsed `130%` is dropped. Editing a loaded
   style rewrites it from the model and drops what the model doesn't hold;
   updating only the modelled attributes in place would keep the rest.
+- **Cell values and formulas** (later). Cells are text: ODT's `office:value`
+  and `table:formula` are dropped, so a formula cell keeps only its last
+  result. LibreOffice stores a formula cell as the formula, its result as a
+  number and the result as text, and a cell's value is used by formulas even
+  with no text shown, so carrying any of them over can't stay consistent. The
+  clean model is a cell holding a number or a formula, with the writers
+  evaluating formulas and writing the text, which needs cell references,
+  number formats and recalculation. DOCX table formulas (`{ = A1 }` fields) are
+  `unknown` today, so they are carried over and can go stale; they should go
+  the same way as ODT's.
 
 ## Testing
 

@@ -3,5 +3,6 @@
         "type": "lldb",
         "initCommands": ["command script import ${workspaceFolder}/tools/debug/docsmith_lldb.py"]
     },
-    "cmake.copyCompileCommands": "${workspaceFolder}/compile_commands.json"
+    "cmake.copyCompileCommands": "${workspaceFolder}/compile_commands.json",
+    "cmake.ctest.neverDebugTestsWithLaunchConfiguration": false
 }

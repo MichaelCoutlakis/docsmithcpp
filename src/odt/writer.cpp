@@ -995,7 +995,6 @@ void writer::emit(pugi::xml_node parent, const table_cell &c, const std::string 
     auto n = parent.append_child("table:table-cell");
     if(!style.empty())
         n.append_attribute("table:style-name").set_value(style.c_str());
-    n.append_attribute("office:value-type").set_value("string");
 
     if(c.rowspan != 1)
         n.append_attribute("table:number-rows-spanned").set_value(c.rowspan);

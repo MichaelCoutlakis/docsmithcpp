@@ -336,6 +336,9 @@ held in `std::variant`. This is a breaking change to almost every public API.
   `tests/odt/test_odt_loss.cpp` lists the cases (cell values, frame anchoring,
   alt text, ...).
 - ODT lengths are read to the thousandth of a point, as they are written.
+- Table cells are text: an ODT cell's value and formula (`office:value-type`,
+  `office:value`, `table:formula`) are dropped, so a formula cell keeps only its
+  last result.
 - Images that are no longer referenced stay in the package when a loaded file is
   saved.
 - `set_style(style)` keeps only the name. The definition must also be added to
