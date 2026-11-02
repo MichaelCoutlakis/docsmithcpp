@@ -127,6 +127,13 @@ public:
         (this->add(std::forward<Args>(content)), ...);
     }
 
+    /// Whether the item shows its number or bullet. An unnumbered item
+    /// doesn't count (ODF's list header, LibreOffice's unnumbered entry).
+    bool numbered{true};
+    /// The number this item shows, if it restarts the count; later items
+    /// count on from it.
+    std::optional<int> start_value;
+
     bool operator==(const list_item &) const = default;
 };
 
@@ -148,6 +155,10 @@ public:
 
     std::vector<list_item> &items() { return m_items; }
     const std::vector<list_item> &items() const { return m_items; }
+
+    /// Whether the numbering carries on from the last list before it with
+    /// the same list style (at the same depth), rather than starting again.
+    bool continue_numbering{false};
 
     bool operator==(const list &) const = default;
 

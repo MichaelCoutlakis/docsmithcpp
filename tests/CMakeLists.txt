@@ -6,6 +6,7 @@ add_executable(docsmithcpp_tests
     test_table.cpp
     odt/test_odt.cpp
     odt/test_odt_xml.cpp
+    odt/test_odt_loss.cpp
     odt/test_package.cpp
     zip/test_zip.cpp
     html/test_html.cpp

@@ -96,6 +96,12 @@ TEST(ODT, ParseModerateFile)
 {
     text_doc actual = load_strip_styles("odt/moderate.odt");
 
+    // "Item b" carries on the count of "Item a" (text:continue-list).
+    auto continued = [](list l)
+    {
+        l.continue_numbering = true;
+        return l;
+    };
     // Styles are stripped, so compare content and structure only.
     text_doc expected{//
         heading(1, "Heading 1"),
@@ -109,7 +115,7 @@ TEST(ODT, ParseModerateFile)
         paragraph("Alpha list:"),
         list(list_item(paragraph("Item a"))),
         list(list_item(list(list_item(paragraph("Sub items of alpha list are bullets"))))),
-        list(list_item(paragraph("Item b"))),
+        continued(list(list_item(paragraph("Item b")))),
         paragraph("Here is a url to ",
             hyperlink("https://github.com/MichaelCoutlakis/docsmithcpp", "docsmith"), " on ",
             span().add(span("GitHub")), ".")};
@@ -124,8 +130,9 @@ TEST(ODT, ParseImage)
     strip_styles(actual);
     drop_unknown(actual);
 
-    text_doc expected{
-        paragraph(frame(image{"Pictures/100000000000002A0000002A13903900F3783A21.png"}))};
+    frame f(image{"Pictures/100000000000002A0000002A13903900F3783A21.png"});
+    f.width = f.height = pt(31.493); // 1.111cm
+    text_doc expected{paragraph(f)};
 
     print_compare(expected, actual);
     EXPECT_EQ(expected.body, actual.body);
@@ -136,6 +143,27 @@ TEST(ODT, ParseImage)
     ASSERT_NE(r, nullptr);
     EXPECT_EQ(r->media_type(), "image/png");
     EXPECT_EQ(r->data().substr(1, 3), "PNG");
+}
+
+TEST(ODT, ParseLists)
+{
+    // As LibreOffice saved it: a list header, an item numbered from 5, a list
+    // carrying on the count after a paragraph, and one starting again whose
+    // unnumbered entry LibreOffice saved as more of the item before it.
+    text_doc actual = load_strip_styles("odt/lists.odt");
+
+    list first(list_item("Header"), list_item("One"), list_item("Five"), list_item("Six"));
+    first.items()[0].numbered = false;
+    first.items()[2].start_value = 5;
+    list second(list_item("Seven"));
+    second.continue_numbering = true;
+    const text_doc expected{first,
+        paragraph("Between"),
+        second,
+        list(list_item("Restart", "Mid header"), list_item("Two"))};
+
+    print_compare(expected, actual);
+    EXPECT_EQ(expected.body, actual.body);
 }
 
 TEST(ODT, ParseParagraphStyle)
@@ -151,7 +179,8 @@ TEST(ODT, ParseParagraphStyle)
 TEST(ODT, ResaveLoadedFile)
 {
     // load -> save -> load gives back the same document, including style names.
-    for(const char *name : {"basic", "moderate", "paragraph_with_style", "table-intermediate"})
+    for(const char *name :
+        {"basic", "moderate", "paragraph_with_style", "table-intermediate", "lists"})
     {
         const auto first = odt::file::load(std::string("odt/") + name + ".odt");
         const std::string resaved = std::string("odt/out/") + name + "_resaved.odt";
@@ -261,7 +290,7 @@ TEST(ODT, ReadTableFormatting)
     const border line = border::solid(pt(0.5));
     const cell_props a1 = effective_cell_props(t, doc.styles(), 0, 0);
     EXPECT_EQ(a1.m_borders, (cell_borders{line, line, line, border::none()}));
-    EXPECT_NEAR(a1.m_padding->m_points, 0.097 * 72 / 2.54, 1e-9);
+    EXPECT_NEAR(a1.m_padding->m_points, 0.097 * 72 / 2.54, 0.0005); // to the thousandth of a point
     EXPECT_EQ(effective_cell_props(t, doc.styles(), 0, 1).m_borders,
         (cell_borders{line, line, line, line}));
 }

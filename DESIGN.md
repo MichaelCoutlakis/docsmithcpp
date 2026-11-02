@@ -24,6 +24,12 @@ foreign content survives a parse → write round trip. Only block- and inline-le
 content is kept this way: unrecognised children _inside_ a table or list, and
 unknown attributes on known elements, are dropped (TODO.md, *Correctness*).
 
+Content the model doesn't hold is either modelled or dropped, all or nothing:
+what can't be modelled isn't kept half-modelled, since raw markup carried over
+next to a node that is edited can end up contradicting it (a number cell's
+value and its text). Where ODF content goes today, case by case, is recorded in
+`tests/odt/test_odt_loss.cpp`.
+
 The recursive edges (a `span` contains inline nodes, which contain spans…) are
 held through a small value-semantic wrapper, `box<T>`
 (`include/docsmithcpp/box.h`), which keeps the model portable across libstdc++,
@@ -43,11 +49,11 @@ What each node holds, independent of any one format. "Inline" is a sequence of
 | `page_style` | — | blocks (`header`, `footer`) | what each page repeats above and below the body |
 | `paragraph` | block | inline | styled |
 | `heading` | block | inline | styled; `level` |
-| `list` | block | `list_item`s | styled with a list style |
-| `list_item` | — | blocks | |
+| `list` | block | `list_item`s | styled with a list style; `continue_numbering` |
+| `list_item` | — | blocks | `numbered`, `start_value` |
 | `table` | block | a grid of `table_cell`s | styled; always rectangular; per row a style, per column a width and style; the first `header_rows()` rows are header rows |
 | `table_cell` | — | blocks | styled; `props` (direct formatting); `rowspan`, `colspan`; a covered slot holds a placeholder cell |
-| `frame` | block, inline | an `image` | styled |
+| `frame` | block, inline | an `image` | styled; `width`, `height` |
 | `page_break` | block | — | starts a new page |
 | `table_of_contents` | block | — | `title`, `levels`; the entries are made by writers |
 | `text` | inline | a string | white space as is, `'\t'` a tab, `'\n'` a line break |
@@ -68,6 +74,14 @@ on.
   item, or a table in a table cell, is fine. Inline content nests through
   `span` and `hyperlink`. A `frame` is a block when it stands on its own and
   inline when it sits in a line of text.
+- **List numbering.** A list's count starts at its list style's start for that
+  level, or with `continue_numbering` carries on from the last list before it
+  with the same list style at the same depth. An item's `start_value` restarts
+  the count there; later items count on from it. An item that isn't `numbered`
+  shows no number or bullet and isn't counted. Only ODF has such an item (as
+  `text:list-header`), and only first, so writers write a later one as more of
+  the item before it, as LibreOffice saves one, and Markdown and DOCX write one
+  at the start as paragraphs before the list. HTML writes each as it is.
 - **Tables are rectangular.** Every row has `num_cols()` cells. A cell with a
   `rowspan` or `colspan` covers the slots to its right and below, which still
   hold placeholder cells that writers skip (`is_cell_covered()`).
@@ -476,9 +490,9 @@ looks right in an `.odt` and writes back to the same Markdown.
 | `'\n'` in text | hard break, `\` at the end of the line | `'\n'`; a soft break is a space |
 | `hyperlink` | `[text](url)`, `<url>` when the text is the URL, `(#id)` for a bookmark | the same |
 | `bookmark` | `<a id="name"></a>` | a bookmark |
-| `list` | `-` or `1.` (with the start number) from its list style at that level | list styled `List_20_1` or `Numbering_20_123[_start_N]` |
+| `list` | `-` or `1.` from its list style at that level, each item with its number (renderers take only the first item's) | list styled `List_20_1` or `Numbering_20_123[_start_N]` |
 | `table` | GFM table | the same, see below |
-| `frame` | `![](uri)`; a block frame is a paragraph of its own | a paragraph holding only an image is a block frame |
+| `frame` | `![](uri)`, its size dropped; a block frame is a paragraph of its own | a paragraph holding only an image is a block frame |
 | `page_break` | thematic break `---` | `page_break` |
 | `table_of_contents` | its title as a paragraph, then nested `-` lists of `[heading](#id)` links; headings without a bookmark get an `<a id>` anchor with the same slug HTML uses | the paragraph and lists |
 | `field` | the title or date as text; page number and count left out | text |
@@ -584,7 +598,15 @@ are kept, renamed only if they clash, and `mc:Ignorable` follows them.
 - **Lists**: each list style is a `w:abstractNum` named after it (`w:name`),
   with each level's format (`decimal`, `lowerLetter`, ..., `bullet`), text
   (prefix, `%<level>`, suffix), start and indent. Each `list` node gets a `w:num`
-  of its own whose `w:startOverride`s restart it. An unstyled nested list
+  of its own whose `w:startOverride`s restart it, unless it continues the
+  numbering: then it uses the last list's `w:num` again. An item's
+  `start_value` starts a new `w:num` with a `w:startOverride` at its level, which
+  the rest of the list uses. Reading follows Word, which counts on through every
+  `w:num` of an abstractNum unless one restarts a level the first time it's used
+  there: a `w:num` of the same abstractNum carries the list on (with a
+  `start_value` if it restarts), and a list that isn't nested continues the
+  numbering if its level was counted before and its `w:num` doesn't restart it.
+  Bulleted levels never continue. An unstyled nested list
   continues its parent's numbering one level down; a styled one gets its own.
   The second and later paragraphs of an item have `w:numId` 0 and the item's
   indent, so they read back into the item. A list with no list style gets
@@ -592,11 +614,13 @@ are kept, renamed only if they clash, and `mc:Ignorable` follows them.
   unstyled. An abstractNum with no name reads as `WWNum<id>`, as LibreOffice
   names them.
 - **Images**: written to `word/media/` (a resource already named
-  `word/media/...` keeps its name) and sized in EMUs from the image's own pixel
-  size and resolution (`src/image_size.h` reads PNG, JPEG and GIF headers),
-  scaled down to the text width. Loading names each resource by its part. The
-  file keeps a loaded image's `w:drawing`, and writes it again (size, anchoring,
-  alt text) while a frame in the same part shows that image.
+  `word/media/...` keeps its name) and sized in EMUs from the frame's `width`
+  and `height`, or with neither from the image's own pixel size and resolution
+  (`src/image_size.h` reads PNG, JPEG and GIF headers), scaled down to the text
+  width. Loading reads the size from `wp:extent` and names each resource by its
+  part. The file keeps a loaded image's `w:drawing`, and writes it again
+  (anchoring, alt text) while a frame in the same part shows that image, with
+  the frame's size in place of the one it had.
 - **Table of contents**: a `w:sdt` content control (docPartGallery "Table of
   Contents"): the title in `TOCHeading`, then a `TOC \o "1-<levels>" \h \z \u`
   complex field whose result is a `TOC<level>` paragraph per heading, linking

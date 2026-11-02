@@ -22,9 +22,12 @@ CONTAINERS = {
     "heading": ["level"],
     "span": [],
     "hyperlink": ["target"],
-    "list_item": [],
+    "list_item": ["numbered", "start_value"],
     "table_cell": ["rowspan", "colspan"],
 }
+
+# list isn't a has_children<> node, but shows its own fields the same way.
+LIST_FIELDS = ["continue_numbering"]
 
 
 def _short_name(valobj):
@@ -248,7 +251,7 @@ class ContainerProvider(ForwardProvider):
         self.items = []
         if _style(raw):
             self.items.append(("style", raw.GetChildMemberWithName("style")))
-        for field in CONTAINERS.get(name, []):
+        for field in CONTAINERS.get(name, LIST_FIELDS if name == "list" else []):
             value = raw.GetChildMemberWithName(field)
             if field.endswith("span") and value.GetValueAsSigned() == 1:
                 continue

@@ -344,3 +344,42 @@ TEST(ODT_XML, DisplayNamesForEncodedStyleNames)
     auto plain = styles_of(styles).find_child_by_attribute("style:style", "style:name", "Plain");
     EXPECT_FALSE(plain.attribute("style:display-name"));
 }
+
+TEST(ODT_XML, ListNumbering)
+{
+    list l(list_item("header"), list_item("one"), list_item("more"), list_item("five"));
+    l.items()[0].numbered = false;
+    l.items()[2].numbered = false;
+    l.items()[3].start_value = 5;
+    list more(list_item("six"));
+    more.continue_numbering = true;
+    odt::file(text_doc{l, paragraph("between"), more}).save("odt/out/list_numbering.odt");
+
+    const part content("odt/out/list_numbering.odt", "content.xml");
+    auto lists = content.xml.select_nodes("//office:text/text:list");
+    ASSERT_EQ(lists.size(), 2U);
+    auto first = lists[0].node();
+    EXPECT_STREQ(first.first_child().name(), "text:list-header");
+    // Only the first item can be unnumbered: a later one is more of the one
+    // before it, as LibreOffice saves one.
+    EXPECT_EQ(first.select_nodes("text:list-item").size(), 2U);
+    EXPECT_EQ(first.select_nodes("text:list-item[1]/text:p").size(), 2U);
+    EXPECT_EQ(
+        first.select_node("text:list-item[2]").node().attribute("text:start-value").as_int(), 5);
+    EXPECT_TRUE(lists[1].node().attribute("text:continue-numbering").as_bool());
+}
+
+TEST(ODT_XML, FrameSize)
+{
+    text_doc doc;
+    frame f(doc.add_image("Pictures/dot.png", "not really a png", "image/png"));
+    f.width = pt(36);
+    f.height = cm(1);
+    doc.add(paragraph(f));
+    odt::file(doc).save("odt/out/frame_size.odt");
+
+    const part content("odt/out/frame_size.odt", "content.xml");
+    auto n = content.xml.select_node("//draw:frame").node();
+    EXPECT_STREQ(n.attribute("svg:width").as_string(), "36pt");
+    EXPECT_STREQ(n.attribute("svg:height").as_string(), "28.346pt");
+}

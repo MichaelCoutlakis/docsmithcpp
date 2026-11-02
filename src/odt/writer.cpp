@@ -692,6 +692,10 @@ void writer::emit(pugi::xml_node parent, const frame &f)
     auto n = parent.append_child("draw:frame");
     if(!f.style.is_empty())
         n.append_attribute("draw:style-name").set_value(f.style.get_name().c_str());
+    if(f.width)
+        n.append_attribute("svg:width") = (detail::to_string(f.width->m_points) + "pt").c_str();
+    if(f.height)
+        n.append_attribute("svg:height") = (detail::to_string(f.height->m_points) + "pt").c_str();
     emit(n, f.img);
 }
 
@@ -842,13 +846,22 @@ void writer::emit(pugi::xml_node parent, const list &l)
     auto n = parent.append_child("text:list");
     if(!l.style.is_empty())
         n.append_attribute("text:style-name").set_value(l.style.get_name().c_str());
+    if(l.continue_numbering)
+        n.append_attribute("text:continue-numbering") = "true";
+    // Only the first item can be unnumbered (text:list-header); a later one is
+    // more of the item before it, as LibreOffice saves one.
     for(const auto &it : l.items())
-        emit(n, it);
+        if(!it.numbered && n.last_child())
+            write_blocks(n.last_child(), it.children());
+        else
+            emit(n, it);
 }
 
 void writer::emit(pugi::xml_node parent, const list_item &it)
 {
-    auto n = parent.append_child("text:list-item");
+    auto n = parent.append_child(it.numbered ? "text:list-item" : "text:list-header");
+    if(it.numbered && it.start_value)
+        n.append_attribute("text:start-value") = *it.start_value;
     write_blocks(n, it.children());
 }
 

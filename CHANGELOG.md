@@ -72,6 +72,18 @@ held in `std::variant`. This is a breaking change to almost every public API.
   directory. Generated test files go to `tests/odt/out/`.
 
 ### Added
+- **List numbering**: `list::continue_numbering` carries a list's count on from
+  the last list of its style, `list_item::start_value` restarts the count at an
+  item, and `list_item::numbered` (false) is an item with no number or bullet,
+  ODF's list header. ODT reads and writes them (`text:continue-numbering`,
+  `text:continue-list`, `text:start-value`, `text:list-header`), DOCX through
+  `w:num` instances and `w:startOverride`, and HTML and Markdown write the
+  numbers they make. A loaded LibreOffice list that continues after a paragraph
+  no longer starts again at 1.
+- **Image size**: `frame::width` and `height`, read and written by ODT
+  (`svg:width`, `svg:height`) and DOCX (`wp:extent`, also replacing a loaded
+  drawing's size), and written by HTML. Before, a loaded `.odt` image was saved
+  with no size.
 - **Table formatting** in every format (see DESIGN.md, *Tables*). A table style
   (`table_props`) gives the table's width and alignment, its outer and inside
   lines, cell padding and its header rows' background, rule and paragraph style.
@@ -320,7 +332,10 @@ held in `std::variant`. This is a breaking change to almost every public API.
 - Editing a loaded style rewrites its definition from the model, so the properties
   the model doesn't hold (margins, display name, ...) are dropped from that style.
 - `unknown` round-trips only block- and inline-level content. Unrecognized children
-  inside tables and lists, and unknown attributes on known elements, are dropped.
+  inside tables and lists, and unknown attributes on known elements, are dropped;
+  `tests/odt/test_odt_loss.cpp` lists the cases (cell values, frame anchoring,
+  alt text, ...).
+- ODT lengths are read to the thousandth of a point, as they are written.
 - Images that are no longer referenced stay in the package when a loaded file is
   saved.
 - `set_style(style)` keeps only the name. The definition must also be added to

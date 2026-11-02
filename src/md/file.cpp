@@ -26,6 +26,7 @@
 
 #include "bytes.h"
 #include "format.h"
+#include "list_numbers.h"
 #include "md/names.h"
 #include "outline.h"
 #include "resource_plan.h"
@@ -213,12 +214,10 @@ private:
                 s = std::visit([this](const auto &n) { return emit(n); }, bs[i].v);
             if(s.empty())
                 continue;
-            // A list's first line starts with its marker, '-' or a number. A
-            // table of contents ends with a '-' list.
-            const char marker = std::holds_alternative<list>(bs[i].v)
-                ? (s.front() == '-' ? '-' : s[s.find_first_not_of("0123456789")])
-                : std::holds_alternative<table_of_contents>(bs[i].v) ? '-'
-                                                                     : 0;
+            // A table of contents ends with a '-' list.
+            const char marker = std::holds_alternative<list>(bs[i].v) ? m_marker
+                : std::holds_alternative<table_of_contents>(bs[i].v)  ? '-'
+                                                                      : 0;
             if(!out.empty())
                 out += tight ? "\n" : "\n\n";
             // Two lists of the same kind in a row would read as one.
@@ -298,27 +297,50 @@ private:
         // enclosing list's style at the next level.
         const list_style *ls = l.style.is_empty() ? (m_lists.empty() ? nullptr : m_lists.back())
                                                   : m_doc.list_styles().find(l.style.get_name());
-        const auto *num = numbering(ls, static_cast<int>(m_lists.size()) + 1);
-        const bool tight = std::all_of(l.items().begin(),
-            l.items().end(),
-            [&](const list_item &it) { return is_tight(it, ls); });
+        const int level = static_cast<int>(m_lists.size()) + 1;
+        const auto *num = numbering(ls, level);
+        const auto numbers = num ? m_counter.numbers(l, ls, *num, level)
+                                 : std::vector<std::optional<int>>(l.items().size());
+        const char delim = num ? (num->m_num_suffix == ")" ? ')' : '.') : '-';
+        // Markdown has no unnumbered item: one at the start is written before
+        // the list, a later one as more of the item before it.
+        const auto &items = l.items();
+        size_t first = 0;
+        while(first != items.size() && !items[first].numbered)
+            ++first;
+        const bool tight = std::all_of(items.begin() + first,
+            items.end(),
+            [&](const list_item &it) { return it.numbered && is_tight(it, ls); });
 
-        m_lists.push_back(ls);
         std::string out;
-        int n = num ? num->m_start_from : 0;
-        for(const auto &it : l.items())
+        for(size_t i = 0; i != first; ++i)
+            if(std::string s = blocks(items[i].children(), false); !s.empty())
+                out += (out.empty() ? "" : "\n\n") + s;
+        if(first != items.size() && !out.empty())
+            out += "\n\n";
+        m_lists.push_back(ls);
+        size_t indent = 0; // of the last item's content
+        for(size_t i = first; i != items.size(); ++i)
         {
-            const std::string marker = num
-                ? std::to_string(n++) + (num->m_num_suffix == ")" ? ")" : ".")
-                : std::string("-");
-            const std::string body = blocks(it.children(), tight);
-            if(!out.empty())
+            const std::string body = blocks(items[i].children(), tight);
+            if(!items[i].numbered)
+            {
+                if(!body.empty())
+                    out += "\n\n" + std::string(indent, ' ') +
+                        indent_lines(body, std::string(indent, ' '));
+                continue;
+            }
+            const std::string marker =
+                numbers[i] ? std::to_string(*numbers[i]) + delim : std::string(1, delim);
+            if(i != first)
                 out += tight ? "\n" : "\n\n";
             out += marker;
+            indent = marker.size() + 1;
             if(!body.empty())
-                out += ' ' + indent_lines(body, std::string(marker.size() + 1, ' '));
+                out += ' ' + indent_lines(body, std::string(indent, ' '));
         }
         m_lists.pop_back();
+        m_marker = delim;
         return out;
     }
 
@@ -339,7 +361,13 @@ private:
             const list_style *nested =
                 l.style.is_empty() ? ls : m_doc.list_styles().find(l.style.get_name());
             const auto *num = numbering(nested, static_cast<int>(m_lists.size()) + 2);
-            return !num || num->m_start_from == 1;
+            if(!num)
+                return true;
+            const auto &items = l.items();
+            if(l.continue_numbering || (!items.empty() && !items.front().numbered))
+                return false;
+            const auto start = items.empty() ? std::nullopt : items.front().start_value;
+            return start.value_or(num->m_start_from) == 1;
         };
         if(bs.size() > 2)
             return false;
@@ -724,7 +752,9 @@ private:
     const detail::resource_plan &m_plan;
     const detail::heading_ids m_ids;
     std::vector<const list_style *> m_lists; //!< Enclosing lists' styles, innermost last
-    bool m_bol{false};                       //!< At the start of a line
+    detail::list_counter m_counter;
+    char m_marker{0};  //!< Of the last list written: '-', '.' or ')'
+    bool m_bol{false}; //!< At the start of a line
 };
 
 } // namespace

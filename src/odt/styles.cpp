@@ -19,6 +19,7 @@
 
 #include <cctype>
 #include <charconv>
+#include <cmath>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -145,7 +146,9 @@ std::optional<length> length_from(std::string_view odf)
             if(auto [p, ec] = std::from_chars(num.data(), num.data() + num.size(), v);
                 ec != std::errc{} || p != num.data() + num.size())
                 return std::nullopt;
-            return length{v * u.points};
+            // To the thousandth of a point the writer keeps, so a length
+            // reads back the same after a save.
+            return length{std::round(v * u.points * 1000) / 1000};
         }
     return std::nullopt;
 }

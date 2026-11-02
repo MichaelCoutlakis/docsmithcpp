@@ -432,7 +432,44 @@ private:
             abstracts[a.attribute("w:abstractNumId").as_string()] = a;
         for(auto n : root.children("w:num"))
             if(auto it = abstracts.find(val(n, "w:abstractNumId")); it != abstracts.end())
+            {
                 m_nums[n.attribute("w:numId").as_string()] = it->second;
+                m_num_nodes[n.attribute("w:numId").as_string()] = n;
+            }
+    }
+
+    /// The count a numbering instance restarts at, at a level, if it does.
+    std::optional<int> start_override(const std::string &num_id, int ilvl) const
+    {
+        auto it = m_num_nodes.find(num_id);
+        if(it == m_num_nodes.end())
+            return std::nullopt;
+        for(auto o : it->second.children("w:lvlOverride"))
+            if(o.attribute("w:ilvl").as_int() == ilvl)
+                if(auto s = o.child("w:startOverride"))
+                    return s.attribute("w:val").as_int();
+        return std::nullopt;
+    }
+
+    /// A level of an instance's definition, if it is numbered (not bullets).
+    pugi::xml_node numbered_level(const std::string &num_id, int ilvl) const
+    {
+        auto it = m_nums.find(num_id);
+        if(it == m_nums.end())
+            return {};
+        for(auto lvl : it->second.children("w:lvl"))
+            if(lvl.attribute("w:ilvl").as_int() == ilvl)
+            {
+                const std::string fmt = val(lvl, "w:numFmt");
+                return fmt == "bullet" || fmt == "none" ? pugi::xml_node{} : lvl;
+            }
+        return {};
+    }
+
+    bool same_numbering(const std::string &a, const std::string &b) const
+    {
+        auto ia = m_nums.find(a), ib = m_nums.find(b);
+        return ia != m_nums.end() && ib != m_nums.end() && ia->second == ib->second;
     }
 
     /// The list style of a numbering instance, added to the registry the first
@@ -711,20 +748,49 @@ private:
     void add_list_item(const numbering_ref &num, std::vector<block_node> blocks,
         std::vector<open_list> &stack, std::vector<block_node> &out)
     {
+        // Word counts on through every instance (w:num) of a numbering, from
+        // the first, unless one restarts the count at a level the first time
+        // it's used there.
+        const bool first_use = m_used_nums.insert({num.num_id, num.ilvl}).second;
+        const auto restart = first_use ? start_override(num.num_id, num.ilvl) : std::nullopt;
+        const auto lvl = numbered_level(num.num_id, num.ilvl);
+        const auto abstract =
+            m_nums.contains(num.num_id) ? m_nums.at(num.num_id) : pugi::xml_node{};
+        const bool counted_before = !m_used_abstracts.insert({abstract, num.ilvl}).second;
+
+        list_item item;
         while(!stack.empty() && stack.back().ilvl > num.ilvl)
             close_list(stack, out);
         if(!stack.empty() && stack.back().ilvl == num.ilvl && stack.back().num_id != num.num_id)
-            close_list(stack, out);
+        {
+            // Another instance of the same numbering carries on the list.
+            if(same_numbering(stack.back().num_id, num.num_id))
+            {
+                stack.back().num_id = num.num_id;
+                if(lvl)
+                    item.start_value = restart;
+            }
+            else
+                close_list(stack, out);
+        }
         if(stack.empty() || stack.back().ilvl < num.ilvl)
         {
             // A nested list continuing its parent's numbering is unstyled.
             const bool same = !stack.empty() && stack.back().num_id == num.num_id;
             open_list l{list(), num.ilvl, num.num_id};
             if(!same)
+            {
                 l.l.set_style(list_style_of(num.num_id));
+                // Nested levels also restart after each item of the level
+                // above, so only lists that aren't nested continue.
+                l.l.continue_numbering =
+                    stack.empty() && lvl && (first_use ? counted_before && !restart : true);
+                // A restart at the numbering's own start is just a new list.
+                if(lvl && restart && *restart != lvl.child("w:start").attribute("w:val").as_int(1))
+                    item.start_value = restart;
+            }
             stack.push_back(std::move(l));
         }
-        list_item item;
         item.children() = std::move(blocks);
         stack.back().l.add(std::move(item));
     }
@@ -922,7 +988,15 @@ private:
             return std::nullopt;
         if(!m_st.drawings.contains(uri))
             m_st.drawings[uri] = drawing{m_part, xml::serialize(d)};
-        return frame(image{uri});
+        frame f(image{uri});
+        for(auto shape : d.children())
+            if(auto ext = shape.child("wp:extent"))
+            {
+                // EMU: 12700 to the point.
+                f.width = pt(ext.attribute("cx").as_double() / 12700);
+                f.height = pt(ext.attribute("cy").as_double() / 12700);
+            }
+        return f;
     }
 
     // ---- tables ----
@@ -1122,7 +1196,10 @@ private:
     std::string m_paragraph_style;        //!< The style id of the paragraph being read
     std::map<std::string, int> m_outline; //!< style id -> outline level
     std::map<std::string, numbering_ref> m_style_num;
-    std::map<std::string, pugi::xml_node> m_nums; //!< numId -> abstractNum
+    std::map<std::string, pugi::xml_node> m_nums;              //!< numId -> abstractNum
+    std::map<std::string, pugi::xml_node> m_num_nodes;         //!< numId -> w:num
+    std::set<std::pair<std::string, int>> m_used_nums;         //!< numId, ilvl of items read
+    std::set<std::pair<pugi::xml_node, int>> m_used_abstracts; //!< abstractNum, ilvl likewise
     std::map<std::string, int> m_direct_count;
     std::map<std::pair<std::string, std::string>, std::string> m_direct_keys;
 };

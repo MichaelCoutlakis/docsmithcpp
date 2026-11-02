@@ -65,6 +65,8 @@ frame parse_frame(const pugi::xml_node &node)
 {
     frame f;
     f.style = style_of(node, "draw:style-name");
+    f.width = length_from(node.attribute("svg:width").as_string());
+    f.height = length_from(node.attribute("svg:height").as_string());
     if(auto img = node.child("draw:image"))
         f.img = parse_image(img);
     return f;
@@ -274,9 +276,19 @@ list parse_list(const pugi::xml_node &node)
 {
     list l;
     l.style = style_of(node, "text:style-name");
-    for(auto item_node : node.children("text:list-item"))
+    // text:continue-list names the list it continues: usually the last one
+    // before with the same style, which is what continue_numbering means.
+    l.continue_numbering =
+        node.attribute("text:continue-numbering").as_bool() || node.attribute("text:continue-list");
+    for(auto item_node : node.children())
     {
+        const std::string_view tag = item_node.name();
+        if(tag != "text:list-item" && tag != "text:list-header")
+            continue;
         list_item it;
+        it.numbered = tag == "text:list-item";
+        if(auto v = item_node.attribute("text:start-value"); v && it.numbered)
+            it.start_value = v.as_int();
         it.children() = parse_block_children(item_node);
         l.items().push_back(std::move(it));
     }

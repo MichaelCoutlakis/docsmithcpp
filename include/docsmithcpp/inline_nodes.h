@@ -19,6 +19,7 @@
 
 // Inline-level (text-flow) content and the inline_node variant.
 
+#include <optional>
 #include <string>
 #include <variant>
 
@@ -55,6 +56,10 @@ class frame : public styled<frame>
 {
 public:
     image img;
+    /// The size it's shown at. Unset, a writer uses the image's own size
+    /// where it can read it.
+    std::optional<length> width;
+    std::optional<length> height;
 
     frame() = default;
     explicit frame(image i) :

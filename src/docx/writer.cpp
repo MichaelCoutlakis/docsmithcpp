@@ -611,6 +611,7 @@ private:
         const int id = m_next_num++;
         n.append_attribute("w:numId") = id;
         set_val(n.append_child("w:abstractNumId"), std::to_string(abstract));
+        m_num_abstract[id] = abstract;
         if(const list_style *ls = m_doc.list_styles().find(list_style_name))
             for(const auto &lvl : ls->m_level_styles)
                 if(const auto *num = std::get_if<list_style_num>(&lvl))
@@ -619,6 +620,24 @@ private:
                     o.append_attribute("w:ilvl") = std::max(num->m_level - 1, 0);
                     set_val(o.append_child("w:startOverride"), std::to_string(num->m_start_from));
                 }
+        return id;
+    }
+
+    /// A new w:num for the same numbering as num_id, counting from start at
+    /// level ilvl and carrying on at the others: an item's start value.
+    int restart_num(int num_id, int ilvl, int start)
+    {
+        auto root = m_numbering.document_element();
+        auto before = root.child("w:numIdMacAtCleanup");
+        auto n = before ? root.insert_child_before("w:num", before) : root.append_child("w:num");
+        const int id = m_next_num++;
+        const int abstract = m_num_abstract.at(num_id);
+        n.append_attribute("w:numId") = id;
+        set_val(n.append_child("w:abstractNumId"), std::to_string(abstract));
+        m_num_abstract[id] = abstract;
+        auto o = n.append_child("w:lvlOverride");
+        o.append_attribute("w:ilvl") = ilvl;
+        set_val(o.append_child("w:startOverride"), std::to_string(start));
         return id;
     }
 
@@ -854,34 +873,51 @@ private:
     {
         // An unstyled nested list continues its parent's numbering one level
         // down; a styled one gets its own, at the same depth.
+        // Continuing the numbering is using the same w:num as the last list
+        // of the style at this depth.
         const bool nested = m_list_depth > 0;
-        const int num_id =
-            (nested && l.style.is_empty()) ? m_list_num : new_num(l.style.get_name());
+        const auto key = std::pair{l.style.get_name(), m_list_depth};
+        int num_id = 0;
+        if(nested && l.style.is_empty())
+            num_id = m_list_num;
+        else if(auto it = m_last_num.find(key); l.continue_numbering && it != m_last_num.end())
+            num_id = it->second;
+        else
+            num_id = new_num(l.style.get_name());
         const int saved_num = m_list_num;
-        m_list_num = num_id;
         ++m_list_depth;
+        // Word has no unnumbered item: one is more of the item before it, or
+        // ordinary paragraphs at the start of a list that isn't nested.
+        bool numbered_before = false;
         for(const auto &item : l.items())
         {
-            bool first = true;
+            if(item.numbered && item.start_value)
+                num_id = restart_num(num_id, m_list_depth - 1, *item.start_value);
+            m_list_num = num_id;
+            const bool in_list = item.numbered || numbered_before || nested;
+            bool first = item.numbered;
             for(const auto &b : item.children())
             {
                 const bool para =
                     std::holds_alternative<paragraph>(b.v) || std::holds_alternative<heading>(b.v);
-                if(para)
+                if(para && in_list)
                     m_list = list_context{m_list_depth - 1, first ? num_id : 0};
                 std::visit([&](const auto &n) { emit(parent, n); }, b.v);
                 m_list.reset();
                 if(para)
                     first = false;
             }
-            if(item.children().empty())
+            if(item.children().empty() && item.numbered)
             {
                 m_list = list_context{m_list_depth - 1, num_id};
                 emit(parent, paragraph{});
                 m_list.reset();
             }
+            numbered_before = numbered_before || item.numbered;
         }
         --m_list_depth;
+        if(!nested || !l.style.is_empty())
+            m_last_num[key] = num_id;
         m_list_num = saved_num;
     }
 
@@ -1010,7 +1046,7 @@ private:
     {
         auto p = parent.append_child("w:p");
         auto r = p.append_child("w:r");
-        write_drawing(r, f.img);
+        write_drawing(r, f);
     }
 
     void emit(pugi::xml_node parent, const page_break &)
@@ -1194,7 +1230,7 @@ private:
     }
 
     void emit_inline(pugi::xml_node parent, const frame &f, const run_format &rf)
-    { write_drawing(add_run(parent, rf), f.img); }
+    { write_drawing(add_run(parent, rf), f); }
 
     int bookmark_start(pugi::xml_node parent, const std::string &name)
     {
@@ -1280,8 +1316,23 @@ private:
         return m_image_parts[uri] = name;
     }
 
-    void write_drawing(pugi::xml_node run, const image &img)
+    /// The frame's size in EMU, (0, 0) for none. Only one of width and height
+    /// scales the image's size, cx by cy.
+    static std::pair<long long, long long> extent(const frame &f, long long cx, long long cy)
     {
+        auto emu = [](const length &l) { return std::llround(l.m_points * emu_per_inch / 72); };
+        if(f.width && f.height)
+            return {emu(*f.width), emu(*f.height)};
+        if(f.width && cx > 0)
+            return {emu(*f.width), cy * emu(*f.width) / cx};
+        if(f.height && cy > 0)
+            return {cx * emu(*f.height) / cy, emu(*f.height)};
+        return {0, 0};
+    }
+
+    void write_drawing(pugi::xml_node run, const frame &f)
+    {
+        const image &img = f.img;
         const std::string name = image_part(img.uri);
         const std::string id =
             m_pkg.ensure_rel(m_part, rel::image, opc::package::relative(m_part, name));
@@ -1300,6 +1351,18 @@ private:
                     blip.attribute("r:embed").set_value(id.c_str());
                 if(auto pr = find_descendant(d, "wp:docPr"))
                     pr.attribute("id").set_value(drawing_id);
+                // The model's size wins over the one the file had.
+                auto ext = find_descendant(d, "wp:extent");
+                auto xfrm = find_descendant(d, "pic:spPr").child("a:xfrm").child("a:ext");
+                const auto [cx, cy] =
+                    extent(f, ext.attribute("cx").as_llong(), ext.attribute("cy").as_llong());
+                if(cx > 0 && cy > 0)
+                    for(auto e : {ext, xfrm})
+                        if(e)
+                        {
+                            e.attribute("cx").set_value(cx);
+                            e.attribute("cy").set_value(cy);
+                        }
                 return;
             }
         }
@@ -1312,7 +1375,12 @@ private:
                 cx = std::llround(sz->width_inches() * emu_per_inch);
                 cy = std::llround(sz->height_inches() * emu_per_inch);
             }
-        if(cx > text_width_emu)
+        if(const auto [w, h] = extent(f, cx, cy); w > 0 && h > 0)
+        {
+            cx = w;
+            cy = h;
+        }
+        else if(cx > text_width_emu)
         {
             cy = cy * text_width_emu / cx;
             cx = text_width_emu;
@@ -1359,6 +1427,8 @@ private:
     std::map<std::string, int> m_abstract_ids; //!< By list style name
     int m_next_abstract{0};
     int m_next_num{1};
+    std::map<int, int> m_num_abstract; //!< w:num -> its w:abstractNum, for those written
+    std::map<std::pair<std::string, int>, int> m_last_num; //!< By list style, depth: last w:num
     std::optional<list_context> m_list;
     int m_list_depth{0};
     int m_list_num{0};

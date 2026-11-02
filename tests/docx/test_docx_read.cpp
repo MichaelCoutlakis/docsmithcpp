@@ -99,6 +99,12 @@ text_doc every_node()
             .set_style(steps));
     doc.add(list(list_item("dot")).set_style(dots));
     doc.add(list(list_item("unstyled")));
+    // Numbering that carries on from the Steps list above, and restarts at 5.
+    list more(list_item("three"), list_item("five"), list_item("six"));
+    more.set_style(steps);
+    more.continue_numbering = true;
+    more.items()[1].start_value = 5;
+    doc.add(more);
     doc.add(page_break{});
     doc.add(heading(2, "Table"));
     table t(3, 3);
@@ -109,8 +115,12 @@ text_doc every_node()
     t.cell(2, 2).add(table::from_cells({{{"n"}}}));
     t.set_header_rows(1);
     doc.add(t);
-    doc.add(frame(img));
-    doc.add(paragraph("inline ", frame(img), " image"));
+    // Read back with the size written, so it has one.
+    frame sized(img);
+    sized.width = pt(36);
+    sized.height = pt(24);
+    doc.add(sized);
+    doc.add(paragraph("inline ", sized, " image"));
     doc.add(paragraph("int main()\n{\n    return 0;\n}").set_style(builtin::preformatted));
     doc.add(paragraph("call ", span("f()").set_style(builtin::source_text)));
     doc.add(

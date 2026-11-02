@@ -484,3 +484,23 @@ TEST(MarkdownInput, ToOdtAndBack)
 }
 
 #endif
+
+TEST(Markdown, ListNumbering)
+{
+    // Markdown has no unnumbered item: one at the start goes before the list,
+    // a later one is more of the item before it.
+    text_doc doc;
+    const auto num = doc.add_style(numbered("N"));
+    list l(list_item("header"), list_item("one"), list_item("more"), list_item("five"));
+    l.set_style(num);
+    l.items()[0].numbered = false;
+    l.items()[2].numbered = false;
+    l.items()[3].start_value = 5;
+    list more(list_item("six"));
+    more.set_style(num);
+    more.continue_numbering = true;
+    doc.add(l);
+    doc.add(paragraph("between"));
+    doc.add(more);
+    EXPECT_EQ(md_of(doc), "header\n\n1. one\n\n   more\n\n5. five\n\nbetween\n\n6. six\n");
+}

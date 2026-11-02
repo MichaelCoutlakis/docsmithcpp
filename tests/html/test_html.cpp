@@ -481,3 +481,33 @@ TEST(HTML, TableFormatting)
     EXPECT_TRUE(has(
         html::file(text_doc{plain}).to_string(), "<table style=\"border-collapse: collapse;\">"));
 }
+
+TEST(HTML, ListNumbering)
+{
+    list_style num("N", {list_style_num(style{}, 1, list_enum::arabic)});
+    list l(list_item("header"), list_item("one"), list_item("five"), list_item("six"));
+    l.set_style(num);
+    l.items()[0].numbered = false;
+    l.items()[2].start_value = 5;
+    list more(list_item("seven"));
+    more.set_style(num);
+    more.continue_numbering = true;
+    text_doc doc{l, paragraph("between"), more};
+    doc.list_styles().add(num);
+    const auto html = html::file(doc).to_string();
+
+    // <ol> counts the unnumbered item too, so "one" says its number.
+    EXPECT_TRUE(has(html, R"(<li style="list-style-type: none">header</li>)"));
+    EXPECT_TRUE(has(html, R"(<li value="1">one</li>)"));
+    EXPECT_TRUE(has(html, R"(<li value="5">five</li>)"));
+    EXPECT_TRUE(has(html, "<li>six</li>"));
+    EXPECT_TRUE(has(html, R"(<ol class="N" start="7">)"));
+}
+
+TEST(HTML, ImageSize)
+{
+    frame f(image{"https://example.com/a.png"});
+    f.width = pt(36);
+    EXPECT_TRUE(has(html::file(text_doc{paragraph(f)}).to_string(),
+        R"(<img src="https://example.com/a.png" style="width: 36pt;" alt="">)"));
+}

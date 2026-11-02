@@ -16,18 +16,32 @@ and polish come after that.
 children _inside_ tables and lists, and unknown _attributes_ on known elements,
 are dropped. So load, edit, save of a real-world file can silently lose content.
 
-In ODT (`parse_table`, `parse_list` in `src/odt/file.cpp`) that includes things
-every LibreOffice table has:
+Done: a table's name, style, row styles and column widths; list numbering (a
+list header, an item's start value, a list continuing the count); an image's
+size.
 
-- ~~the table's own `table:style-name` and `table:name`~~ (done);
-- ~~`table:table-column` (column widths and styles)~~ (done);
-- ~~row styles~~ (done);
-- a list's `text:list-header`, and an item's `text:start-value`.
+The rule (DESIGN.md, _Document model_): what the model could hold in every
+format is modelled; the rest is dropped on purpose, not carried over half
+modelled. `tests/odt/test_odt_loss.cpp` has a test per case left, recording what
+happens today. To decide, each, then change its test to match:
 
-The table's name, style, row styles and column widths are now kept, as is the
-table's look through its cells' styles. What's left: a list's
-`text:list-header` and an item's `text:start-value`, and unknown attributes and
-children, which could be kept as `unknown` or as raw attributes.
+- **Cell values and formulas** (`office:value`, `table:formula`): model typed
+  cell values, or keep cells as text.
+- **Frame anchoring and position** (`text:anchor-type`, `svg:x`/`svg:y`, wrap in
+  the graphic style): model them together, or keep frames inline.
+- **Alternative text** for images (`svg:title`, `svg:desc`) and tables
+  (`table:title`, `table:desc`): likely model fields; HTML writes `alt=""`.
+- **Link target frame** (`office:target-frame-name`) and link character styles.
+- **Element ids** (`xml:id`): drop, or keep and drop repeats.
+- **A column's default cell style**: resolve it into the cells when reading.
+- **Soft page breaks**: dropped, proposed as is (a layout cache).
+- **List label cache** (`text:number`): kept today as `unknown` and so goes
+  stale; proposed to drop it like soft page breaks.
+- **Attributes in other namespaces**: whether to keep them at all; keeping them
+  needs _Namespace prefixes in ODT_ first.
+
+DOCX: the reader doesn't see a nested styled list continue, and an unnumbered
+item reads back as more of the item before it.
 
 ## 2. Reports that look like reports (blocks 0.1.0)
 

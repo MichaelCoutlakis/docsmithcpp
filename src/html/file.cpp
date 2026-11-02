@@ -32,6 +32,7 @@
 #include <vector>
 
 #include "format.h"
+#include "list_numbers.h"
 #include "outline.h"
 
 // The page is written directly rather than built as an XML tree: HTML is not
@@ -504,22 +505,37 @@ private:
         const list_style *ls = l.style.is_empty()
             ? (m_lists.empty() ? nullptr : m_lists.back())
             : m_doc.list_styles().find(l.style.get_name());
-        const auto *num = numbering(ls, static_cast<int>(m_lists.size()) + 1);
+        const int level = static_cast<int>(m_lists.size()) + 1;
+        const auto *num = numbering(ls, level);
         const char *tag = num ? "ol" : "ul";
+        const auto numbers = num ? m_counter.numbers(l, ls, *num, level)
+                                 : std::vector<std::optional<int>>(l.items().size());
+        // <ol> counts every <li>, an unnumbered one too, so an item whose
+        // number isn't the next one says so.
+        int next = !numbers.empty() && numbers.front() ? *numbers.front() : 1;
 
         indent();
         m_os << '<' << tag;
         class_attr(l.style);
         if(num && num->m_format != list_enum::arabic)
             m_os << " type=\"" << static_cast<char>(num->m_format) << '"';
-        if(num && num->m_start_from != 1)
-            m_os << " start=\"" << num->m_start_from << '"';
+        if(next != 1)
+            m_os << " start=\"" << next << '"';
         m_os << ">\n";
 
         m_lists.push_back(ls);
         ++m_depth;
-        for(const auto &it : l.items())
-            container("li", style_name{}, it.children());
+        for(size_t i = 0; i != l.items().size(); ++i)
+        {
+            const list_item &it = l.items()[i];
+            std::string attrs;
+            if(!it.numbered)
+                attrs = " style=\"list-style-type: none\"";
+            else if(numbers[i] && *numbers[i] != next)
+                attrs = " value=\"" + std::to_string(*numbers[i]) + '"';
+            next = numbers[i].value_or(next) + 1;
+            container("li", style_name{}, it.children(), attrs);
+        }
         --m_depth;
         m_lists.pop_back();
 
@@ -786,7 +802,18 @@ private:
         class_attr(f.style);
         m_os << " src=\"";
         escape(m_os, src(f.img.uri), true);
-        m_os << "\" alt=\"\">";
+        m_os << '"';
+        if(f.width || f.height)
+        {
+            m_os << " style=\"";
+            if(f.width)
+                m_os << "width: " << detail::to_string(f.width->m_points) << "pt;";
+            if(f.height)
+                m_os << (f.width ? " " : "") << "height: " << detail::to_string(f.height->m_points)
+                     << "pt;";
+            m_os << '"';
+        }
+        m_os << " alt=\"\">";
     }
 
     std::string src(const std::string &uri) const
@@ -822,6 +849,7 @@ private:
     int m_depth{0};
     bool m_pre{false};                       //!< Inside <pre>: text is written as is
     std::vector<const list_style *> m_lists; //!< Enclosing lists' styles, innermost last
+    detail::list_counter m_counter;
     const detail::heading_ids m_ids;
 };
 

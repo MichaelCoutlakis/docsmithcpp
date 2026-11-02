@@ -16,7 +16,9 @@
  * limitations under the License.
  *****************************************************************************/
 #pragma once
+#include <optional>
 #include <ostream>
+#include <string>
 #include <variant>
 
 #include "docsmithcpp/text_doc.h"
@@ -71,7 +73,9 @@ public:
     void operator()(const text &t) { line("Text: ", t.content); }
     void operator()(const frame &f)
     {
-        line("Frame: style=", f.style.get_name());
+        auto pts = [](const std::optional<length> &l)
+        { return l ? std::to_string(l->m_points) + "pt" : std::string("auto"); };
+        line("Frame: style=", f.style.get_name(), ", size=", pts(f.width), " x ", pts(f.height));
         ++m_indent;
         (*this)(f.img);
         --m_indent;
@@ -90,7 +94,7 @@ public:
 
     void operator()(const list &l)
     {
-        line("List: style ", l.style.get_name());
+        line("List: style ", l.style.get_name(), l.continue_numbering ? ", continues" : "");
         ++m_indent;
         for(const auto &it : l.items())
             (*this)(it);
@@ -98,7 +102,8 @@ public:
     }
     void operator()(const list_item &it)
     {
-        line("List Item:");
+        line(it.numbered ? "List Item:" : "List Item: unnumbered",
+            it.start_value ? " from " + std::to_string(*it.start_value) : std::string());
         ++m_indent;
         for(const auto &b : it.children())
             (*this)(b);

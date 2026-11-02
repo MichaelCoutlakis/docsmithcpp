@@ -168,6 +168,8 @@
     <DisplayString Condition="(*m_children.m_ptr)._Mypair._Myval2._Mylast - (*m_children.m_ptr)._Mypair._Myval2._Myfirst == 1">list_item {*(*m_children.m_ptr)._Mypair._Myval2._Myfirst}</DisplayString>
     <DisplayString>list_item {(*m_children.m_ptr)}</DisplayString>
     <Expand>
+      <Item Name="numbered" Condition="!numbered">numbered</Item>
+      <Item Name="start_value" Condition="start_value._Has_value">start_value</Item>
       <ArrayItems>
         <Size>(*m_children.m_ptr)._Mypair._Myval2._Mylast - (*m_children.m_ptr)._Mypair._Myval2._Myfirst</Size>
         <ValuePointer>(*m_children.m_ptr)._Mypair._Myval2._Myfirst</ValuePointer>
@@ -196,6 +198,7 @@
     <DisplayString>list {m_items}</DisplayString>
     <Expand>
       <Item Name="style" Condition="style.m_name._Mypair._Myval2._Mysize != 0">style</Item>
+      <Item Name="continue_numbering" Condition="continue_numbering">continue_numbering</Item>
       <ArrayItems>
         <Size>m_items._Mypair._Myval2._Mylast - m_items._Mypair._Myval2._Myfirst</Size>
         <ValuePointer>m_items._Mypair._Myval2._Myfirst</ValuePointer>

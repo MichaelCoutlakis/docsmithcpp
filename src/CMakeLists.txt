@@ -22,6 +22,7 @@ add_library(docsmithcpp
     "bytes.h"
     "bytes.cpp"
     "format.h"
+    "list_numbers.h"
     "outline.h"
     "zip/archive.h"
     "zip/archive.cpp"
