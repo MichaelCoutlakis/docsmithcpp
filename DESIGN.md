@@ -58,7 +58,7 @@ What each node holds, independent of any one format. "Inline" is a sequence of
 | `table_of_contents` | block | — | `title`, `levels`; the entries are made by writers |
 | `text` | inline | a string | white space as is, `'\t'` a tab, `'\n'` a line break |
 | `span` | inline | inline | styled |
-| `hyperlink` | inline | inline | `target`: a URL or a bookmark |
+| `hyperlink` | inline | inline | styled (a text style); `target`: a URL or a bookmark |
 | `bookmark` | inline | — | `name` |
 | `field` | inline | — | `type`: page number, page count, date or title |
 | `unknown` | block, inline | verbatim XML | another format's markup, passed through |
@@ -522,7 +522,7 @@ looks right in an `.odt` and writes back to the same Markdown.
 | `builtin::preformatted` paragraph | fenced code block | the same; the info string is dropped |
 | paragraph based on `Quotations` | `>` block quote | `Quotations` paragraphs |
 | `'\n'` in text | hard break, `\` at the end of the line | `'\n'`; a soft break is a space |
-| `hyperlink` | `[text](url)`, `<url>` when the text is the URL, `(#id)` for a bookmark | the same |
+| `hyperlink` | `[text](url)`, `<url>` when the text is the URL, `(#id)` for a bookmark; its style dropped | the same |
 | `bookmark` | `<a id="name"></a>` | a bookmark |
 | `list` | `-` or `1.` from its list style at that level, each item with its number (renderers take only the first item's) | list styled `List_20_1` or `Numbering_20_123[_start_N]` |
 | `table` | GFM table | the same, see below |
@@ -594,7 +594,7 @@ are kept, renamed only if they clash, and `mc:Ignorable` follows them.
 | `heading` | `w:p` with `w:outlineLvl` (level - 1) and `w:pStyle` `Heading<level>`, or its own style | a paragraph with an outline level, directly or from its style; `Heading<level>` reads as none |
 | `span` | runs with `w:rStyle`; runs don't nest, so a span in a span gets the inner style | runs of one style in one span |
 | `text` | `w:t` (`xml:space="preserve"` where needed), `'\t'` `w:tab`, `'\n'` `w:br` | the same; `w:cr` is `'\n'` too |
-| `hyperlink` | `w:hyperlink`, a URL as an external relationship, a bookmark as `w:anchor`; unstyled text gets the `Hyperlink` character style | the same, without the `Hyperlink` style |
+| `hyperlink` | `w:hyperlink`, a URL as an external relationship, a bookmark as `w:anchor`; unstyled text gets the link's style as its run style, else `Hyperlink` | the same, without the `Hyperlink` style; text all in one other style is the link's style, so a link holding one styled span reads back as a styled link |
 | `bookmark` | `w:bookmarkStart` and `w:bookmarkEnd` | a bookmark; `_Toc...` ones are dropped |
 | `list` | items are paragraphs with `w:numPr` (`w:ilvl` = depth); see below | lists, nested by `w:ilvl` |
 | `table` | `w:tbl` on an even grid at full width, `w:gridSpan`, `w:vMerge`, `w:tblHeader` on the first `header_rows` rows; no borders | the same; cell, row and table properties are dropped |

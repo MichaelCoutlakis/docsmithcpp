@@ -864,6 +864,26 @@ private:
         pieces inner;
         read_content(h, inner, true);
         link.children() = group(inner);
+        // Text all in one style (other than Hyperlink, read as none) is the
+        // link's style, as the writer writes it.
+        auto &kids = link.children();
+        const auto *first = kids.empty() ? nullptr : std::get_if<span>(&kids.front().v);
+        if(first && !first->style.is_empty() &&
+            std::all_of(kids.begin(),
+                kids.end(),
+                [&](const inline_node &k)
+                {
+                    const auto *s = std::get_if<span>(&k.v);
+                    return s && s->style == first->style;
+                }))
+        {
+            link.style = first->style;
+            std::vector<inline_node> unwrapped;
+            for(auto &k : kids)
+                for(auto &c : std::get<span>(k.v).children())
+                    unwrapped.push_back(std::move(c));
+            kids = std::move(unwrapped);
+        }
         add_node(out, "", inline_node{std::move(link)});
     }
 

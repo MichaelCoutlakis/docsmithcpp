@@ -750,7 +750,9 @@ private:
     }
     void emit_inline(const hyperlink &h)
     {
-        m_os << "<a href=\"";
+        m_os << "<a";
+        class_attr(h.style);
+        m_os << " href=\"";
         escape(m_os,
             std::visit(overloaded{[](const url_target &u) { return u.url; },
                            [](const bookmark_target &b) { return "#" + html_id(b.name); }},

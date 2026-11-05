@@ -169,7 +169,7 @@ std::map<std::string, std::set<style_family>> used_families(const text_doc &doc)
             };
             if constexpr(std::is_same_v<T, paragraph> || std::is_same_v<T, heading>)
                 use(n.style, style_family::paragraph);
-            else if constexpr(std::is_same_v<T, span>)
+            else if constexpr(std::is_same_v<T, span> || std::is_same_v<T, hyperlink>)
                 use(n.style, style_family::text);
             else if constexpr(std::is_same_v<T, frame>)
                 use(n.style, style_family::graphic);
@@ -627,6 +627,8 @@ void writer::emit(pugi::xml_node parent, const hyperlink &h)
 {
     auto n = parent.append_child("text:a");
     n.append_attribute("xlink:type").set_value("simple");
+    if(!h.style.is_empty())
+        n.append_attribute("text:style-name").set_value(h.style.get_name().c_str());
     const std::string href = std::visit(overloaded{[](const url_target &u) { return u.url; },
                                             [](const bookmark_target &b) { return "#" + b.name; }},
         h.target);

@@ -90,6 +90,7 @@ inline_node parse_inline(const pugi::xml_node &node)
         const std::string href = node.attribute("xlink:href").as_string();
         hyperlink h = href.starts_with('#') ? hyperlink(bookmark_target{href.substr(1)})
                                             : hyperlink(url_target{href});
+        h.style = style_of(node, "text:style-name"); // its visited style is dropped
         h.children() = parse_inline_children(node);
         return inline_node{std::move(h)};
     }

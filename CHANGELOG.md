@@ -72,6 +72,9 @@ held in `std::variant`. This is a breaking change to almost every public API.
   directory. Generated test files go to `tests/odt/out/`.
 
 ### Added
+- **Link styles**: `hyperlink` is styled (a text style), read and written as ODT's
+  `text:style-name` on `text:a` (a loaded LibreOffice link keeps "Internet link"), as
+  the DOCX run style of the link's text in place of `Hyperlink`, and as an HTML class.
 - **Alternative text** for images and tables: `accessibility_title` and
   `accessibility_description` on `frame` and `table`. ODT (`svg:title`, `svg:desc`,
   `table:title`, `table:desc`) and DOCX (`wp:docPr` `title` / `descr`, `w:tblCaption`,

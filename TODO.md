@@ -17,7 +17,8 @@ children _inside_ tables and lists, and unknown _attributes_ on known elements,
 are dropped. So load, edit, save of a real-world file can silently lose content.
 
 Done: a table's name, style, row styles, column widths and columns' default
-cell styles (a column's style); alternative text for images and tables; list numbering (a
+cell styles (a column's style); alternative text for images and tables; a
+link's style; list numbering (a
 list header, an item's start value, a list continuing the count); an image's
 size. Decided, and dropped when read:
 
@@ -34,13 +35,6 @@ size. Decided, and dropped when read:
 - a cell's value and formula (`office:value-type`, `office:value`,
   `table:formula`): cells are text, so a formula cell becomes its last result
   (_Model gaps_ has modelling them).
-
-Decided, to do:
-
-- **Link styles**: `hyperlink` gets a `style` (a text style), as `span` has.
-  ODT `text:a text:style-name`, DOCX the run style, HTML a class. Unstyled,
-  writers keep their defaults (DOCX `Hyperlink`; ODT none, as LibreOffice
-  styles a typed URL itself).
 
 The rule (DESIGN.md, _Document model_): what the model could hold in every
 format is modelled; the rest is dropped on purpose, not carried over half

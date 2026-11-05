@@ -155,6 +155,21 @@ TEST(DOCX_Read, RoundTripThroughTheModel)
     // Adjacent runs of one style read back as one span.
     lead.children()[1] = inline_node{span("redx").set_style("Red")};
     lead.children().erase(lead.children().begin() + 2);
+    // A link's text all in one style is the link's style: DOCX can't tell a
+    // styled link from a link holding a styled span.
+    walk(expected,
+        [](auto &n)
+        {
+            if constexpr(std::is_same_v<std::decay_t<decltype(n)>, hyperlink>)
+                if(n.children().size() == 1)
+                    if(auto *s = std::get_if<span>(&n.children().front().v);
+                        s && !s->style.is_empty())
+                    {
+                        n.style = s->style;
+                        auto inner = s->children();
+                        n.children() = std::move(inner);
+                    }
+        });
 
     ASSERT_EQ(back.body.size(), expected.body.size());
     for(std::size_t i = 0; i != back.body.size(); ++i)

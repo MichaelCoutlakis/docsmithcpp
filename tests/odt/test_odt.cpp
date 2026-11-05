@@ -232,6 +232,15 @@ TEST(ODT, ColumnStyleRoundTrips)
         colour::rgb(0xee, 0xee, 0xee));
 }
 
+TEST(ODT, StyledLinkRoundTrips)
+{
+    text_doc doc;
+    doc.add_style(style("Quiet link", style_family::text, text_props(colour::rgb(80, 80, 80))));
+    doc.add(paragraph("see ", hyperlink("https://example.com", "site").set_style("Quiet link")));
+    odt::file(doc).save("odt/out/styled_link.odt");
+    EXPECT_EQ(odt::file::load("odt/out/styled_link.odt").doc.body, doc.body);
+}
+
 TEST(ODT, BlockFrameRoundTrips)
 {
     text_doc doc;

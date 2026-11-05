@@ -104,7 +104,10 @@ struct bookmark_target
 
 using link_target = std::variant<url_target, bookmark_target>;
 
-class hyperlink : public has_children<inline_node, hyperlink, true>
+/// A link. Its style is a text style (style_family::text) for how the link
+/// looks; unstyled, each writer uses its format's usual link look (DOCX
+/// Hyperlink; LibreOffice styles links itself).
+class hyperlink : public styled<hyperlink>, public has_children<inline_node, hyperlink, true>
 {
 public:
     link_target target;

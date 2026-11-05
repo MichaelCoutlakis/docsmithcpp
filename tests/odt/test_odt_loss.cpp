@@ -173,19 +173,20 @@ TEST(ODT_Loss, TableTitleAndDescriptionAreKept)
 
 // Where a link opens (HTML target, DOCX w:tgtFrame), and the link's own
 // character styles, unvisited and visited.
-// Decided: the target frame and the visited style are dropped. The style is
-// to be modelled as hyperlink::style (TODO.md, Correctness); dropped until
-// then.
-TEST(ODT_Loss, LinkTargetFrameAndStylesAreDropped)
+// Decided: the target frame and the visited style are dropped; the style is
+// hyperlink::style.
+TEST(ODT_Loss, LinkTargetFrameAndVisitedStyleAreDropped)
 {
     const resaved r("link_target",
         R"(<text:p><text:a xlink:type="simple" xlink:href="https://example.com/" )"
         R"(office:target-frame-name="_blank" xlink:show="new" )"
-        R"(text:style-name="Internet_20_link">site</text:a></text:p>)");
+        R"(text:style-name="Internet_20_link" text:visited-style-name="Visited_20_Internet_20_Link">)"
+        R"(site</text:a></text:p>)");
     auto a = r.node("//text:a");
     EXPECT_STREQ(a.attribute("xlink:href").as_string(), "https://example.com/");
     EXPECT_FALSE(a.attribute("office:target-frame-name"));
-    EXPECT_FALSE(a.attribute("text:style-name"));
+    EXPECT_FALSE(a.attribute("text:visited-style-name"));
+    EXPECT_STREQ(a.attribute("text:style-name").as_string(), "Internet_20_link");
 }
 
 // Element ids are what other markup refers to: RDF metadata in manifest.rdf,

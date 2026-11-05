@@ -253,7 +253,10 @@ TEST(HTML, ConvertsParsedOdt)
     const auto html = read("html/out/moderate.html");
 
     EXPECT_TRUE(has(html, "Heading 1</h1>"));
-    EXPECT_TRUE(has(html, R"(<a href="https://github.com/MichaelCoutlakis/docsmithcpp">docsmith</a>)"));
+    EXPECT_TRUE(has(html,
+        R"(<a class="Internet_20_link" href="https://github.com/MichaelCoutlakis/docsmithcpp">docsmith</a>)"))
+        << "the link keeps LibreOffice's link style";
+    EXPECT_TRUE(has(html, ".Internet_20_link { color: #000080; }"));
     EXPECT_EQ(count(html, "<li"), 8U); // 2 + 2 + 1 + (1 with a nested 1) + 1
 }
 
@@ -504,6 +507,14 @@ TEST(HTML, ListNumbering)
     EXPECT_TRUE(has(html, R"(<li value="5">five</li>)"));
     EXPECT_TRUE(has(html, "<li>six</li>"));
     EXPECT_TRUE(has(html, R"(<ol class="N" start="7">)"));
+}
+
+TEST(HTML, StyledLink)
+{
+    const std::string html =
+        html::file(text_doc{paragraph(hyperlink("https://example.com", "site").set_style("Quiet"))})
+            .to_string();
+    EXPECT_TRUE(has(html, R"(<a class="Quiet" href="https://example.com">site</a>)")) << html;
 }
 
 TEST(HTML, AlternativeText)

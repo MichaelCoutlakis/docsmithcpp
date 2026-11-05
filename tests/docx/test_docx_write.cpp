@@ -143,6 +143,22 @@ TEST(DOCX_Write, SpansAndStyles)
     EXPECT_EQ(docx::val(style_def(styles, "BothChar"), "w:link"), "Both");
 }
 
+// A styled link's text gets the link's style instead of Hyperlink, and reads
+// back as the link's style.
+TEST(DOCX_Write, StyledLink)
+{
+    text_doc doc;
+    doc.add_style(style("Quiet link", style_family::text, text_props(colour::rgb(80, 80, 80))));
+    doc.add(paragraph(hyperlink("https://example.com", "site").set_style("Quiet link")));
+    saved s(doc, "styled_link");
+    auto run = s.body().child("w:p").child("w:hyperlink").child("w:r");
+    EXPECT_EQ(docx::val(run.child("w:rPr"), "w:rStyle"), "Quiet link");
+    EXPECT_TRUE(style_def(s.xml("word/styles.xml"), "Quiet link"));
+
+    const auto back = docx::file::load(s.path).doc;
+    EXPECT_EQ(back.body.front(), doc.body.front());
+}
+
 TEST(DOCX_Write, LinksAndBookmarks)
 {
     saved s(text_doc{paragraph(bookmark{"top"},

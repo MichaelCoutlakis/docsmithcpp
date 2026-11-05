@@ -65,8 +65,9 @@ public:
     }
     void operator()(const hyperlink &h)
     {
-        std::visit(overloaded{[&](const url_target &u) { line("Hyperlink: ", u.url); },
-                       [&](const bookmark_target &b) { line("Hyperlink: bookmark ", b.name); }},
+        const std::string style = h.style.is_empty() ? "" : " style=" + h.style.get_name();
+        std::visit(overloaded{[&](const url_target &u) { line("Hyperlink: ", u.url, style); },
+                       [&](const bookmark_target &b) { line("Hyperlink: bookmark ", b.name, style); }},
             h.target);
         kids(h.children());
     }

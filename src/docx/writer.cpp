@@ -215,7 +215,7 @@ std::map<std::string, std::set<style_family>> used_families(const text_doc &doc)
                 if(!n.style.is_empty())
                     out[n.style.get_name()].insert(style_family::paragraph);
             }
-            else if constexpr(std::is_same_v<T, span>)
+            else if constexpr(std::is_same_v<T, span> || std::is_same_v<T, hyperlink>)
             {
                 if(!n.style.is_empty())
                     out[n.style.get_name()].insert(style_family::text);
@@ -300,6 +300,7 @@ private:
     {
         std::string style;
         bool in_link{false};
+        std::string link_style; //!< For unstyled text in the link; empty: Hyperlink
     };
 
     /// The list a paragraph belongs to, when writing list items.
@@ -1152,7 +1153,7 @@ private:
         auto r = parent.append_child("w:r");
         std::string style_id = rf.style;
         if(style_id.empty() && rf.in_link)
-            style_id = "Hyperlink";
+            style_id = rf.link_style.empty() ? "Hyperlink" : rf.link_style;
         if(is_direct(style_id))
         {
             const auto &d = m_st.direct.at(style_id);
@@ -1233,6 +1234,7 @@ private:
         n.append_attribute("w:history") = "1";
         run_format inner = rf;
         inner.in_link = true;
+        inner.link_style = h.style.get_name();
         write_inlines(n, h.children(), inner);
     }
 
