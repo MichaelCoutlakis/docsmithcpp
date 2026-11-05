@@ -178,8 +178,10 @@ TEST(ODT_Loss, LinkTargetFrameAndStylesAreDropped)
 
 // Element ids are what other markup refers to: RDF metadata in manifest.rdf,
 // text:continue-list. Carried over as is, a copied paragraph would have the
-// same id as the original, which ODF doesn't allow.
-// To decide: drop them (as now), or keep them and drop repeats.
+// same id as the original, which ODF doesn't allow. The model holds neither
+// RDF nor list references (text:continue-list is read as continue_numbering),
+// so an id alone would be kept half modelled.
+// Decided: dropped. A writer that needs an id generates it when saving.
 TEST(ODT_Loss, ElementIdsAreDropped)
 {
     const resaved r("element_id", R"(<text:p xml:id="para1">x</text:p>)");

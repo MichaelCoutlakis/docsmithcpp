@@ -19,7 +19,8 @@ are dropped. So load, edit, save of a real-world file can silently lose content.
 Done: a table's name, style, row styles and column widths; list numbering (a
 list header, an item's start value, a list continuing the count); an image's
 size. Decided: soft page breaks and list labels (`text:number`) are layout
-caches and dropped; cells are text, so a cell's value and formula
+caches and dropped; element ids (`xml:id`) are dropped, since nothing the
+model holds refers to them; cells are text, so a cell's value and formula
 (`office:value-type`, `office:value`, `table:formula`) are dropped and a formula
 cell becomes its last result (_Model gaps_ has modelling them).
 
@@ -33,7 +34,6 @@ happens today. To decide, each, then change its test to match:
 - **Alternative text** for images (`svg:title`, `svg:desc`) and tables
   (`table:title`, `table:desc`): likely model fields; HTML writes `alt=""`.
 - **Link target frame** (`office:target-frame-name`) and link character styles.
-- **Element ids** (`xml:id`): drop, or keep and drop repeats.
 - **A column's default cell style**: resolve it into the cells when reading.
 - **Attributes in other namespaces**: whether to keep them at all; keeping them
   needs _Namespace prefixes in ODT_ first.
@@ -178,6 +178,10 @@ Options:
 - `set_style(style)` keeps only the name. `text_doc::add_style()` registers a
   definition and returns its name, but nothing yet checks that every style a
   node names is defined.
+- Bookmark names aren't checked for repeats. Copying a paragraph that holds a
+  bookmark repeats its name, and a link to it is then ambiguous. Report
+  repeats (with the style check above) rather than renaming them, since a
+  writer can't tell which one a link meant.
 - Package entries that no `image` referred to at load (e.g. pictures used only
   by `unknown` markup) stay in the ODT package and are carried over on save,
   even if nothing uses them any more. Resources whose image was removed are
