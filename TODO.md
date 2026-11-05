@@ -24,6 +24,16 @@ model holds refers to them; cells are text, so a cell's value and formula
 (`office:value-type`, `office:value`, `table:formula`) are dropped and a formula
 cell becomes its last result (_Model gaps_ has modelling them).
 
+Decided, to do:
+
+- **Alternative text**: model `accessibility_title` and
+  `accessibility_description` on `frame` and `table`. ODT `svg:title`/`svg:desc`
+  on the frame and `table:title`/`table:desc`; DOCX `wp:docPr` `title`/`descr`
+  and `w:tblCaption`/`w:tblDescription` (the DOCX writer reuses a loaded
+  drawing's XML, so it must set `docPr` from the model); HTML `alt` (title,
+  else description) on images, `aria-label` on tables; Markdown the image's
+  `![alt]`, tables drop it. Not a visible caption, and not `table::name`.
+
 The rule (DESIGN.md, _Document model_): what the model could hold in every
 format is modelled; the rest is dropped on purpose, not carried over half
 modelled. `tests/odt/test_odt_loss.cpp` has a test per case left, recording what
@@ -31,8 +41,6 @@ happens today. To decide, each, then change its test to match:
 
 - **Frame anchoring and position** (`text:anchor-type`, `svg:x`/`svg:y`, wrap in
   the graphic style): model them together, or keep frames inline.
-- **Alternative text** for images (`svg:title`, `svg:desc`) and tables
-  (`table:title`, `table:desc`): likely model fields; HTML writes `alt=""`.
 - **Link target frame** (`office:target-frame-name`) and link character styles.
 - **A column's default cell style**: resolve it into the cells when reading.
 - **Attributes in other namespaces**: whether to keep them at all; keeping them

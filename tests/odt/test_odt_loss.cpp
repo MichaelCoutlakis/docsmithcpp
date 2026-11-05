@@ -133,7 +133,8 @@ TEST(ODT_Loss, FrameAnchorAndPositionAreDropped)
 
 // An image's alternative text. Every format has it (DOCX wp:docPr descr, HTML
 // alt), so it would be a model field; HTML writes alt="" today.
-// To decide: frame::title and frame::description.
+// Decided, not done yet: frame::accessibility_title and
+// frame::accessibility_description (TODO.md, Correctness).
 TEST(ODT_Loss, ImageTitleAndDescriptionAreDropped)
 {
     const resaved r("image_alt",
@@ -147,7 +148,8 @@ TEST(ODT_Loss, ImageTitleAndDescriptionAreDropped)
 
 // A table's title and description, for accessibility (DOCX tblCaption and
 // tblDescription).
-// To decide: table::title and table::description, like the image's.
+// Decided, not done yet: table::accessibility_title and
+// table::accessibility_description, like the image's.
 TEST(ODT_Loss, TableTitleAndDescriptionAreDropped)
 {
     const resaved r("table_title",
