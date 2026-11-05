@@ -207,17 +207,21 @@ TEST(ODT_Loss, ElementIdsAreDropped)
 }
 
 // A column's default cell style applies to its cells that have no style of
-// their own, so dropping it changes how those cells look.
-// To decide: resolve it into those cells' styles when reading.
-TEST(ODT_Loss, ColumnDefaultCellStyleIsDropped)
+// their own.
+// Decided: modelled as the column's style (table::column_style), applied by
+// position, so it is kept.
+TEST(ODT_Loss, ColumnDefaultCellStyleIsKept)
 {
     const resaved r("column_default",
         R"(<table:table table:name="T">)"
         R"(<table:table-column table:default-cell-style-name="Shaded"/>)"
         R"(<table:table-row><table:table-cell><text:p>x</text:p></table:table-cell>)"
         R"(</table:table-row></table:table>)");
-    EXPECT_FALSE(r.node("//table:table-column").attribute("table:default-cell-style-name"));
-    EXPECT_FALSE(r.node("//table:table-cell").attribute("table:style-name"));
+    EXPECT_STREQ(
+        r.node("//table:table-column").attribute("table:default-cell-style-name").as_string(),
+        "Shaded");
+    EXPECT_STREQ(r.node("//table:table-cell").attribute("table:style-name").as_string(), "Shaded")
+        << "written on the cell as well";
 }
 
 // Soft page breaks are where LibreOffice last laid out a page break. They are

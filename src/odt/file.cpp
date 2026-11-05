@@ -207,17 +207,32 @@ std::vector<table_cell> parse_row(const pugi::xml_node &row_node)
     return row;
 }
 
-/// Each column's style, in order, from table:table-column elements (also in
-/// column groups).
-void parse_columns(const pugi::xml_node &node, std::vector<style_name> &out)
+/// Column widths by the name of the automatic column style that holds them,
+/// as LibreOffice gives every table; set while content.xml is read.
+thread_local const std::map<std::string, double> *t_column_widths = nullptr;
+
+struct column
+{
+    std::optional<double> width;
+    style_name cell_style; //!< table:default-cell-style-name
+};
+
+/// Each column, in order, from table:table-column elements (also in column
+/// groups). The column's own style is only read for its width.
+void parse_columns(const pugi::xml_node &node, std::vector<column> &out)
 {
     for(auto child : node.children())
     {
         const std::string_view tag = child.name();
         if(tag == "table:table-column")
-            out.insert(out.end(),
-                repeats(child, "table:number-columns-repeated"),
-                style_of(child, "table:style-name"));
+        {
+            column c{.cell_style = style_of(child, "table:default-cell-style-name")};
+            if(t_column_widths)
+                if(auto it = t_column_widths->find(child.attribute("table:style-name").as_string());
+                    it != t_column_widths->end())
+                    c.width = it->second;
+            out.insert(out.end(), repeats(child, "table:number-columns-repeated"), c);
+        }
         else if(tag == "table:table-columns" || tag == "table:table-header-columns" ||
             tag == "table:table-column-group")
             parse_columns(child, out);
@@ -271,11 +286,17 @@ table parse_table(const pugi::xml_node &node)
     t.style = style_of(node, "table:style-name");
     t.name = node.attribute("table:name").as_string();
 
-    std::vector<style_name> columns;
+    std::vector<column> columns;
     parse_columns(node, columns);
     if(columns.size() == t.num_cols())
         for(size_t c = 0; c != cols; ++c)
-            t.set_column_style(c, columns[c]);
+        {
+            t.set_column_width(c, columns[c].width).set_column_style(c, columns[c].cell_style);
+            // The writer writes the column's style on its cells as well.
+            for(size_t r = 0; r != t.num_rows(); ++r)
+                if(auto &cell = t.cell(r, c); cell.style == columns[c].cell_style)
+                    cell.style = {};
+        }
     return t;
 }
 
@@ -408,26 +429,15 @@ void expand_page_breaks(
 
 /// The header and footer of the master page the body uses: "Standard"
 /// (LibreOffice's Default Page Style), else the first one.
-/// Column widths from the automatic column styles LibreOffice gives every
-/// table. A column whose width is read loses its style: the writer makes its
-/// own from the width.
-void read_column_widths(const pugi::xml_node &automatic_styles, text_doc &doc)
+/// Column widths by style name, from the automatic column styles.
+std::map<std::string, double> column_widths(const pugi::xml_node &automatic_styles)
 {
     std::map<std::string, double> widths;
     for(auto s : automatic_styles.children("style:style"))
         if(std::string_view(s.attribute("style:family").as_string()) == "table-column")
             if(auto w = read_column_width(s))
                 widths[s.attribute("style:name").as_string()] = *w;
-    if(widths.empty())
-        return;
-    walk(doc,
-        [&widths](auto &n)
-        {
-            if constexpr(std::is_same_v<std::decay_t<decltype(n)>, table>)
-                for(size_t c = 0; c != n.num_cols(); ++c)
-                    if(auto it = widths.find(n.column_style(c).get_name()); it != widths.end())
-                        n.set_column_width(c, it->second).set_column_style(c, {});
-        });
+    return widths;
 }
 
 page_style parse_page(const odf::package &pkg)
@@ -486,7 +496,15 @@ file file::load(const std::filesystem::path &p)
         throw std::runtime_error("Could not read content.xml from " + p.string());
 
     auto root = xml.child("office:document-content");
-    f.doc.body = parse_block_children(root.child("office:body").child("office:text"));
+    const auto widths = column_widths(root.child("office:automatic-styles"));
+    {
+        struct reading
+        {
+            explicit reading(const std::map<std::string, double> &w) { t_column_widths = &w; }
+            ~reading() { t_column_widths = nullptr; }
+        } guard(widths);
+        f.doc.body = parse_block_children(root.child("office:body").child("office:text"));
+    }
 
     std::map<std::string, style_name> page_breaks;
     for(auto s : root.child("office:automatic-styles").children("style:style"))
@@ -495,7 +513,6 @@ file file::load(const std::filesystem::path &p)
     if(!page_breaks.empty())
         expand_page_breaks(f.doc.body, page_breaks);
     read_styles(f.m_impl->pkg, f.doc);
-    read_column_widths(root.child("office:automatic-styles"), f.doc);
     f.doc.page = parse_page(f.m_impl->pkg);
     if(const auto *meta = f.m_impl->pkg.find("meta.xml"))
         f.doc.meta = odf::read_meta(meta->data);

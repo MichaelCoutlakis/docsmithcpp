@@ -212,6 +212,26 @@ TEST(ODT, AddedImageRoundTrips)
     EXPECT_EQ(odt::file::load("odt/out/added_image.odt").doc.resources(), doc.resources());
 }
 
+TEST(ODT, ColumnStyleRoundTrips)
+{
+    text_doc doc;
+    doc.add_style(style("Key text", style_family::paragraph, text_props(font_weight::bold)));
+    doc.add_style(style("Key",
+        style_family::table_cell,
+        cell_props(colour::rgb(0xee, 0xee, 0xee), paragraph_style{"Key text"})));
+    table t = table::from_cells({{"a", "1"}, {"b", "2"}});
+    t.set_column_style(0, "Key");
+    doc.add(t);
+    odt::file(doc).save("odt/out/column_style.odt");
+
+    const auto again = odt::file::load("odt/out/column_style.odt").doc;
+    const table &back = *collect<table>(again).front();
+    EXPECT_EQ(back.column_style(0), style_name("Key"));
+    EXPECT_TRUE(back.column_style(1).is_empty());
+    EXPECT_EQ(effective_cell_props(back, again.styles(), 1, 0).m_background,
+        colour::rgb(0xee, 0xee, 0xee));
+}
+
 TEST(ODT, BlockFrameRoundTrips)
 {
     text_doc doc;
@@ -320,7 +340,7 @@ TEST(ODT, TableFormattingRoundTrip)
             table_align::centre,
             outer_border{thick},
             inside_h{thin},
-            header_props{colour::rgb(0xdd, 0xdd, 0xdd), thick, {}})));
+            header_cells{cell_props(colour::rgb(0xdd, 0xdd, 0xdd), cell_borders{.m_bottom = thick})})));
     table t = table::from_cells({{"Test", "Result"}, {"open", "pass"}, {"save", "fail"}});
     t.set_header_rows(1).set_style("Grid").set_column_widths({3, 1});
     t.cell(2, 1).props.set(colour::rgb(0xff, 0xcc, 0xcc));

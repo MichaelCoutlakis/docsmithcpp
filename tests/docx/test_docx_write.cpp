@@ -392,6 +392,32 @@ TEST(DOCX_Write, UnknownFromAnotherFormatIsDropped)
     EXPECT_STREQ(body.first_child().next_sibling().name(), "w:sectPr");
 }
 
+// DOCX has no cell styles: a column's style is written on its cells, and its
+// paragraph style on their paragraphs.
+TEST(DOCX_Write, ColumnStyle)
+{
+    text_doc doc;
+    doc.add_style(style("Key text", style_family::paragraph, text_props(font_weight::bold)));
+    doc.add_style(style("Key",
+        style_family::table_cell,
+        cell_props(colour::rgb(0xee, 0xee, 0xee), paragraph_style{"Key text"})));
+    table t = table::from_cells({{"a", "1"}, {"b", "2"}});
+    t.set_column_style(0, "Key");
+    doc.add(t);
+    saved s(doc, "column_style");
+
+    const auto rows = s.body().child("w:tbl").children("w:tr");
+    for(auto tr : rows)
+    {
+        auto first = tr.child("w:tc");
+        EXPECT_STREQ(first.child("w:tcPr").child("w:shd").attribute("w:fill").as_string(), "eeeeee");
+        EXPECT_STREQ(
+            first.child("w:p").child("w:pPr").child("w:pStyle").attribute("w:val").as_string(),
+            "Key text");
+        EXPECT_FALSE(first.next_sibling("w:tc").child("w:p").child("w:pPr").child("w:pStyle"));
+    }
+}
+
 TEST(DOCX_Write, TableFormatting)
 {
     text_doc doc;
@@ -404,7 +430,7 @@ TEST(DOCX_Write, TableFormatting)
             outer_border{thick},
             inside_h{thin},
             cell_padding{pt(3)},
-            header_props{colour::rgb(0xdd, 0xdd, 0xdd), thick, {}})));
+            header_cells{cell_props(colour::rgb(0xdd, 0xdd, 0xdd), cell_borders{.m_bottom = thick})})));
     table t = table::from_cells({{"Test", "Result"}, {"open", "pass"}});
     t.set_header_rows(1).set_style("Grid").set_column_widths({3, 1});
     t.cell(1, 1).props.set(colour::rgb(0xff, 0xcc, 0xcc));

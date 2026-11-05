@@ -446,7 +446,9 @@ text_doc formatted_table()
             table_align::centre,
             outer_border{thick},
             inside_h{thin},
-            header_props{colour::rgb(0xdd, 0xdd, 0xdd), thick, "Table Heading"})));
+            header_cells{cell_props(colour::rgb(0xdd, 0xdd, 0xdd),
+                cell_borders{.m_bottom = thick},
+                paragraph_style{"Table Heading"})})));
     doc.add_style(style("Table Heading", style_family::paragraph, text_props(font_weight::bold)));
     table t = table::from_cells({{"Test", "Result"}, {"open", "pass"}, {"save", "fail"}});
     t.set_header_rows(1).set_style("Grid").set_column_widths({3, 1});

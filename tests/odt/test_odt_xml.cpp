@@ -369,6 +369,31 @@ TEST(ODT_XML, ListNumbering)
     EXPECT_TRUE(lists[1].node().attribute("text:continue-numbering").as_bool());
 }
 
+// A column's cell style is its default cell style, and its paragraph style
+// goes on the paragraphs of the column's cells.
+TEST(ODT_XML, ColumnStyle)
+{
+    text_doc doc;
+    doc.add_style(style("Key", style_family::table_cell, cell_props(paragraph_style{"Key"})));
+    table t = table::from_cells({{"a", "1"}, {"b", "2"}});
+    t.set_column_style(0, "Key");
+    doc.add(t);
+    odt::file(doc).save("odt/out/column_style_xml.odt");
+
+    const part content("odt/out/column_style_xml.odt", "content.xml");
+    const auto cols = content.xml.select_nodes("//table:table-column");
+    ASSERT_FALSE(cols.empty());
+    EXPECT_STREQ(cols[0].node().attribute("table:default-cell-style-name").as_string(), "Key");
+    const auto cells = content.xml.select_nodes("//table:table-cell");
+    ASSERT_EQ(cells.size(), 4U);
+    for(size_t i : {0, 2})
+    {
+        EXPECT_STREQ(cells[i].node().attribute("table:style-name").as_string(), "Key");
+        EXPECT_STREQ(cells[i].node().child("text:p").attribute("text:style-name").as_string(), "Key");
+    }
+    EXPECT_FALSE(cells[1].node().child("text:p").attribute("text:style-name"));
+}
+
 TEST(ODT_XML, FrameSize)
 {
     text_doc doc;

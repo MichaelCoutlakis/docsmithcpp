@@ -224,9 +224,12 @@ std::map<std::string, std::set<style_family>> used_families(const text_doc &doc)
             {
                 if(!n.style.is_empty())
                     out[n.style.get_name()].insert(style_family::table);
-                if(const auto h = effective_table_props(n, doc.styles()).m_header;
-                    h && !h->m_paragraph_style.is_empty())
-                    out[h->m_paragraph_style.get_name()].insert(style_family::paragraph);
+                for(size_t r = 0; r != n.num_rows(); ++r)
+                    for(size_t c = 0; c != n.num_cols(); ++c)
+                        if(const auto ps =
+                                effective_cell_props(n, doc.styles(), r, c).m_paragraph_style;
+                            !n.is_cell_covered(r, c) && !ps.is_empty())
+                            out[ps.get_name()].insert(style_family::paragraph);
             }
         });
     return out;
@@ -985,13 +988,11 @@ private:
         auto saved = m_list;
         m_list.reset();
         const style_name saved_style = m_cell_paragraph_style;
-        const style_name header_style = tp.m_header ? tp.m_header->m_paragraph_style : style_name{};
         for(std::size_t r = 0; r != rows; ++r)
         {
             auto tr = tbl.append_child("w:tr");
             if(r < t.header_rows())
                 tr.append_child("w:trPr").append_child("w:tblHeader");
-            m_cell_paragraph_style = r < t.header_rows() ? header_style : style_name{};
             for(std::size_t c = 0; c < cols;)
             {
                 const auto o = origin[r][c].first == SIZE_MAX ? std::pair{r, c} : origin[r][c];
@@ -1030,6 +1031,8 @@ private:
                     std::min(rows, o.first + static_cast<std::size_t>(std::max(cell.rowspan, 1))))
                     props.m_borders.m_bottom.reset();
                 write_tcpr(tc_pr, props);
+                // Unstyled paragraphs get the cell's paragraph style.
+                m_cell_paragraph_style = props.m_paragraph_style;
                 if(o.first == r)
                     write_blocks(tc, cell.children());
                 // A cell ends with a paragraph.

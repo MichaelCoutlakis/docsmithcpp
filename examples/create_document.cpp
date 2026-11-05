@@ -66,7 +66,9 @@ void write_example_test_report()
             inside_h{border::solid(pt(0.5), colour::rgb(0xa0, 0xa0, 0xa0))},
             inside_v{black},
             cell_padding{pt(3)},
-            header_props{colour::rgb(0xe8, 0xe8, 0xe8), rule, heading_style})));
+            header_cells{cell_props(colour::rgb(0xe8, 0xe8, 0xe8),
+                cell_borders{.m_bottom = rule},
+                paragraph_style{heading_style})})));
 
     auto summary_table = table::from_cells({{{"Test Case"}, {"Result"}}}).set_header_rows(1);
     summary_table.set_style(results_style).set_column_widths({3, 1});

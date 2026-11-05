@@ -386,14 +386,7 @@ table_props effective_table_style(const style_name &sn, const style_registry &st
         take(out.m_inside_h, p.m_inside_h);
         take(out.m_inside_v, p.m_inside_v);
         take(out.m_padding, p.m_padding);
-        if(p.m_header)
-        {
-            auto &h = out.m_header ? *out.m_header : out.m_header.emplace();
-            take(h.m_background, p.m_header->m_background);
-            take(h.m_bottom, p.m_header->m_bottom);
-            if(!p.m_header->m_paragraph_style.is_empty())
-                h.m_paragraph_style = p.m_header->m_paragraph_style;
-        }
+        out.m_header.overlay(p.m_header);
     }
     return out;
 }
@@ -418,15 +411,13 @@ cell_props effective_cell_props(
         b.m_end = last_col == cols ? tp.m_outer.m_end : tp.m_inside_v;
         out.m_padding = tp.m_padding;
     }
-    if(const auto &h = tp.m_header)
-    {
-        if(h->m_bottom && row != 0 && row == header)
-            b.m_top = h->m_bottom;
-        if(h->m_bottom && last_row == header)
-            b.m_bottom = h->m_bottom;
-        if(row < header)
-            out.m_background = h->m_background;
-    }
+    out.overlay(effective_cell_style(t.column_style(col), styles));
+    if(row < header)
+        out.overlay(tp.m_header);
+    // The line below the header is also the top of the row after it, so the
+    // two agree.
+    else if(row == header && row != 0 && tp.m_header.m_borders.m_bottom)
+        b.m_top = tp.m_header.m_borders.m_bottom;
     out.overlay(effective_cell_style(c.style, styles));
     out.overlay(c.props);
     return out;

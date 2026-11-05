@@ -122,7 +122,9 @@ TEST(Table, EffectivePropsLayers)
             inside_h{thin},
             inside_v{thin},
             cell_padding{pt(2)},
-            header_props{colour::rgb(0xdd, 0xdd, 0xdd), thick, "Table Heading"})));
+            header_cells{cell_props(colour::rgb(0xdd, 0xdd, 0xdd),
+                cell_borders{.m_bottom = thick},
+                paragraph_style{"Table Heading"})})));
     doc.add_style(style("Base cell", style_family::table_cell, cell_props(cell_valign::middle)));
     style highlight("Highlight", style_family::table_cell, cell_props(colour::rgb(0xff, 0xff, 0)));
     highlight.m_parent_style = "Base cell";
@@ -155,6 +157,39 @@ TEST(Table, EffectivePropsLayers)
     // Live: a change to the style shows on the next look.
     doc.styles().find("Grid")->m_table_props->m_inside_v = thick;
     EXPECT_EQ(effective_cell_props(t, doc.styles(), 1, 0).m_borders.m_end, thick);
+}
+
+TEST(Table, ColumnStyleIsLive)
+{
+    text_doc doc;
+    doc.add_style(style("Grid",
+        style_family::table,
+        table_props(header_cells{
+            cell_props(colour::rgb(0xdd, 0xdd, 0xdd), paragraph_style{"Table Heading"})})));
+    doc.add_style(style("Key",
+        style_family::table_cell,
+        cell_props(colour::rgb(0xee, 0xee, 0xee), cell_valign::middle, paragraph_style{"Key text"})));
+    doc.add_style(style("Highlight", style_family::table_cell, cell_props(colour::rgb(0xff, 0xff, 0))));
+
+    table t = table::from_cells({{"h", "h"}, {"a", "b"}});
+    t.set_header_rows(1).set_style("Grid").set_column_style(0, "Key");
+    t.add_row({"c", "d"}); // after the column's style was set
+    t.cell(1, 0).set_style("Highlight");
+
+    const auto added = effective_cell_props(t, doc.styles(), 2, 0);
+    EXPECT_EQ(added.m_background, colour::rgb(0xee, 0xee, 0xee)) << "a row added later";
+    EXPECT_EQ(added.m_paragraph_style, style_name("Key text"));
+
+    const auto header = effective_cell_props(t, doc.styles(), 0, 0);
+    EXPECT_EQ(header.m_background, colour::rgb(0xdd, 0xdd, 0xdd)) << "the header beats the column";
+    EXPECT_EQ(header.m_paragraph_style, style_name("Table Heading"));
+    EXPECT_EQ(header.m_valign, cell_valign::middle) << "the column's, where the header has none";
+
+    const auto own = effective_cell_props(t, doc.styles(), 1, 0);
+    EXPECT_EQ(own.m_background, colour::rgb(0xff, 0xff, 0)) << "the cell's own style beats both";
+    EXPECT_EQ(own.m_paragraph_style, style_name("Key text"));
+
+    EXPECT_EQ(effective_cell_props(t, doc.styles(), 1, 1), cell_props{});
 }
 
 TEST(Table, PropsCopy)

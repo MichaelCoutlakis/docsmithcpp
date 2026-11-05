@@ -547,11 +547,6 @@ private:
         // <thead> / <tbody> only when there are header rows, so a plain table
         // stays plain.
         const size_t header_rows = std::min(t.header_rows(), t.num_rows());
-        const style_name header_style = [&]
-        {
-            const auto h = effective_table_props(t, m_doc.styles()).m_header;
-            return h ? h->m_paragraph_style : style_name{};
-        }();
         auto section = [&](size_t r)
         {
             if(header_rows == 0 || (r != 0 && r != header_rows))
@@ -570,6 +565,7 @@ private:
         // Each cell's formatting, with the table style's lines, in its style
         // attribute: CSS selectors for a table's edges break with spans.
         std::vector<std::string> cell_css(t.num_rows() * t.num_cols());
+        std::vector<style_name> cell_paragraph(t.num_rows() * t.num_cols());
         bool lines = false;
         for(size_t r = 0; r != t.num_rows(); ++r)
             for(size_t c = 0; c != t.num_cols(); ++c)
@@ -578,6 +574,7 @@ private:
                     const auto p = effective_cell_props(t, m_doc.styles(), r, c);
                     lines = lines || p.m_borders != cell_borders{};
                     cell_css[r * t.num_cols() + c] = css_decls(p);
+                    cell_paragraph[r * t.num_cols() + c] = p.m_paragraph_style;
                 }
 
         indent();
@@ -620,7 +617,7 @@ private:
                     cell.style,
                     cell.children(),
                     attrs,
-                    r < header_rows ? header_style : style_name{});
+                    cell_paragraph[r * t.num_cols() + c]);
             }
             --m_depth;
             indent();

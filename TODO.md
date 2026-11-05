@@ -16,7 +16,8 @@ and polish come after that.
 children _inside_ tables and lists, and unknown _attributes_ on known elements,
 are dropped. So load, edit, save of a real-world file can silently lose content.
 
-Done: a table's name, style, row styles and column widths; list numbering (a
+Done: a table's name, style, row styles, column widths and columns' default
+cell styles (a column's style); list numbering (a
 list header, an item's start value, a list continuing the count); an image's
 size. Decided, and dropped when read:
 
@@ -50,10 +51,8 @@ Decided, to do:
 
 The rule (DESIGN.md, _Document model_): what the model could hold in every
 format is modelled; the rest is dropped on purpose, not carried over half
-modelled. `tests/odt/test_odt_loss.cpp` has a test per case left, recording what
-happens today. To decide, each, then change its test to match:
-
-- **A column's default cell style**: resolve it into the cells when reading.
+modelled. `tests/odt/test_odt_loss.cpp` has a test per case, recording what
+happens today; a new case gets a test there.
 
 DOCX: the reader doesn't see a nested styled list continue, and an unnumbered
 item reads back as more of the item before it.
@@ -74,7 +73,12 @@ every format (DESIGN.md, _Tables_). Still to do:
   would keep them; check what LibreOffice reads and writes.
 - **DOCX header rows** are written as each header cell's own formatting, not as
   the table style's `firstRow` conditional formatting, so Word's table style
-  pane doesn't show them. Banded rows and first column aren't modelled.
+  pane doesn't show them.
+- **More position rules** (later): first or last column, bands every n rows.
+  Each would be a `cell_props` in the table style applied by position, like
+  `header_cells`, and written per cell (DESIGN.md, _Tables_), so they work in
+  every format without its conditional table styles. Reading could later spot
+  a style shared down a column and make it the column's style.
 - Row properties (height, keep together) and absolute column widths.
 
 ### Paragraph spacing and alignment

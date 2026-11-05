@@ -184,8 +184,11 @@ public:
     /// unless widths has num_cols() values.
     table &set_column_widths(const std::vector<double> &widths);
     table &set_column_width(size_t c, std::optional<double> width);
+    /// A cell style (style_family::table_cell) for the column's cells, under
+    /// the header rows' formatting and each cell's own style. It applies by
+    /// position when the document is written, so rows added later get it too.
     const style_name &column_style(size_t c) const { return m_columns.at(c).style; }
-    table &set_column_style(size_t c, style_name sn);
+    table &set_column_style(size_t c, style_name cell_style);
 
     // Borders as the cells' direct formatting (table_cell::props). They act on
     // the cells there are now; a line between two cells is set on both.
@@ -235,9 +238,10 @@ private:
     size_t m_header_rows{};
 };
 
-/// How the cell at (row, col) looks once its table's style (by the cell's
-/// position), its own style and its direct formatting are combined, each style
-/// with its parents' properties filled in. With table_lines false, the table
+/// How the cell at (row, col) looks once these are combined, the later
+/// winning for each property: its table's style's lines, its column's style,
+/// the table style's header_cells (in a header row), its own style and its
+/// direct formatting. Each style has its parents' properties filled in. With table_lines false, the table
 /// style's outer and inside lines and padding are left out, for formats that
 /// write those in the table style itself (DOCX).
 cell_props effective_cell_props(

@@ -266,8 +266,17 @@ enum class cell_valign
     bottom
 };
 
-/// How a table cell looks: in a table_cell style, or as a cell's direct
-/// formatting (table_cell::props). See DESIGN.md, Tables.
+/// The paragraph style for a cell's paragraphs that have no style of their
+/// own (cell_props).
+struct paragraph_style
+{
+    style_name m_name;
+    bool operator==(const paragraph_style &rhs) const = default;
+};
+
+/// How a table cell looks: in a table_cell style, as a cell's direct
+/// formatting (table_cell::props), or in a table style for its header rows
+/// (header_cells). See DESIGN.md, Tables.
 class cell_props
 {
 public:
@@ -297,6 +306,11 @@ public:
         m_padding = p.m_length;
         return *this;
     }
+    cell_props &set(const paragraph_style &p)
+    {
+        m_paragraph_style = p.m_name;
+        return *this;
+    }
     /// Sets each property over holds, keeping the others.
     cell_props &overlay(const cell_props &over);
     bool empty() const { return *this == cell_props{}; }
@@ -306,6 +320,10 @@ public:
     std::optional<colour> m_background;
     std::optional<cell_valign> m_valign;
     std::optional<length> m_padding;
+    /// For the cell's paragraphs that have no style of their own; empty for
+    /// none. Writers put it on those paragraphs: no format holds it in a
+    /// cell style.
+    style_name m_paragraph_style;
 };
 
 inline cell_props &cell_props::overlay(const cell_props &over)
@@ -322,6 +340,8 @@ inline cell_props &cell_props::overlay(const cell_props &over)
     take(m_background, over.m_background);
     take(m_valign, over.m_valign);
     take(m_padding, over.m_padding);
+    if(!over.m_paragraph_style.is_empty())
+        m_paragraph_style = over.m_paragraph_style;
     return *this;
 }
 
@@ -341,16 +361,12 @@ struct inside_h { border m_border; bool operator==(const inside_h&) const = defa
 struct inside_v { border m_border; bool operator==(const inside_v&) const = default; };
 // clang-format on
 
-/// How a table's header rows (table::header_rows()) differ from its body.
-struct header_props
+/// How the cells of a table's header rows (table::header_rows()) look, over
+/// the table's lines and its columns' styles, under each cell's own style.
+struct header_cells
 {
-    bool operator==(const header_props &rhs) const = default;
-
-    std::optional<colour> m_background;
-    /// The line below the last header row, in place of inside_h there.
-    std::optional<border> m_bottom;
-    /// For the header's paragraphs that have no style of their own.
-    style_name m_paragraph_style;
+    cell_props m_props;
+    bool operator==(const header_cells &rhs) const = default;
 };
 
 /// How a table looks, in a table style. The lines and the header apply to
@@ -404,9 +420,9 @@ public:
         m_padding = p.m_length;
         return *this;
     }
-    table_props &set(const header_props &h)
+    table_props &set(const header_cells &h)
     {
-        m_header = h;
+        m_header = h.m_props;
         return *this;
     }
     bool operator==(const table_props &rhs) const = default;
@@ -417,7 +433,7 @@ public:
     std::optional<border> m_inside_h;
     std::optional<border> m_inside_v;
     std::optional<length> m_padding; //!< Every cell's, unless it sets its own
-    std::optional<header_props> m_header;
+    cell_props m_header; //!< The header rows' cells (header_cells)
 };
 
 /// What kind of node a style applies to. ODF and DOCX keep styles of different

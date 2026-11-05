@@ -51,7 +51,7 @@ What each node holds, independent of any one format. "Inline" is a sequence of
 | `heading` | block | inline | styled; `level` |
 | `list` | block | `list_item`s | styled with a list style; `continue_numbering` |
 | `list_item` | — | blocks | `numbered`, `start_value` |
-| `table` | block | a grid of `table_cell`s | styled; always rectangular; per row a style, per column a width and style; the first `header_rows()` rows are header rows |
+| `table` | block | a grid of `table_cell`s | styled; always rectangular; per row a style, per column a width and a cell style; the first `header_rows()` rows are header rows |
 | `table_cell` | — | blocks | styled; `props` (direct formatting); `rowspan`, `colspan`; a covered slot holds a placeholder cell |
 | `frame` | block, inline | an `image` | styled; `width`, `height` |
 | `page_break` | block | — | starts a new page |
@@ -276,33 +276,48 @@ paragraph.
 A `table` is a grid: its cells are private, row by row, so every row has
 `num_cols()` cells, and a slot spanned over by an earlier cell holds a
 placeholder. Beside the cells it keeps a style per row and a relative width and
-style per column. Content comes first and formatting after:
+cell style per column. Content comes first and formatting after:
 
     table t = table::from_cells({{"Test", "Result"}, {"open", "pass"}});
     t.add_row({"save", "fail"});
     t.set_header_rows(1).set_style("Results").set_column_widths({3, 1});
+    t.set_column_style(0, "Key"); // a table_cell style
     t.set_row_borders({0}, edge::bottom, border::solid(pt(1)));
 
-Borders, shading, vertical alignment and padding are properties of a cell
-(`cell_props`). The formats store them differently: ODF has them only on cells,
+Borders, shading, vertical alignment, padding and the paragraph style for the
+cell's unstyled paragraphs are properties of a cell (`cell_props`). It is the
+one way to say how cells look: in a cell style, as a cell's direct formatting,
+or in a table style for the header rows (`header_cells`). No format holds a
+paragraph style in a cell style, so writers put it on each of the cell's
+paragraphs that has no style of its own. The formats store them differently: ODF has them only on cells,
 DOCX on the table (outer edges and the lines inside) and on cells, HTML on
 either. Keeping them on cells in the model means there is one place a border
 can be, so nothing has to decide between a table's line and a cell's edge.
 
-A cell's formatting comes from three layers, the later winning for each
+A cell's formatting comes from these layers, the later winning for each
 property:
 
-1. The table's style (`table_props`): the outer edges, the horizontal and
-   vertical lines inside, and the header rows (background, the line below them,
-   and a paragraph style for their text). It applies by position, so it is
-   live: a row added later, or a change to the style, is picked up when the
-   document is written. Nothing is copied into the cells.
-2. The cell's own style (`cell_props` in a `table_cell` style).
-3. The cell's direct formatting, `table_cell::props`. The table's setters
-   (`set_borders`, `set_outer_border`, `set_horiz_borders`, `set_vert_borders`,
-   `set_row_borders`, `set_column_borders`) write here. They act once, on the
-   cells there are: a row added afterwards doesn't get them. A line between two
-   cells is set on both, so neighbours agree.
+1. The table style's lines (`table_props`): the outer edges and the horizontal
+   and vertical lines inside, and the cells' padding.
+2. The column's style (`set_column_style()`), a cell style.
+3. In a header row, the table style's `header_cells`. Its bottom line is also
+   the top of the row below the header.
+4. The cell's own style (`cell_props` in a `table_cell` style).
+5. The cell's direct formatting, `table_cell::props`.
+
+Layers 1 to 3 apply by position, so they are live: a row added later, or a
+change to a style, is picked up when the document is written. Nothing is
+copied into the cells. Word and LibreOffice also have conditional table styles
+(first column, banded rows), but they hold few patterns and behave differently
+across applications. Rules like those would be further position layers here,
+written per cell.
+
+The table's border setters (`set_borders`, `set_outer_border`,
+`set_horiz_borders`, `set_vert_borders`, `set_row_borders`,
+`set_column_borders`) and the `row()` / `col()` views write to the cells
+instead (layers 4 and 5). They act once, on the cells there are: a row added
+afterwards doesn't get them. A line between two cells is set on both, so
+neighbours agree.
 
 `effective_cell_props()` combines the layers for one cell; it is what writers
 use, and what a caller can use to ask how a cell will look. The table's width
@@ -310,20 +325,22 @@ and alignment are in its style too.
 
 - **ODT**: a table style is a `table` family style with the width and
   alignment. ODF can't hold the rest in it, so the writer gives each cell that
-  needs one an automatic cell style with all three layers combined, its own
-  style as parent. LibreOffice draws both cells' edges where two meet, so a line
+  needs one an automatic cell style with the layers combined, its own style
+  (or else its column's) as parent. A column's style is its
+  `table:default-cell-style-name`, and is written on its cells too. LibreOffice draws both cells' edges where two meet, so a line
   between two cells is written once, as the upper cell's bottom (or the earlier
   cell's end), with `none` on the other, as LibreOffice's own files have it.
   Columns with widths get automatic column styles; relative widths are written
   as given when they are whole numbers of LibreOffice's size, else scaled, since
   LibreOffice ignores small ones (`3*`). Reading puts borders back where the
   file had them, on cells (through their styles), and keeps the table's name,
-  its style, row styles and column widths. So a table style's lines don't
+  its style, row styles, column widths and columns' default cell styles (a
+  cell with its column's style reads back unstyled). So a table style's lines don't
   survive in an `.odt` template.
 - **DOCX**: a table style is a `w:style` of type `table` holding the outer and
   inside lines (`tblBorders`) and cell padding, as Word's own Table Grid does.
-  DOCX has no cell styles, so a cell's style and direct formatting, and the
-  header rows' formatting, are written as its `tcPr`. Reading does the reverse:
+  DOCX has no cell styles, so a cell's style and direct formatting, its
+  column's style and the header rows' formatting, are written as its `tcPr`. Reading does the reverse:
   `tblBorders` into the table style, `tcPr` into the cell's direct formatting.
 - **HTML**: the table style is a class with the width and alignment and
   `border-collapse`. A cell's combined borders, background and padding are

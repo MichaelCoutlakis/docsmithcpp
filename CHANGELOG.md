@@ -86,9 +86,12 @@ held in `std::variant`. This is a breaking change to almost every public API.
   with no size.
 - **Table formatting** in every format (see DESIGN.md, *Tables*). A table style
   (`table_props`) gives the table's width and alignment, its outer and inside
-  lines, cell padding and its header rows' background, rule and paragraph style.
-  A cell style or a cell's direct formatting (`table_cell::props`, `cell_props`)
-  gives borders, background, vertical alignment and padding, the later winning.
+  lines, cell padding and how its header rows' cells look (`header_cells`). How a
+  cell looks is `cell_props` (borders, background, vertical alignment, padding and
+  a paragraph style for its unstyled paragraphs), in a cell style, a column's
+  style (`set_column_style`, applied to rows added later too, read from and written
+  to ODT's `table:default-cell-style-name`), the header's, or a cell's direct
+  formatting (`table_cell::props`), the later winning.
   `set_borders`, `set_outer_border`, `set_horiz_borders`, `set_vert_borders`,
   `set_row_borders` and `set_column_borders` set lines after the content is in;
   `set_column_widths` sets relative column widths. `effective_cell_props()` says
