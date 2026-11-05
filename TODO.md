@@ -18,7 +18,8 @@ are dropped. So load, edit, save of a real-world file can silently lose content.
 
 Done: a table's name, style, row styles and column widths; list numbering (a
 list header, an item's start value, a list continuing the count); an image's
-size. Decided: cells are text, so a cell's value and formula
+size. Decided: soft page breaks and list labels (`text:number`) are layout
+caches and dropped; cells are text, so a cell's value and formula
 (`office:value-type`, `office:value`, `table:formula`) are dropped and a formula
 cell becomes its last result (_Model gaps_ has modelling them).
 
@@ -34,9 +35,6 @@ happens today. To decide, each, then change its test to match:
 - **Link target frame** (`office:target-frame-name`) and link character styles.
 - **Element ids** (`xml:id`): drop, or keep and drop repeats.
 - **A column's default cell style**: resolve it into the cells when reading.
-- **Soft page breaks**: dropped, proposed as is (a layout cache).
-- **List label cache** (`text:number`): kept today as `unknown` and so goes
-  stale; proposed to drop it like soft page breaks.
 - **Attributes in other namespaces**: whether to keep them at all; keeping them
   needs _Namespace prefixes in ODT_ first.
 

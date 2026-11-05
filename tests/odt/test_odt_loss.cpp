@@ -203,10 +203,13 @@ TEST(ODT_Loss, ColumnDefaultCellStyleIsDropped)
 
 // Soft page breaks are where LibreOffice last laid out a page break. They are
 // a cache: LibreOffice makes them again when it lays the document out.
-// Proposed: dropped on purpose, as now.
+// Decided: dropped, wherever they are (between blocks, in a paragraph, in a
+// list or a table).
 TEST(ODT_Loss, SoftPageBreaksAreDropped)
 {
     const resaved r("soft_page_break",
+        "<text:p>before</text:p><text:soft-page-break/>"
+        "<text:p>split <text:soft-page-break/>here</text:p>"
         "<text:list><text:list-item><text:p>a</text:p></text:list-item><text:soft-page-break/>"
         "<text:list-item><text:p>b</text:p></text:list-item></text:list>"
         R"(<table:table table:name="T"><table:table-column/><table:table-row>)"
@@ -216,18 +219,20 @@ TEST(ODT_Loss, SoftPageBreaksAreDropped)
     EXPECT_EQ(r.xml.select_nodes("//text:list-item").size(), 2U);
     EXPECT_EQ(r.xml.select_nodes("//table:table-row").size(), 2U);
     EXPECT_FALSE(r.node("//text:soft-page-break"));
+    EXPECT_STREQ(r.node("//office:text/text:p[2]").text().as_string(), "split here")
+        << "the text either side joins up";
 }
 
-// A list item's label as last laid out (text:number) is also a cache, but
-// today it is kept as unknown markup and written back as it was, so it goes
-// stale when items are added or moved: the partly modelled case to avoid.
-// Proposed: drop it, like soft page breaks.
-TEST(ODT_Loss, ListLabelCacheIsKeptStale)
+// A list item's label as last laid out (text:number) is also a cache, and
+// kept as is it would go stale when items are added or moved.
+// Decided: dropped, like soft page breaks.
+TEST(ODT_Loss, ListLabelCacheIsDropped)
 {
     const resaved r("list_label",
         "<text:list><text:list-item><text:number>1.</text:number><text:p>a</text:p>"
         "</text:list-item></text:list>");
-    EXPECT_STREQ(r.node("//text:list-item/text:number").text().as_string(), "1.");
+    EXPECT_FALSE(r.node("//text:number"));
+    EXPECT_STREQ(r.node("//text:list-item/text:p").text().as_string(), "a");
 }
 
 // An attribute in a namespace the writer doesn't declare (another

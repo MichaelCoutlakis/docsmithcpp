@@ -318,6 +318,9 @@ held in `std::variant`. This is a breaking change to almost every public API.
   inside the original archive and the writer looked for it on disk.
 - Table cell style names were parsed but never written.
 - The writer used the `loext:` namespace without declaring it.
+- ODT soft page breaks (`text:soft-page-break`) between blocks or in a paragraph, and
+  list labels as last laid out (`text:number`), are dropped when read. They were kept
+  as `unknown` and written back, so they went stale once the document was edited.
 
 ### Known limitations
 - HTML from a *parsed* `.odt` is plainer than the original: the CSS covers only the

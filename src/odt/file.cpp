@@ -145,6 +145,13 @@ std::string collapse_space(std::string_view s, bool at_start)
     return out;
 }
 
+/// Markup that only caches LibreOffice's last layout: soft page breaks and a
+/// list item's label as shown (text:number). It is dropped when read, since
+/// it would go stale once the document is edited, and LibreOffice makes it
+/// again when it lays the document out.
+bool is_layout_cache(std::string_view tag)
+{ return tag == "text:soft-page-break" || tag == "text:number"; }
+
 std::vector<inline_node> parse_inline_children(const pugi::xml_node &node)
 {
     const std::string_view tag = node.name();
@@ -160,7 +167,7 @@ std::vector<inline_node> parse_inline_children(const pugi::xml_node &node)
             if(auto s = collapse_space(child.value(), at_start); !s.empty())
                 append_text(out, s);
         }
-        else if(child.type() != pugi::node_element)
+        else if(child.type() != pugi::node_element || is_layout_cache(name))
             continue;
         else if(name == "text:s")
             append_text(out, std::string(child.attribute("text:c").as_uint(1), ' '));
@@ -299,6 +306,8 @@ std::optional<block_node> parse_block(const pugi::xml_node &node)
 {
     std::string tag = node.name();
 
+    if(is_layout_cache(tag))
+        return std::nullopt;
     if(tag == "text:p")
     {
         paragraph p;
