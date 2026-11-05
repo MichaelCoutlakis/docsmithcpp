@@ -274,6 +274,9 @@ held in `std::variant`. This is a breaking change to almost every public API.
   plumbing. Setup is in CONTRIBUTING.md.
 
 ### Removed
+- `graphics_props`, `align_horiz` and `align_vert`, and `style::set(graphics_props)`.
+  Frames are always in the line of text, so a graphic style's position had nothing to
+  apply to.
 - `element.h` (`element`, `element_base`, `elem_tagged`, `elem_t`, `element_visitor`),
   `valid_relations.h`, `parser.h`, `text.h`, `forward_decl.h`, `src/nodes.cpp`,
   `src/list.cpp`.
@@ -303,7 +306,6 @@ held in `std::variant`. This is a breaking change to almost every public API.
   when it was saved again.
 - List levels' `text:style-name` was written on the list style instead of the level,
   and `loext:num-list-format` ignored the number's prefix and suffix.
-- `graphics_props` (frame position) were never written.
 - The parser now reads heading outline levels and style names.
 - `odt/file.h` was missing `#pragma once`.
 - The installed `DocSmithCppConfig.cmake` now finds its dependencies (pugixml,
@@ -318,6 +320,11 @@ held in `std::variant`. This is a breaking change to almost every public API.
   inside the original archive and the writer looked for it on disk.
 - Table cell style names were parsed but never written.
 - The writer used the `loext:` namespace without declaring it.
+- Frames are anchored as characters. The ODT writer writes `text:anchor-type="as-char"`
+  and puts a block frame in an unstyled paragraph of its own, which reads back as a
+  block frame; it wrote neither before. A loaded frame's anchor and position (ODT
+  `text:anchor-type`, `svg:x`, `svg:y`; DOCX `wp:anchor`) are dropped, so a floating
+  picture comes back in the line.
 - ODT soft page breaks (`text:soft-page-break`) between blocks or in a paragraph, and
   list labels as last laid out (`text:number`), are dropped when read. They were kept
   as `unknown` and written back, so they went stale once the document was edited.

@@ -39,18 +39,6 @@ struct spelling
     const char *odf;
 };
 
-constexpr spelling<align_horiz> horiz_names[] = {{align_horiz::left, "left"},
-    {align_horiz::centre, "center"},
-    {align_horiz::right, "right"},
-    {align_horiz::from_inside, "from-inside"},
-    {align_horiz::from_left, "from-left"},
-    {align_horiz::inside, "inside"},
-    {align_horiz::outside, "outside"}};
-constexpr spelling<align_vert> vert_names[] = {{align_vert::top, "top"},
-    {align_vert::middle, "middle"},
-    {align_vert::bottom, "bottom"},
-    {align_vert::from_top, "from-top"},
-    {align_vert::below, "below"}};
 constexpr spelling<font_style> font_style_names[] = {{font_style::normal, "normal"},
     {font_style::italic, "italic"},
     {font_style::oblique, "oblique"}};
@@ -195,18 +183,6 @@ std::optional<paragraph_props> read_paragraph_props(const pugi::xml_node &n)
     if(auto b = from_odf(break_names, n.attribute("fo:break-after").as_string()))
         pp.set(break_after{*b});
     return pp == paragraph_props{} ? std::nullopt : std::optional(std::move(pp));
-}
-
-std::optional<graphics_props> read_graphics_props(const pugi::xml_node &n)
-{
-    if(!n)
-        return std::nullopt;
-    graphics_props gp;
-    if(auto h = from_odf(horiz_names, n.attribute("style:horizontal-pos").as_string()))
-        gp.set(*h);
-    if(auto v = from_odf(vert_names, n.attribute("style:vertical-pos").as_string()))
-        gp.set(*v);
-    return gp == graphics_props{} ? std::nullopt : std::optional(std::move(gp));
 }
 
 constexpr spelling<border_line> border_names[] = {{border_line::none, "none"},
@@ -366,9 +342,6 @@ void write_xml(pugi::xml_node &n, const style &s, style_family family)
         style_node.append_attribute("style:parent-style-name") =
             s.m_parent_style.get_name().c_str();
 
-    if(s.m_graphics_props)
-        write_xml(style_node, s.m_graphics_props.value());
-
     // A table style's lines and header go on its cells (see the writer).
     if(family == style_family::table)
         write_xml(style_node, s.m_table_props.value_or(table_props{}));
@@ -448,17 +421,6 @@ void write_xml(pugi::xml_node &n, const paragraph_props &props)
     if(props.m_break_before)
         para_props_node.append_attribute("fo:break-before") =
             to_odf(break_names, props.m_break_before->m_break_type);
-}
-
-void write_xml(pugi::xml_node &n, const graphics_props &props)
-{
-    auto graphic_node = n.append_child("style:graphic-properties");
-
-    if(props.m_horiz_pos)
-        graphic_node.append_attribute("style:horizontal-pos") =
-            to_odf(horiz_names, *props.m_horiz_pos);
-    if(props.m_vert_pos)
-        graphic_node.append_attribute("style:vertical-pos") = to_odf(vert_names, *props.m_vert_pos);
 }
 
 void write_xml(pugi::xml_node &n, const table_props &props)
@@ -547,7 +509,6 @@ std::optional<style> read_style(const pugi::xml_node &n)
 
     style s(style_name(n.attribute("style:name").as_string()), *family);
     s.m_parent_style = style_name(n.attribute("style:parent-style-name").as_string());
-    s.m_graphics_props = read_graphics_props(n.child("style:graphic-properties"));
     s.m_paragraph_props = read_paragraph_props(n.child("style:paragraph-properties"));
     s.m_text_props = read_text_props(n.child("style:text-properties"));
     if(*family == style_family::table)

@@ -74,6 +74,12 @@ on.
   item, or a table in a table cell, is fine. Inline content nests through
   `span` and `hyperlink`. A `frame` is a block when it stands on its own and
   inline when it sits in a line of text.
+- **Frames** are in the line of text, like a character: ODT `as-char`, DOCX
+  `wp:inline`. A block frame is an unstyled paragraph holding only the frame,
+  and reads back as a block frame. Anchoring a frame elsewhere (to a paragraph
+  or page), its position and how text wraps round it aren't modelled, and are
+  dropped when read, so a floating picture comes back in the line at its
+  anchor (TODO.md, *Model gaps*).
 - **List numbering.** A list's count starts at its list style's start for that
   level, or with `continue_numbering` carries on from the last list before it
   with the same list style at the same depth. An item's `start_value` restarts
@@ -623,8 +629,10 @@ are kept, renamed only if they clash, and `mc:Ignorable` follows them.
   (`src/image_size.h` reads PNG, JPEG and GIF headers), scaled down to the text
   width. Loading reads the size from `wp:extent` and names each resource by its
   part. The file keeps a loaded image's `w:drawing`, and writes it again
-  (anchoring, alt text) while a frame in the same part shows that image, with
-  the frame's size in place of the one it had.
+  (alt text, cropping, effects) while a frame in the same part shows that
+  image, with the frame's size in place of the one it had. A floating one
+  (`wp:anchor`) is kept as `wp:inline`, without its position and wrap (see
+  *Rules*, Frames).
 - **Table of contents**: a `w:sdt` content control (docPartGallery "Table of
   Contents"): the title in `TOCHeading`, then a `TOC \o "1-<levels>" \h \z \u`
   complex field whose result is a `TOC<level>` paragraph per heading, linking

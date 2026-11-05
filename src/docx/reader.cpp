@@ -961,6 +961,29 @@ private:
         fld = field_state{};
     }
 
+    /// A w:drawing as XML to write back, with a floating picture (wp:anchor)
+    /// made inline: the model doesn't hold anchors or positions (DESIGN.md,
+    /// Rules). wp:inline takes the anchor's size, alt text and picture,
+    /// which come in the same order.
+    static std::string inline_drawing(const pugi::xml_node &d)
+    {
+        pugi::xml_document copy;
+        auto root = copy.append_copy(d);
+        if(auto a = root.child("wp:anchor"))
+        {
+            auto in = root.insert_child_before("wp:inline", a);
+            for(const char *dist : {"distT", "distB", "distL", "distR"})
+                in.append_attribute(dist) = 0;
+            for(auto c : a.children())
+                for(const char *keep :
+                    {"wp:extent", "wp:effectExtent", "wp:docPr", "wp:cNvGraphicFramePr", "a:graphic"})
+                    if(std::string_view(c.name()) == keep)
+                        in.append_copy(c);
+            root.remove_child(a);
+        }
+        return xml::serialize(root);
+    }
+
     std::optional<frame> read_drawing(const pugi::xml_node &d)
     {
         pugi::xml_node blip;
@@ -987,7 +1010,7 @@ private:
         if(!m_pkg.contains(uri) && !m_doc.resources().find(uri))
             return std::nullopt;
         if(!m_st.drawings.contains(uri))
-            m_st.drawings[uri] = drawing{m_part, xml::serialize(d)};
+            m_st.drawings[uri] = drawing{m_part, inline_drawing(d)};
         frame f(image{uri});
         for(auto shape : d.children())
             if(auto ext = shape.child("wp:extent"))

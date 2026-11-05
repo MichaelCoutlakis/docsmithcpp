@@ -686,10 +686,19 @@ void writer::emit(pugi::xml_node parent, const text &t)
     flush();
 }
 
+// Frames are anchored as characters, in a line of text: the model doesn't
+// hold other anchors or positions (DESIGN.md, Rules). A block frame is an
+// unstyled paragraph of its own, as in DOCX.
 void writer::emit(pugi::xml_node parent, const frame &f)
 {
-    flush_page_break(parent);
+    const std::string_view in = parent.name();
+    if(in != "text:p" && in != "text:h" && in != "text:span" && in != "text:a")
+    {
+        flush_page_break(parent);
+        parent = parent.append_child("text:p");
+    }
     auto n = parent.append_child("draw:frame");
+    n.append_attribute("text:anchor-type") = "as-char";
     if(!f.style.is_empty())
         n.append_attribute("draw:style-name").set_value(f.style.get_name().c_str());
     if(f.width)

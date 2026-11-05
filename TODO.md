@@ -20,7 +20,8 @@ Done: a table's name, style, row styles and column widths; list numbering (a
 list header, an item's start value, a list continuing the count); an image's
 size. Decided: soft page breaks and list labels (`text:number`) are layout
 caches and dropped; element ids (`xml:id`) are dropped, since nothing the
-model holds refers to them; cells are text, so a cell's value and formula
+model holds refers to them; frames are in the line of text (`as-char`,
+`wp:inline`) and their anchor, position and wrap are dropped; cells are text, so a cell's value and formula
 (`office:value-type`, `office:value`, `table:formula`) are dropped and a formula
 cell becomes its last result (_Model gaps_ has modelling them).
 
@@ -39,8 +40,6 @@ format is modelled; the rest is dropped on purpose, not carried over half
 modelled. `tests/odt/test_odt_loss.cpp` has a test per case left, recording what
 happens today. To decide, each, then change its test to match:
 
-- **Frame anchoring and position** (`text:anchor-type`, `svg:x`/`svg:y`, wrap in
-  the graphic style): model them together, or keep frames inline.
 - **Link target frame** (`office:target-frame-name`) and link character styles.
 - **A column's default cell style**: resolve it into the cells when reading.
 - **Attributes in other namespaces**: whether to keep them at all; keeping them
@@ -200,6 +199,14 @@ Options:
   `language`) would make them first class. ODT would still write it as a
   Preformatted Text paragraph, keeping the language in a derived style or an
   attribute, and HTML as `<pre><code class="language-…">`.
+- **Frame placement** (later). Frames are always in the line of text. A
+  portable subset all of ODT, DOCX and HTML can hold: in the line; a block on
+  its own line, left, centred or right, text above and below; floating left
+  or right with text wrapping round it (ODT anchored to the paragraph with a
+  graphic style's `style:wrap`, DOCX `wp:anchor` with `wrapSquare`, HTML
+  `float`). Offsets, page anchors and behind-text would still be dropped.
+  The DOCX writer would then write `wp:inline` / `wp:anchor` from the model
+  rather than reuse the loaded drawing's.
 - `frame` holds only an image. ODF frames can also hold text boxes and objects.
 - HTML: images can only be written as files. A `data:` URI mode would give a
   single self-contained page.

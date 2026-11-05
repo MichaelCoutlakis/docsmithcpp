@@ -313,6 +313,10 @@ std::optional<block_node> parse_block(const pugi::xml_node &node)
         paragraph p;
         p.style = style_of(node, "text:style-name");
         p.children() = parse_inline_children(node);
+        // The writer puts a block frame in an unstyled paragraph of its own.
+        if(p.style.is_empty() && p.children().size() == 1 &&
+            std::holds_alternative<frame>(p.children().front().v))
+            return block_node{std::get<frame>(p.children().front().v)};
         return block_node{std::move(p)};
     }
     if(tag == "text:h")

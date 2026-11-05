@@ -27,28 +27,6 @@
 namespace docsmith
 {
 
-/// style:horizontal-pos
-enum class align_horiz
-{
-    left,
-    centre,
-    right,
-    from_inside,
-    from_left,
-    inside,
-    outside
-};
-
-/// style:vertical-pos
-enum class align_vert
-{
-    top,
-    middle,
-    bottom,
-    from_top,
-    below
-};
-
 class style_name
 {
 public:
@@ -239,31 +217,6 @@ public:
 
     std::optional<break_before> m_break_before;
     std::optional<break_after> m_break_after;
-};
-
-class graphics_props
-{
-public:
-    template <typename... Args>
-    explicit graphics_props(Args &&...args)
-    {
-        (set(args), ...);
-    }
-
-    graphics_props &set(align_horiz h)
-    {
-        m_horiz_pos = h;
-        return *this;
-    }
-    graphics_props &set(align_vert v)
-    {
-        m_vert_pos = v;
-        return *this;
-    }
-    bool operator==(const graphics_props &rhs) const = default;
-
-    std::optional<align_horiz> m_horiz_pos;
-    std::optional<align_vert> m_vert_pos;
 };
 
 enum class border_line
@@ -497,11 +450,6 @@ public:
         m_family = f;
         return *this;
     }
-    style &set(const graphics_props &props)
-    {
-        m_graphics_props = props;
-        return *this;
-    }
     style &set(const text_props &props)
     {
         m_text_props = props;
@@ -530,7 +478,6 @@ public:
     /// the style, writing it once per family if they differ.
     std::optional<style_family> m_family;
     style_name m_parent_style;
-    std::optional<graphics_props> m_graphics_props;
     std::optional<text_props> m_text_props;
     std::optional<paragraph_props> m_paragraph_props;
     std::optional<table_props> m_table_props; //!< family table

@@ -212,6 +212,20 @@ TEST(ODT, AddedImageRoundTrips)
     EXPECT_EQ(odt::file::load("odt/out/added_image.odt").doc.resources(), doc.resources());
 }
 
+TEST(ODT, BlockFrameRoundTrips)
+{
+    text_doc doc;
+    const image img = doc.add_image("Pictures/dot.png", "not really a png", "image/png");
+    doc.add(frame(img));
+    doc.add(paragraph("Text then ", frame(img)));
+    odt::file(doc).save("odt/out/block_frame.odt");
+
+    const auto again = odt::file::load("odt/out/block_frame.odt").doc;
+    ASSERT_EQ(again.body.size(), 2U);
+    EXPECT_EQ(again.body[0], doc.body[0]) << "an unstyled paragraph of its own";
+    EXPECT_EQ(again.body[1], doc.body[1]);
+}
+
 TEST(ODT, EditLoadedFile)
 {
     auto f = odt::file::load("odt/basic.odt");
@@ -516,7 +530,7 @@ TEST(ODT, CodeBuiltStylesRoundTrip)
             colour::rgb(1, 2, 3)),
         paragraph_props(break_before{break_type::page}, break_after{break_type::column})));
     auto pic = doc.add_style(
-        style("Pic", style_family::graphic, graphics_props(align_horiz::centre, align_vert::top)));
+        style("Pic", style_family::graphic));
     auto steps = doc.add_style(list_style("Steps",
         {list_style_num(style{}, 1, list_enum::upper_roman, ")", 2, "("),
             list_style_bullet(style("Bullet_20_Symbols"), 2, bullet_type::right_arrow())}));

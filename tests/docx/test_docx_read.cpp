@@ -358,10 +358,14 @@ TEST(DOCX_Read, LibreOfficeImage)
     EXPECT_EQ(r->media_type(), "image/png");
     EXPECT_FALSE(r->data().empty());
 
-    // The drawing (here anchored, not inline) is written back as it was.
+    // The drawing is written back as it was, but inline: here it was
+    // anchored, and the model doesn't hold anchors.
     f.save("docx/out/image_resaved.docx");
     const auto xml = part_xml("docx/out/image_resaved.docx", "word/document.xml");
-    EXPECT_TRUE(xml.select_node("//wp:anchor"));
+    EXPECT_FALSE(xml.select_node("//wp:anchor"));
+    EXPECT_TRUE(xml.select_node("//w:drawing/wp:inline/wp:extent"));
+    EXPECT_TRUE(xml.select_node("//w:drawing/wp:inline/wp:docPr"));
+    EXPECT_TRUE(xml.select_node("//w:drawing/wp:inline/a:graphic//a:blip"));
     EXPECT_TRUE(opc::package::read("docx/out/image_resaved.docx").contains(frames[0]->img.uri));
 }
 

@@ -117,18 +117,32 @@ TEST(ODT_Loss, CellValuesAndFormulasAreDropped)
 // A frame's anchor goes with its position (svg:x, svg:y) and how text wraps
 // round it, which is in its graphic style. Keeping some of these and not the
 // others would move the picture.
-// To decide: model anchoring and position together, or keep frames inline.
-TEST(ODT_Loss, FrameAnchorAndPositionAreDropped)
+// Decided: frames are anchored as characters, in the line of text, and the
+// anchor and position are dropped. A block frame is an unstyled paragraph of
+// its own. Placement other than in the line is a later TODO.md item (Model
+// gaps).
+TEST(ODT_Loss, FramesAreAnchoredAsCharacters)
 {
     const resaved r("frame_anchor",
         R"(<text:p><draw:frame text:anchor-type="paragraph" svg:x="2cm" svg:y="1cm" )"
         R"(svg:width="1cm" svg:height="1cm">)" +
-            smiley + "</draw:frame></text:p>");
-    auto f = r.node("//draw:frame");
-    EXPECT_TRUE(f.attribute("svg:width")) << "the size is modelled";
-    EXPECT_FALSE(f.attribute("text:anchor-type"));
-    EXPECT_FALSE(f.attribute("svg:x"));
-    EXPECT_FALSE(f.attribute("svg:y"));
+            smiley +
+            "</draw:frame></text:p>"
+            R"(<draw:frame text:anchor-type="page" text:anchor-page-number="1" svg:x="1cm" )"
+            R"(svg:y="1cm" svg:width="1cm" svg:height="1cm">)" +
+            smiley + "</draw:frame>");
+    const auto frames = r.xml.select_nodes("//draw:frame");
+    ASSERT_EQ(frames.size(), 2U);
+    for(const auto &x : frames)
+    {
+        auto f = x.node();
+        EXPECT_TRUE(f.attribute("svg:width")) << "the size is modelled";
+        EXPECT_STREQ(f.attribute("text:anchor-type").as_string(), "as-char");
+        EXPECT_FALSE(f.attribute("text:anchor-page-number"));
+        EXPECT_FALSE(f.attribute("svg:x"));
+        EXPECT_FALSE(f.attribute("svg:y"));
+        EXPECT_STREQ(f.parent().name(), "text:p") << "as-char frames are in a paragraph";
+    }
 }
 
 // An image's alternative text. Every format has it (DOCX wp:docPr descr, HTML
