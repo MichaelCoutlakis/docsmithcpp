@@ -17,9 +17,9 @@
  *****************************************************************************/
 
 // What a load -> save of an ODT file loses, case by case: ODF the model
-// doesn't hold. Each test records what happens today, not what should, and
-// says what is still to decide (TODO.md, Correctness). Deciding a case means
-// changing its test to the behaviour chosen.
+// doesn't hold. Each test records what happens and what was decided, and
+// why. A new case gets a test here, saying what is still to decide until it
+// is.
 //
 // The choices are to model it (all formats then gain it), to drop it on
 // purpose, or to carry it over as is. Carrying it over is only safe for markup

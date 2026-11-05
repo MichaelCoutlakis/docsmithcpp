@@ -1,79 +1,28 @@
 # TODO
 
 Outstanding work, roughly in priority order. Each item says why it matters and
-where to start. See `CHANGELOG.md` for what's done.
+where to start. Done work goes in `CHANGELOG.md` and leaves this file.
+
+## 1. Before 0.1.0
 
 The library builds, installs and passes CI on Linux and MSVC. What's left for a
-usable first release (0.1.0) is that it doesn't lose content and that the
-headline use case, a generated test report, looks like a report. More formats
-and polish come after that.
-
-## 1. Correctness (blocks 0.1.0)
-
-### Content lost inside tables and lists
-
-`unknown` round-trips only block- and inline-level content. Unrecognised
-children _inside_ tables and lists, and unknown _attributes_ on known elements,
-are dropped. So load, edit, save of a real-world file can silently lose content.
-
-Done: a table's name, style, row styles, column widths and columns' default
-cell styles (a column's style); alternative text for images and tables; a
-link's style; list numbering (a
-list header, an item's start value, a list continuing the count); an image's
-size. Decided, and dropped when read:
-
-- soft page breaks and list labels (`text:number`): layout caches;
-- element ids (`xml:id`): nothing the model holds refers to them;
-- a frame's anchor, position and wrap: frames are in the line of text
-  (`as-char`, `wp:inline`);
-- a link's target frame (`office:target-frame-name`, `w:tgtFrame`): niche; if
-  it's ever wanted, an enum (`same_window`, `new_window`, ...) rather than
-  frame names;
-- a link's visited style (`text:visited-style-name`): only ODF has it;
-- attributes in other namespaces (`loext:`, other applications' extensions):
-  niche, and keeping them needs _Namespace prefixes in ODT_ first;
-- a cell's value and formula (`office:value-type`, `office:value`,
-  `table:formula`): cells are text, so a formula cell becomes its last result
-  (_Model gaps_ has modelling them).
-
-The rule (DESIGN.md, _Document model_): what the model could hold in every
-format is modelled; the rest is dropped on purpose, not carried over half
-modelled. `tests/odt/test_odt_loss.cpp` has a test per case, recording what
-happens today; a new case gets a test there.
-
-DOCX: the reader doesn't see a nested styled list continue, and an unnumbered
-item reads back as more of the item before it.
-
-## 2. Reports that look like reports (blocks 0.1.0)
-
+usable first release is that it doesn't lose content and that the headline use
+case, a generated test report, looks like a report.
 `write_example_test_report()` in `examples/create_document.cpp` is the
 yardstick.
 
-### Table and cell properties: what's left
+### DOCX lists
 
-Tables have styles, borders, shading, padding, column widths and header rows in
-every format (DESIGN.md, _Tables_). Still to do:
-
-- **Table styles in an ODT template.** ODF can't hold a table style's lines in
-  the style, so they go on the cells and a template saved as `.odt` loses them
-  from the style. ODF's `table:table-template` (LibreOffice's table styles)
-  would keep them; check what LibreOffice reads and writes.
-- **DOCX header rows** are written as each header cell's own formatting, not as
-  the table style's `firstRow` conditional formatting, so Word's table style
-  pane doesn't show them.
-- **More position rules** (later): first or last column, bands every n rows.
-  Each would be a `cell_props` in the table style applied by position, like
-  `header_cells`, and written per cell (DESIGN.md, _Tables_), so they work in
-  every format without its conditional table styles. Reading could later spot
-  a style shared down a column and make it the column's style.
-- Row properties (height, keep together) and absolute column widths.
+The reader doesn't see a nested styled list continue, and an unnumbered item
+reads back as more of the item before it.
 
 ### Paragraph spacing and alignment
 
 Paragraph properties are only page breaks, so the template's headings have no
 space above or below them, and a style defined in code replaces LibreOffice's
 spacing for a style of the same name (e.g. Heading 1). Add margins, alignment
-(`text_align` exists but isn't used) and keep-with-next.
+(`text_align` exists but isn't used) and keep-with-next. Alignment is also what
+a column's paragraph style needs for centred or right-aligned cells.
 
 ### Fonts in HTML
 
@@ -81,6 +30,35 @@ A style's `font_name` is ODF's `style:font-name`, the name of a font
 declaration, not the font family: LibreOffice declares "Liberation Sans1" for a
 second "Liberation Sans". HTML writes the name as the CSS font family. Read the
 declaration's `svg:font-family` instead.
+
+### Tag 0.1.0
+
+Once the above is in, move `[Unreleased]` in `CHANGELOG.md` to `[0.1.0]` and
+tag it.
+
+## 2. After 0.1.0
+
+### Tables
+
+- **Table styles in an ODT template.** ODF can't hold a table style's lines in
+  the style, so they go on the cells and a template saved as `.odt` loses them
+  from the style; defining the table style in code works in every format.
+  ODF's `table:table-template` (LibreOffice's table styles) has a cell style
+  per region (first and last row and column, body, odd and even rows and
+  columns), which a table switches on (`table:template-name`,
+  `table:use-first-row-styles`, ...). Mapping the model's lines and
+  `header_cells` onto regions is lossy (corners, header rows past the first,
+  lines between cells), and what LibreOffice reads and applies from one needs
+  checking first.
+- **DOCX header rows** are written as each header cell's own formatting, not as
+  the table style's `firstRow` conditional formatting (`tblStylePr`), so Word's
+  table style pane doesn't show them. Banding isn't read or written either.
+- **More position rules**: first or last column, bands every n rows. Each would
+  be a `cell_props` in the table style applied by position, like
+  `header_cells`, and written per cell (DESIGN.md, _Tables_), so they work in
+  every format without its conditional table styles. Reading could spot a
+  style shared down a column and make it the column's style.
+- **Row properties** (height, keep together) and absolute column widths.
 
 ### Page numbers in the table of contents
 
@@ -94,25 +72,12 @@ setting exists), or a note in the template.
 `text_doc::page` is one page style for the whole document. A different first
 page, or a landscape section, needs a registry of page styles and a way to start
 one in the body (ODF master pages, DOCX sections). See DESIGN.md, _Pages,
-headers and footers_. The largest item here; it can follow 0.1.0 if the rest
-is done.
-
-### Tag 0.1.0
-
-Once the above is in, move `[Unreleased]` in `CHANGELOG.md` to `[0.1.0]` and
-tag it.
-
-## 3. Formats
+headers and footers_.
 
 ### DOCX gaps
 
-`docx::file` reads and writes every node (see DESIGN.md, _DOCX_). What it
-doesn't do yet, roughly by how much a report or a loaded file would miss it:
+Roughly by how much a report or a loaded file would miss it:
 
-- **Table properties**: a table style's `tblBorders` and cell margins, the
-  table's style, width and alignment, column widths and each cell's borders,
-  shading, margins and vertical alignment are read and written. Conditional
-  formatting (`tblStylePr`: first row, banding) and row properties aren't.
 - **Sections**: section breaks inside the body stay in the direct formatting of
   the paragraph that ends the section, so they survive load and save but the
   model can't see them. First-page and even-page headers are kept, not read.
@@ -136,7 +101,56 @@ doesn't do yet, roughly by how much a report or a loaded file would miss it:
   table of contents; a cross-reference to one in `unknown` markup breaks.
 - Strict OOXML (`purl.oclc.org` namespaces) isn't read.
 
-## 4. Internal quality
+### Model gaps
+
+- `set_style(style)` keeps only the name. `text_doc::add_style()` registers a
+  definition and returns its name, but nothing yet checks that every style a
+  node names is defined.
+- Bookmark names aren't checked for repeats. Copying a paragraph that holds a
+  bookmark repeats its name, and a link to it is then ambiguous. Report
+  repeats (with the style check above) rather than renaming them, since a
+  writer can't tell which one a link meant.
+- Package entries that no `image` referred to at load (e.g. pictures used only
+  by `unknown` markup) stay in the ODT package and are carried over on save,
+  even if nothing uses them any more. Resources whose image was removed are
+  dropped.
+- Code blocks are paragraphs styled `builtin::preformatted`, so a Markdown
+  fence's info string (` ```c++ `) has nowhere to go and is dropped. Code blocks
+  are now as common as headings, so a `code_block` block node (text plus
+  `language`) would make them first class. ODT would still write it as a
+  Preformatted Text paragraph, keeping the language in a derived style or an
+  attribute, and HTML as `<pre><code class="language-…">`.
+- **Frame placement**. Frames are always in the line of text. A portable subset
+  all of ODT, DOCX and HTML can hold: in the line; a block on its own line,
+  left, centred or right, text above and below; floating left or right with
+  text wrapping round it (ODT anchored to the paragraph with a graphic style's
+  `style:wrap`, DOCX `wp:anchor` with `wrapSquare`, HTML `float`). Offsets,
+  page anchors and behind-text would still be dropped. The DOCX writer would
+  then write `wp:inline` / `wp:anchor` from the model rather than reuse the
+  loaded drawing's.
+- `frame` holds only an image. ODF frames can also hold text boxes and objects.
+- HTML: images can only be written as files. A `data:` URI mode would give a
+  single self-contained page.
+- HTML: list number prefixes and suffixes aren't reflected in the CSS.
+- HTML: a table's accessibility description is written only when it has no
+  title (`aria-label`); `aria-describedby` could carry both.
+- Font sizes are points only, so a parsed `130%` is dropped. Editing a loaded
+  style rewrites it from the model and drops what the model doesn't hold;
+  updating only the modelled attributes in place would keep the rest.
+- **Cell values and formulas**. Cells are text: ODT's `office:value` and
+  `table:formula` are dropped, so a formula cell keeps only its last result.
+  LibreOffice stores a formula cell as the formula, its result as a number and
+  the result as text, and a cell's value is used by formulas even with no text
+  shown, so carrying any of them over can't stay consistent. The clean model is
+  a cell holding a number or a formula, with the writers evaluating formulas and
+  writing the text, which needs cell references, number formats and
+  recalculation. DOCX table formulas (`{ = A1 }` fields) are `unknown` today, so
+  they are carried over and can go stale; they should go the same way as ODT's.
+- A link's target frame (`office:target-frame-name`, `w:tgtFrame`) is dropped.
+  If it's ever wanted, an enum (`same_window`, `new_window`, ...) rather than
+  frame names.
+
+## 3. Internal quality
 
 ### Share the image resource plan
 
@@ -181,62 +195,20 @@ Options:
 - Revisit the third-party route if HTML _parsing_ becomes a goal. Then one
   library covering both directions would earn its place.
 
-### Model gaps
-
-- `set_style(style)` keeps only the name. `text_doc::add_style()` registers a
-  definition and returns its name, but nothing yet checks that every style a
-  node names is defined.
-- Bookmark names aren't checked for repeats. Copying a paragraph that holds a
-  bookmark repeats its name, and a link to it is then ambiguous. Report
-  repeats (with the style check above) rather than renaming them, since a
-  writer can't tell which one a link meant.
-- Package entries that no `image` referred to at load (e.g. pictures used only
-  by `unknown` markup) stay in the ODT package and are carried over on save,
-  even if nothing uses them any more. Resources whose image was removed are
-  dropped.
-- Code blocks are paragraphs styled `builtin::preformatted`, so a Markdown
-  fence's info string (` ```c++ `) has nowhere to go and is dropped. Code blocks
-  are now as common as headings, so a `code_block` block node (text plus
-  `language`) would make them first class. ODT would still write it as a
-  Preformatted Text paragraph, keeping the language in a derived style or an
-  attribute, and HTML as `<pre><code class="language-…">`.
-- **Frame placement** (later). Frames are always in the line of text. A
-  portable subset all of ODT, DOCX and HTML can hold: in the line; a block on
-  its own line, left, centred or right, text above and below; floating left
-  or right with text wrapping round it (ODT anchored to the paragraph with a
-  graphic style's `style:wrap`, DOCX `wp:anchor` with `wrapSquare`, HTML
-  `float`). Offsets, page anchors and behind-text would still be dropped.
-  The DOCX writer would then write `wp:inline` / `wp:anchor` from the model
-  rather than reuse the loaded drawing's.
-- `frame` holds only an image. ODF frames can also hold text boxes and objects.
-- HTML: images can only be written as files. A `data:` URI mode would give a
-  single self-contained page.
-- HTML: list number prefixes and suffixes aren't reflected in the CSS.
-- Font sizes are points only, so a parsed `130%` is dropped. Editing a loaded
-  style rewrites it from the model and drops what the model doesn't hold;
-  updating only the modelled attributes in place would keep the rest.
-- **Cell values and formulas** (later). Cells are text: ODT's `office:value`
-  and `table:formula` are dropped, so a formula cell keeps only its last
-  result. LibreOffice stores a formula cell as the formula, its result as a
-  number and the result as text, and a cell's value is used by formulas even
-  with no text shown, so carrying any of them over can't stay consistent. The
-  clean model is a cell holding a number or a formula, with the writers
-  evaluating formulas and writing the text, which needs cell references,
-  number formats and recalculation. DOCX table formulas (`{ = A1 }` fields) are
-  `unknown` today, so they are carried over and can go stale; they should go
-  the same way as ODT's.
-
 ## Testing
 
+- **What a load and save loses.** `tests/odt/test_odt_loss.cpp` has a test for
+  each kind of ODF content the model doesn't hold, saying whether it's kept or
+  dropped and why (DESIGN.md, _Document model_). A new case gets a test there.
 - **LibreOffice validation in CI.** `libreoffice_opens_output` has LibreOffice
   open every file the tests write, when `soffice` is found. Installing
   LibreOffice (`apt-get install libreoffice-writer`) in one Linux CI job would
   run it on every change. Word itself is stricter than LibreOffice about element
   order; nothing checks DOCX output against it.
-- **Fixtures:** the old experimental samples were deleted. Add small, targeted
-  `.odt` fixtures per feature (lists, figures, bookmarks, page breaks, nested
-  tables, header rows) as tests need them. `examples/report_template.odt`, as
-  LibreOffice saved it, covers headers, footers, fields and a table of contents.
+- **Fixtures:** add small, targeted `.odt` fixtures per feature (lists, figures,
+  bookmarks, page breaks, nested tables, header rows) as tests need them.
+  `examples/report_template.odt`, as LibreOffice saved it, covers headers,
+  footers, fields and a table of contents.
 
 ## Performance (deferred)
 

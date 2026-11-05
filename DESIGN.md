@@ -22,7 +22,8 @@ validation layer. Copy and `operator==` are compiler-generated, and traversal is
 An `unknown` node stores verbatim XML for anything the parser does not model, so
 foreign content survives a parse → write round trip. Only block- and inline-level
 content is kept this way: unrecognised children _inside_ a table or list, and
-unknown attributes on known elements, are dropped (TODO.md, *Correctness*).
+unknown attributes on known elements, are dropped; `tests/odt/test_odt_loss.cpp`
+has a test for each case.
 
 Content the model doesn't hold is either modelled or dropped, all or nothing:
 what can't be modelled isn't kept half-modelled, since raw markup carried over
