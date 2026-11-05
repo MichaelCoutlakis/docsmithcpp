@@ -959,6 +959,10 @@ private:
                                                       : "left");
         auto look = tbl_pr.append_child("w:tblLook");
         look.append_attribute("w:val") = "04A0";
+        if(!t.accessibility_title.empty())
+            set_val(tbl_pr.append_child("w:tblCaption"), t.accessibility_title);
+        if(!t.accessibility_description.empty())
+            set_val(tbl_pr.append_child("w:tblDescription"), t.accessibility_description);
         std::vector<int> col_widths;
         for(double share : column_shares(t))
             col_widths.push_back(static_cast<int>(table_width * share + 0.5));
@@ -1353,7 +1357,10 @@ private:
                 if(auto blip = find_descendant(d, "a:blip"))
                     blip.attribute("r:embed").set_value(id.c_str());
                 if(auto pr = find_descendant(d, "wp:docPr"))
+                {
                     pr.attribute("id").set_value(drawing_id);
+                    set_alt_text(pr, f);
+                }
                 // The model's size wins over the one the file had.
                 auto ext = find_descendant(d, "wp:extent");
                 auto xfrm = find_descendant(d, "pic:spPr").child("a:xfrm").child("a:ext");
@@ -1410,6 +1417,20 @@ private:
             "</a:graphic></wp:inline></w:drawing>";
         run.append_buffer(xml.data(), xml.size());
         find_descendant(run, "pic:cNvPr").attribute("name").set_value(file.c_str());
+        set_alt_text(find_descendant(run, "wp:docPr"), f);
+    }
+
+    /// The frame's alternative text on wp:docPr, in place of any it had.
+    static void set_alt_text(pugi::xml_node doc_pr, const frame &f)
+    {
+        for(const auto &[name, value] :
+            {std::pair<const char *, const std::string &>{"descr", f.accessibility_description},
+                {"title", f.accessibility_title}})
+        {
+            doc_pr.remove_attribute(name);
+            if(!value.empty())
+                doc_pr.append_attribute(name) = value.c_str();
+        }
     }
 
     const text_doc &m_doc;

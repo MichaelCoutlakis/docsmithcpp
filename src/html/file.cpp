@@ -580,6 +580,14 @@ private:
         indent();
         m_os << "<table";
         class_attr(t.style);
+        if(const auto &label =
+                t.accessibility_title.empty() ? t.accessibility_description : t.accessibility_title;
+            !label.empty())
+        {
+            m_os << " aria-label=\"";
+            escape(m_os, label, true);
+            m_os << '"';
+        }
         if(lines && t.style.is_empty())
             m_os << " style=\"border-collapse: collapse;\"";
         m_os << ">\n";
@@ -810,7 +818,12 @@ private:
                      << "pt;";
             m_os << '"';
         }
-        m_os << " alt=\"\">";
+        // The title is the short alternative alt wants; else the description.
+        m_os << " alt=\"";
+        escape(m_os,
+            f.accessibility_title.empty() ? f.accessibility_description : f.accessibility_title,
+            true);
+        m_os << "\">";
     }
 
     std::string src(const std::string &uri) const

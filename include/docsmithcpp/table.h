@@ -138,6 +138,11 @@ public:
     /// The table's name in formats that name tables (ODT); empty lets the
     /// writer choose.
     std::string name;
+    /// Alternative text for screen readers and accessible PDF, not shown: a
+    /// short title and a longer description. Not a visible caption, which is
+    /// a paragraph of its own.
+    std::string accessibility_title;
+    std::string accessibility_description;
 
     table() = default;
     table(size_t num_rows, size_t num_cols);

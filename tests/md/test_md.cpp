@@ -332,6 +332,17 @@ void expect_round_trip(const std::string &markdown)
 }
 } // namespace
 
+TEST(Markdown, ImageAltText)
+{
+    frame f(image{"a.png"});
+    f.accessibility_description = "described [here]";
+    EXPECT_EQ(md_of(text_doc{f}), "![described \\[here\\]](a.png)\n")
+        << "the description, with no title";
+    f.accessibility_title = "Title";
+    EXPECT_EQ(md_of(text_doc{f}), "![Title](a.png)\n");
+    expect_round_trip("![Title](a.png)\n");
+}
+
 TEST(MarkdownInput, Blocks)
 {
     const text_doc doc = md::parse("# Title\n\nSome *text*.\n\n---\n\n```c++\nint x;\n```\n");
@@ -369,7 +380,9 @@ TEST(MarkdownInput, ImagesAndBookmarkLinks)
 {
     const text_doc doc = md::parse("![alt *text*](pic.png)\n\nsee ![](a.png) and [x](#m)\n");
     ASSERT_EQ(doc.body.size(), 2U);
-    EXPECT_EQ(doc.body[0], block_node{frame(image{"pic.png"})});
+    frame alt(image{"pic.png"});
+    alt.accessibility_title = "alt text"; // its text, without the emphasis
+    EXPECT_EQ(doc.body[0], block_node{alt});
     EXPECT_EQ(doc.body[1],
         block_node{
             paragraph("see ", frame(image{"a.png"}), " and ", hyperlink(bookmark{"m"}, "x"))});

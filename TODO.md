@@ -17,7 +17,7 @@ children _inside_ tables and lists, and unknown _attributes_ on known elements,
 are dropped. So load, edit, save of a real-world file can silently lose content.
 
 Done: a table's name, style, row styles, column widths and columns' default
-cell styles (a column's style); list numbering (a
+cell styles (a column's style); alternative text for images and tables; list numbering (a
 list header, an item's start value, a list continuing the count); an image's
 size. Decided, and dropped when read:
 
@@ -37,13 +37,6 @@ size. Decided, and dropped when read:
 
 Decided, to do:
 
-- **Alternative text**: model `accessibility_title` and
-  `accessibility_description` on `frame` and `table`. ODT `svg:title`/`svg:desc`
-  on the frame and `table:title`/`table:desc`; DOCX `wp:docPr` `title`/`descr`
-  and `w:tblCaption`/`w:tblDescription` (the DOCX writer reuses a loaded
-  drawing's XML, so it must set `docPr` from the model); HTML `alt` (title,
-  else description) on images, `aria-label` on tables; Markdown the image's
-  `![alt]`, tables drop it. Not a visible caption, and not `table::name`.
 - **Link styles**: `hyperlink` gets a `style` (a text style), as `span` has.
   ODT `text:a text:style-name`, DOCX the run style, HTML a class. Unstyled,
   writers keep their defaults (DOCX `Hyperlink`; ODT none, as LibreOffice

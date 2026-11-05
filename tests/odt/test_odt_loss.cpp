@@ -145,35 +145,30 @@ TEST(ODT_Loss, FramesAreAnchoredAsCharacters)
     }
 }
 
-// An image's alternative text. Every format has it (DOCX wp:docPr descr, HTML
-// alt), so it would be a model field; HTML writes alt="" today.
-// Decided, not done yet: frame::accessibility_title and
-// frame::accessibility_description (TODO.md, Correctness).
-TEST(ODT_Loss, ImageTitleAndDescriptionAreDropped)
+// An image's and a table's alternative text: a title and a description, for
+// screen readers (DOCX wp:docPr and w:tblCaption / w:tblDescription, HTML alt
+// and aria-label).
+// Decided: modelled as accessibility_title and accessibility_description.
+TEST(ODT_Loss, ImageTitleAndDescriptionAreKept)
 {
     const resaved r("image_alt",
         R"(<text:p><draw:frame svg:width="1cm" svg:height="1cm">)" + smiley +
             "<svg:title>Smiley</svg:title><svg:desc>A smiling face</svg:desc>"
             "</draw:frame></text:p>");
-    EXPECT_TRUE(r.node("//draw:frame"));
-    EXPECT_FALSE(r.node("//draw:frame/svg:title"));
-    EXPECT_FALSE(r.node("//draw:frame/svg:desc"));
+    EXPECT_STREQ(r.node("//draw:frame/svg:title").text().as_string(), "Smiley");
+    EXPECT_STREQ(r.node("//draw:frame/svg:desc").text().as_string(), "A smiling face");
 }
 
-// A table's title and description, for accessibility (DOCX tblCaption and
-// tblDescription).
-// Decided, not done yet: table::accessibility_title and
-// table::accessibility_description, like the image's.
-TEST(ODT_Loss, TableTitleAndDescriptionAreDropped)
+TEST(ODT_Loss, TableTitleAndDescriptionAreKept)
 {
     const resaved r("table_title",
         R"(<table:table table:name="T"><table:title>Results</table:title>)"
         R"(<table:desc>One row per test</table:desc><table:table-column/>)"
         R"(<table:table-row><table:table-cell><text:p>x</text:p></table:table-cell>)"
         R"(</table:table-row></table:table>)");
-    EXPECT_TRUE(r.node("//table:table"));
-    EXPECT_FALSE(r.node("//table:table/table:title"));
-    EXPECT_FALSE(r.node("//table:table/table:desc"));
+    EXPECT_STREQ(r.node("//table:table/table:title").text().as_string(), "Results");
+    EXPECT_STREQ(r.node("//table:table/table:desc").text().as_string(), "One row per test");
+    EXPECT_STREQ(r.node("//table:table").first_child().name(), "table:title") << "first, as ODF requires";
 }
 
 // Where a link opens (HTML target, DOCX w:tgtFrame), and the link's own

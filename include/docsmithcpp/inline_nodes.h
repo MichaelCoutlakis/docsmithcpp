@@ -60,6 +60,10 @@ public:
     /// where it can read it.
     std::optional<length> width;
     std::optional<length> height;
+    /// Alternative text for screen readers, accessible PDF and HTML's alt,
+    /// not shown: a short title and a longer description.
+    std::string accessibility_title;
+    std::string accessibility_description;
 
     frame() = default;
     explicit frame(image i) :

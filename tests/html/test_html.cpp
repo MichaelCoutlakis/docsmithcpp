@@ -506,6 +506,18 @@ TEST(HTML, ListNumbering)
     EXPECT_TRUE(has(html, R"(<ol class="N" start="7">)"));
 }
 
+TEST(HTML, AlternativeText)
+{
+    frame f(image{"a.png"});
+    f.accessibility_title = "A \"dot\"";
+    f.accessibility_description = "Long";
+    table t = table::from_cells({{"x"}});
+    t.accessibility_description = "Results & more";
+    const std::string html = html::file(text_doc{paragraph(f), t}).to_string();
+    EXPECT_TRUE(has(html, R"(<img src="a.png" alt="A &quot;dot&quot;">)")) << html;
+    EXPECT_TRUE(has(html, R"(<table aria-label="Results &amp; more">)")) << html;
+}
+
 TEST(HTML, ImageSize)
 {
     frame f(image{"https://example.com/a.png"});

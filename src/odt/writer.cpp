@@ -709,6 +709,10 @@ void writer::emit(pugi::xml_node parent, const frame &f)
     if(f.height)
         n.append_attribute("svg:height") = (detail::to_string(f.height->m_points) + "pt").c_str();
     emit(n, f.img);
+    if(!f.accessibility_title.empty())
+        n.append_child("svg:title").text() = f.accessibility_title.c_str();
+    if(!f.accessibility_description.empty())
+        n.append_child("svg:desc").text() = f.accessibility_description.c_str();
 }
 
 void writer::emit(pugi::xml_node parent, const image &v)
@@ -932,6 +936,10 @@ void writer::emit(pugi::xml_node parent, const table &t)
         n.append_attribute("table:name") = t.name.c_str();
     if(!t.style.is_empty())
         n.append_attribute("table:style-name") = t.style.get_name().c_str();
+    if(!t.accessibility_title.empty())
+        n.append_child("table:title").text() = t.accessibility_title.c_str();
+    if(!t.accessibility_description.empty())
+        n.append_child("table:desc").text() = t.accessibility_description.c_str();
 
     // Columns with a width get an automatic style for it. Without widths,
     // neighbouring columns with the same style are written once, repeated.

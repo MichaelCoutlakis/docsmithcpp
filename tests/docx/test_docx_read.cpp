@@ -114,11 +114,15 @@ text_doc every_node()
     t.cell(1, 1).add(paragraph("x")).add(paragraph("y"));
     t.cell(2, 2).add(table::from_cells({{{"n"}}}));
     t.set_header_rows(1);
+    t.accessibility_title = "Grid";
+    t.accessibility_description = "Spanned cells and a nested table";
     doc.add(t);
     // Read back with the size written, so it has one.
     frame sized(img);
     sized.width = pt(36);
     sized.height = pt(24);
+    sized.accessibility_title = "Dot";
+    sized.accessibility_description = "A single \"dot\" & nothing else";
     doc.add(sized);
     doc.add(paragraph("inline ", sized, " image"));
     doc.add(paragraph("int main()\n{\n    return 0;\n}").set_style(builtin::preformatted));

@@ -72,6 +72,11 @@ held in `std::variant`. This is a breaking change to almost every public API.
   directory. Generated test files go to `tests/odt/out/`.
 
 ### Added
+- **Alternative text** for images and tables: `accessibility_title` and
+  `accessibility_description` on `frame` and `table`. ODT (`svg:title`, `svg:desc`,
+  `table:title`, `table:desc`) and DOCX (`wp:docPr` `title` / `descr`, `w:tblCaption`,
+  `w:tblDescription`) read and write them; HTML writes `alt` and `aria-label`, and
+  Markdown reads and writes an image's alt text. HTML wrote `alt=""` before.
 - **List numbering**: `list::continue_numbering` carries a list's count on from
   the last list of its style, `list_item::start_value` restarts the count at an
   item, and `list_item::numbered` (false) is an item with no number or bullet,

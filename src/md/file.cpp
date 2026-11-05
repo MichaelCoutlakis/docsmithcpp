@@ -615,7 +615,28 @@ private:
     void emit(const unknown &, context, std::string &) { }
 
     std::string image(const frame &f)
-    { return "![](" + destination(m_plan.src_of(f.img.uri), context::block) + ')'; }
+    {
+        return "![" +
+            alt_text(f.accessibility_title.empty() ? f.accessibility_description
+                                                   : f.accessibility_title) +
+            "](" + destination(m_plan.src_of(f.img.uri), context::block) + ')';
+    }
+
+    /// An image's alt text, on one line, with what would end it or read as
+    /// markup escaped.
+    static std::string alt_text(std::string_view s)
+    {
+        std::string out;
+        for(char c : s)
+        {
+            if(c == '\n' || c == '\r' || c == '\t')
+                c = ' ';
+            if(std::string_view("\\[]*_`<&!").find(c) != std::string_view::npos)
+                out += '\\';
+            out += c;
+        }
+        return out;
+    }
 
     static std::string escape_pipes(std::string_view s)
     {

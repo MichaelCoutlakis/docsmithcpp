@@ -69,6 +69,8 @@ frame parse_frame(const pugi::xml_node &node)
     f.height = length_from(node.attribute("svg:height").as_string());
     if(auto img = node.child("draw:image"))
         f.img = parse_image(img);
+    f.accessibility_title = node.child("svg:title").text().as_string();
+    f.accessibility_description = node.child("svg:desc").text().as_string();
     return f;
 }
 
@@ -285,6 +287,8 @@ table parse_table(const pugi::xml_node &node)
     t.set_header_rows(header_rows);
     t.style = style_of(node, "table:style-name");
     t.name = node.attribute("table:name").as_string();
+    t.accessibility_title = node.child("table:title").text().as_string();
+    t.accessibility_description = node.child("table:desc").text().as_string();
 
     std::vector<column> columns;
     parse_columns(node, columns);

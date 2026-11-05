@@ -1013,6 +1013,12 @@ private:
             m_st.drawings[uri] = drawing{m_part, inline_drawing(d)};
         frame f(image{uri});
         for(auto shape : d.children())
+            if(auto pr = shape.child("wp:docPr"))
+            {
+                f.accessibility_title = pr.attribute("title").as_string();
+                f.accessibility_description = pr.attribute("descr").as_string();
+            }
+        for(auto shape : d.children())
             if(auto ext = shape.child("wp:extent"))
             {
                 // EMU: 12700 to the point.
@@ -1112,6 +1118,8 @@ private:
         auto tbl_pr = tbl.child("w:tblPr");
         if(const std::string id = val(tbl_pr, "w:tblStyle"); !id.empty())
             t.style = style_name(name_of(id));
+        t.accessibility_title = val(tbl_pr, "w:tblCaption");
+        t.accessibility_description = val(tbl_pr, "w:tblDescription");
 
         std::vector<double> widths;
         for(auto col : tbl.child("w:tblGrid").children("w:gridCol"))

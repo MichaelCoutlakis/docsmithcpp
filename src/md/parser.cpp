@@ -365,7 +365,8 @@ public:
         case MD_SPAN_IMG:
             inlines().push_back(
                 inline_node{frame(image{decode(static_cast<MD_SPAN_IMG_DETAIL *>(detail)->src)})});
-            m_alt = 1; // the model has no alt text
+            m_alt = 1; // its text is the alt text, not content
+            m_alt_frame = &std::get<frame>(inlines().back().v);
             break;
         default: m_inlines.push_back(&inlines()); break; // e.g. strikethrough: text only
         }
@@ -376,8 +377,8 @@ public:
     {
         if(m_alt)
         {
-            if(type == MD_SPAN_IMG)
-                --m_alt;
+            if(type == MD_SPAN_IMG && --m_alt == 0)
+                m_alt_frame = nullptr;
             return 0;
         }
         m_inlines.pop_back();
@@ -386,6 +387,13 @@ public:
 
     int on_text(MD_TEXTTYPE type, std::string_view s)
     {
+        if(m_alt && m_alt_frame && !m_skip)
+        {
+            m_alt_frame->accessibility_title += type == MD_TEXT_ENTITY ? decode_entity(s)
+                : type == MD_TEXT_SOFTBR || type == MD_TEXT_BR       ? std::string(" ")
+                                                                     : std::string(s);
+            return 0;
+        }
         if(m_skip || m_alt)
             return 0;
         if(m_code && type == MD_TEXT_CODE)
@@ -549,6 +557,7 @@ private:
     int m_quote{0};
     int m_skip{0}; //!< Inside an HTML block
     int m_alt{0};  //!< Inside an image's alt text
+    frame *m_alt_frame = nullptr; //!< The image whose alt text it is
     bool m_code{false};
     bool m_implicit{false}; //!< The innermost paragraph was opened for bare inline content
     std::string m_code_text;

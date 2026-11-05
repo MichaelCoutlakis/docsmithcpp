@@ -51,9 +51,9 @@ What each node holds, independent of any one format. "Inline" is a sequence of
 | `heading` | block | inline | styled; `level` |
 | `list` | block | `list_item`s | styled with a list style; `continue_numbering` |
 | `list_item` | — | blocks | `numbered`, `start_value` |
-| `table` | block | a grid of `table_cell`s | styled; always rectangular; per row a style, per column a width and a cell style; the first `header_rows()` rows are header rows |
+| `table` | block | a grid of `table_cell`s | styled; always rectangular; per row a style, per column a width and a cell style; the first `header_rows()` rows are header rows; `accessibility_title`, `accessibility_description` |
 | `table_cell` | — | blocks | styled; `props` (direct formatting); `rowspan`, `colspan`; a covered slot holds a placeholder cell |
-| `frame` | block, inline | an `image` | styled; `width`, `height` |
+| `frame` | block, inline | an `image` | styled; `width`, `height`; `accessibility_title`, `accessibility_description` |
 | `page_break` | block | — | starts a new page |
 | `table_of_contents` | block | — | `title`, `levels`; the entries are made by writers |
 | `text` | inline | a string | white space as is, `'\t'` a tab, `'\n'` a line break |
@@ -80,6 +80,13 @@ on.
   or page), its position and how text wraps round it aren't modelled, and are
   dropped when read, so a floating picture comes back in the line at its
   anchor (TODO.md, *Model gaps*).
+- **Alternative text.** A frame or table can have an `accessibility_title` and
+  `accessibility_description`: for screen readers and accessible PDF, never
+  shown. ODT writes them as `svg:title` / `svg:desc` in the frame and
+  `table:title` / `table:desc` in the table, DOCX as `wp:docPr` `title` /
+  `descr` and `w:tblCaption` / `w:tblDescription`, HTML as `alt` on images and
+  `aria-label` on tables (the title, else the description), Markdown as an
+  image's alt text. A visible caption is a paragraph of its own.
 - **List numbering.** A list's count starts at its list style's start for that
   level, or with `continue_numbering` carries on from the last list before it
   with the same list style at the same depth. An item's `start_value` restarts
@@ -519,7 +526,7 @@ looks right in an `.odt` and writes back to the same Markdown.
 | `bookmark` | `<a id="name"></a>` | a bookmark |
 | `list` | `-` or `1.` from its list style at that level, each item with its number (renderers take only the first item's) | list styled `List_20_1` or `Numbering_20_123[_start_N]` |
 | `table` | GFM table | the same, see below |
-| `frame` | `![](uri)`, its size dropped; a block frame is a paragraph of its own | a paragraph holding only an image is a block frame |
+| `frame` | `![alt](uri)`, the alt its accessibility title (else description), its size dropped; a block frame is a paragraph of its own | the alt as its accessibility title; a paragraph holding only an image is a block frame |
 | `page_break` | thematic break `---` | `page_break` |
 | `table_of_contents` | its title as a paragraph, then nested `-` lists of `[heading](#id)` links; headings without a bookmark get an `<a id>` anchor with the same slug HTML uses | the paragraph and lists |
 | `field` | the title or date as text; page number and count left out | text |
@@ -591,7 +598,7 @@ are kept, renamed only if they clash, and `mc:Ignorable` follows them.
 | `bookmark` | `w:bookmarkStart` and `w:bookmarkEnd` | a bookmark; `_Toc...` ones are dropped |
 | `list` | items are paragraphs with `w:numPr` (`w:ilvl` = depth); see below | lists, nested by `w:ilvl` |
 | `table` | `w:tbl` on an even grid at full width, `w:gridSpan`, `w:vMerge`, `w:tblHeader` on the first `header_rows` rows; no borders | the same; cell, row and table properties are dropped |
-| `frame` | `w:drawing/wp:inline`; a block frame is a paragraph of its own | a frame; an unstyled paragraph holding only an image is a block frame |
+| `frame` | `w:drawing/wp:inline`, alternative text as `wp:docPr` `title` and `descr`; a block frame is a paragraph of its own | a frame; an unstyled paragraph holding only an image is a block frame |
 | `page_break` | a paragraph holding `w:br w:type="page"` | a page break; one inside a paragraph splits it, and `w:pageBreakBefore` on a paragraph is one before it |
 | `table_of_contents` | see below | the title and levels |
 | `field` | `w:fldSimple` `PAGE`, `NUMPAGES`, `DATE \@ "yyyy-MM-dd"`, `TITLE`, with the value it shows | those four, from simple or complex (`w:fldChar`) fields |
