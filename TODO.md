@@ -18,12 +18,21 @@ are dropped. So load, edit, save of a real-world file can silently lose content.
 
 Done: a table's name, style, row styles and column widths; list numbering (a
 list header, an item's start value, a list continuing the count); an image's
-size. Decided: soft page breaks and list labels (`text:number`) are layout
-caches and dropped; element ids (`xml:id`) are dropped, since nothing the
-model holds refers to them; frames are in the line of text (`as-char`,
-`wp:inline`) and their anchor, position and wrap are dropped; cells are text, so a cell's value and formula
-(`office:value-type`, `office:value`, `table:formula`) are dropped and a formula
-cell becomes its last result (_Model gaps_ has modelling them).
+size. Decided, and dropped when read:
+
+- soft page breaks and list labels (`text:number`): layout caches;
+- element ids (`xml:id`): nothing the model holds refers to them;
+- a frame's anchor, position and wrap: frames are in the line of text
+  (`as-char`, `wp:inline`);
+- a link's target frame (`office:target-frame-name`, `w:tgtFrame`): niche; if
+  it's ever wanted, an enum (`same_window`, `new_window`, ...) rather than
+  frame names;
+- a link's visited style (`text:visited-style-name`): only ODF has it;
+- attributes in other namespaces (`loext:`, other applications' extensions):
+  niche, and keeping them needs _Namespace prefixes in ODT_ first;
+- a cell's value and formula (`office:value-type`, `office:value`,
+  `table:formula`): cells are text, so a formula cell becomes its last result
+  (_Model gaps_ has modelling them).
 
 Decided, to do:
 
@@ -34,16 +43,17 @@ Decided, to do:
   drawing's XML, so it must set `docPr` from the model); HTML `alt` (title,
   else description) on images, `aria-label` on tables; Markdown the image's
   `![alt]`, tables drop it. Not a visible caption, and not `table::name`.
+- **Link styles**: `hyperlink` gets a `style` (a text style), as `span` has.
+  ODT `text:a text:style-name`, DOCX the run style, HTML a class. Unstyled,
+  writers keep their defaults (DOCX `Hyperlink`; ODT none, as LibreOffice
+  styles a typed URL itself).
 
 The rule (DESIGN.md, _Document model_): what the model could hold in every
 format is modelled; the rest is dropped on purpose, not carried over half
 modelled. `tests/odt/test_odt_loss.cpp` has a test per case left, recording what
 happens today. To decide, each, then change its test to match:
 
-- **Link target frame** (`office:target-frame-name`) and link character styles.
 - **A column's default cell style**: resolve it into the cells when reading.
-- **Attributes in other namespaces**: whether to keep them at all; keeping them
-  needs _Namespace prefixes in ODT_ first.
 
 DOCX: the reader doesn't see a nested styled list continue, and an unnumbered
 item reads back as more of the item before it.

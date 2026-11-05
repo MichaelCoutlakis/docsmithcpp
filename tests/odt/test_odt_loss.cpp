@@ -177,9 +177,10 @@ TEST(ODT_Loss, TableTitleAndDescriptionAreDropped)
 }
 
 // Where a link opens (HTML target, DOCX w:tgtFrame), and the link's own
-// character styles.
-// To decide: model the target frame; the styles go with character styles on
-// links generally.
+// character styles, unvisited and visited.
+// Decided: the target frame and the visited style are dropped. The style is
+// to be modelled as hyperlink::style (TODO.md, Correctness); dropped until
+// then.
 TEST(ODT_Loss, LinkTargetFrameAndStylesAreDropped)
 {
     const resaved r("link_target",
@@ -257,7 +258,7 @@ TEST(ODT_Loss, ListLabelCacheIsDropped)
 // application's extension). Carrying it over means declaring its namespace
 // too, which the ODT reader can't yet tell (TODO.md, Namespace prefixes in
 // ODT).
-// To decide: whether foreign attributes are kept at all.
+// Decided: dropped. Niche, and keeping them needs the namespace work first.
 TEST(ODT_Loss, ForeignAttributesAreDropped)
 {
     const resaved r("foreign_attribute", R"(<text:p xmlns:x="urn:example" x:flag="1">x</text:p>)");
