@@ -213,3 +213,34 @@ TEST(Table, DefaultTableStyle)
     EXPECT_EQ(effective_cell_props(t, doc.styles(), 0, 0).m_borders.m_top, thin)
         << "an unstyled table has the default's lines";
 }
+
+TEST(Table, ViewsSkipCoveredSlots)
+{
+    // A A B
+    // C D B   (A spans two columns, B two rows)
+    table t(2, 3);
+    t.cell(0, 0).set_span(1, 2);
+    t.cell(0, 2).set_span(2, 1);
+
+    EXPECT_EQ(t.row(0).size(), 2u);
+    t.row(1).assign("C", "D");
+    EXPECT_EQ(t.cell(1, 0), table_cell("C"));
+    EXPECT_EQ(t.cell(1, 1), table_cell("D"));
+    EXPECT_EQ(t.col(1).size(), 1u) << "(0, 1) is covered by A";
+    EXPECT_EQ(std::as_const(t).col(2).size(), 1u);
+    EXPECT_TRUE(t.is_cell_covered(0, 1));
+    EXPECT_TRUE(t.is_cell_covered(1, 2));
+    EXPECT_FALSE(t.is_cell_covered(1, 1));
+}
+
+TEST(Table, SpanMustBePositive)
+{
+    EXPECT_THROW(table_cell().set_span(1, 0), std::invalid_argument);
+    EXPECT_THROW(table_cell().set_span(-1, 1), std::invalid_argument);
+
+    // A bad span set directly doesn't hang the views.
+    table t(1, 2);
+    t.cell(0, 0).colspan = 0;
+    EXPECT_EQ(t.row(0).size(), 2u);
+    EXPECT_FALSE(t.is_cell_covered(0, 1));
+}

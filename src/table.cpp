@@ -104,53 +104,43 @@ table &table::set_column_style(size_t c, style_name sn)
     return *this;
 }
 
-cell_view<table_cell> table::row(size_t row_idx)
+namespace
 {
-    std::vector<table_cell *> cells;
-    for(size_t col_idx{}; col_idx < num_cols(); col_idx += cell(row_idx, col_idx).colspan)
-        cells.push_back(&cell(row_idx, col_idx));
-    return cell_view<table_cell>(std::move(cells));
-}
-cell_view<table_cell> table::col(size_t col_idx)
+/// The cells that start in a row (or a column) of t, leaving out the slots a
+/// span from another cell covers.
+template <typename Cell, typename Table>
+cell_view<Cell> line_cells(Table &t, const std::vector<size_t> &origins, bool is_row, size_t idx)
 {
-    std::vector<table_cell *> cells;
-    for(size_t row_idx{}; row_idx < num_rows(); row_idx += cell(row_idx, col_idx).rowspan)
-        cells.push_back(&cell(row_idx, col_idx));
-    return cell_view<table_cell>(std::move(cells));
+    if(idx >= (is_row ? t.num_rows() : t.num_cols()))
+        throw std::out_of_range(is_row ? "table row out of range" : "table column out of range");
+    std::vector<Cell *> out;
+    const size_t count = is_row ? t.num_cols() : t.num_rows();
+    for(size_t k = 0; k != count; ++k)
+    {
+        const size_t r = is_row ? idx : k;
+        const size_t c = is_row ? k : idx;
+        if(origins[r * t.num_cols() + c] == r * t.num_cols() + c)
+            out.push_back(&t.cell(r, c));
+    }
+    return cell_view<Cell>(std::move(out));
 }
+} // namespace
 
+cell_view<table_cell> table::row(size_t row_idx)
+{ return line_cells<table_cell>(*this, origins(), true, row_idx); }
+cell_view<table_cell> table::col(size_t col_idx)
+{ return line_cells<table_cell>(*this, origins(), false, col_idx); }
 cell_view<const table_cell> table::row(size_t row_idx) const
-{
-    std::vector<const table_cell *> cells;
-    for(size_t col_idx{}; col_idx < num_cols(); col_idx += cell(row_idx, col_idx).colspan)
-        cells.push_back(&cell(row_idx, col_idx));
-    return cell_view<const table_cell>(std::move(cells));
-}
+{ return line_cells<const table_cell>(*this, origins(), true, row_idx); }
 cell_view<const table_cell> table::col(size_t col_idx) const
-{
-    std::vector<const table_cell *> cells;
-    for(size_t row_idx{}; row_idx < num_rows(); row_idx += cell(row_idx, col_idx).rowspan)
-        cells.push_back(&cell(row_idx, col_idx));
-    return cell_view<const table_cell>(std::move(cells));
-}
+{ return line_cells<const table_cell>(*this, origins(), false, col_idx); }
 
 bool table::is_cell_covered(size_t row, size_t col) const
 {
     if(row >= num_rows() || col >= num_cols())
         throw std::out_of_range("table cell out of range");
-
-    // Any of the preceding cells (row- or column-wise) could cover this cell.
-    for(size_t r = 0; r <= row; ++r)
-    {
-        for(size_t c = 0; c <= col; ++c)
-        {
-            if(r + static_cast<size_t>(cell(r, c).rowspan) > row && // covered row-wise
-                c + static_cast<size_t>(cell(r, c).colspan) > col && // covered col-wise
-                !(r == row && c == col))                             // not the cell itself
-                return true;
-        }
-    }
-    return false;
+    const size_t i = row * m_cols + col;
+    return origins()[i] != i;
 }
 
 std::vector<size_t> table::origins() const

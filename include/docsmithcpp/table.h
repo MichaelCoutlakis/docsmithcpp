@@ -23,6 +23,7 @@
 #include <cstddef>
 #include <optional>
 #include <span>
+#include <stdexcept>
 #include <utility>
 #include <vector>
 
@@ -45,8 +46,11 @@ public:
     table_cell(Args &&...content)
     { (this->add(std::forward<Args>(content)), ...); }
 
+    /// Throws std::invalid_argument unless rows and cols are at least 1.
     table_cell &set_span(int rows, int cols)
     {
+        if(rows < 1 || cols < 1)
+            throw std::invalid_argument("a cell spans at least one row and column");
         rowspan = rows;
         colspan = cols;
         return *this;
@@ -153,12 +157,17 @@ public:
     size_t num_cols() const { return m_cols; }
     size_t num_rows() const { return m_rows.size(); }
 
+    /// The cell in a slot. A slot covered by another cell's span holds a
+    /// placeholder that writers skip, so content put in it is not written:
+    /// origin() gives the cell that covers it.
     table_cell &cell(size_t r, size_t c);
     const table_cell &cell(size_t r, size_t c) const;
     /// Every cell, row by row, placeholders included.
     std::span<table_cell> cells() { return m_cells; }
     std::span<const table_cell> cells() const { return m_cells; }
 
+    /// The cells that start in a row or column, in order: slots covered by a
+    /// span from another cell are left out.
     cell_view<table_cell> row(size_t row_idx);
     cell_view<table_cell> col(size_t col_idx);
     cell_view<const table_cell> row(size_t row_idx) const;

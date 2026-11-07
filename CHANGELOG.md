@@ -327,6 +327,11 @@ held in `std::variant`. This is a breaking change to almost every public API.
 - The empty placeholder tests in `test_main.cpp`, and the `architecture/` sketches.
 
 ### Fixed
+- `table::row()` and `col()` give the cells that start in that row or column,
+  leaving out slots another cell's span covers. They included those placeholders,
+  so `row(r).assign(...)` could put content where no writer writes it, and a span
+  of 0 made them loop forever. `set_span()` throws for a span under 1, and
+  `cell()`'s documentation says a covered slot isn't written.
 - A non-const `text_props` or `paragraph_props` can be copied. Its variadic
   constructor took the copy and failed to compile.
 - A moved-from `span`, `hyperlink`, `list_item` or `table_cell` is empty. Its
