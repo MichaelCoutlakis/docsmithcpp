@@ -42,6 +42,10 @@ namespace docsmith
 //  constructor, which is only ever instantiated where T is complete (the call
 //  site). box's own destructor, copy, move and operator== therefore never
 //  require T to be complete, so the variant can be formed freely.
+//
+//  A moved-from box holds nothing, so moving stays cheap and noexcept, but it
+//  reads as an empty T (T()) and makes one when written through. So a
+//  moved-from node is an empty node, not a null pointer.
 // ============================================================================
 template <typename T>
 class box
@@ -87,20 +91,18 @@ public:
             m_vtable->destroy(m_ptr);
     }
 
-    T &operator*() noexcept { return *m_ptr; }
-    const T &operator*() const noexcept { return *m_ptr; }
-    T *operator->() noexcept { return m_ptr; }
-    const T *operator->() const noexcept { return m_ptr; }
+    T &operator*() { return *get(); }
+    const T &operator*() const { return *get(); }
+    T *operator->() { return get(); }
+    const T *operator->() const { return get(); }
 
     bool operator==(const box &other) const
     {
         if(m_ptr == other.m_ptr)
             return true;
-        if(!m_ptr || !other.m_ptr)
-            return false;
         if(!m_vtable->equal)
             throw std::logic_error("box: the held type has no operator==");
-        return m_vtable->equal(m_ptr, other.m_ptr);
+        return m_vtable->equal(get(), other.get());
     }
 
 private:
@@ -109,7 +111,25 @@ private:
         void *(*clone)(const void *);
         void (*destroy)(void *) noexcept;
         bool (*equal)(const void *, const void *);
+        const void *(*empty)(); //!< A T(), for a moved-from box; null if T has none
     };
+
+    /// The held value, or for a moved-from box, a shared T() to read.
+    const T *get() const
+    {
+        if(m_ptr)
+            return m_ptr;
+        if(!m_vtable->empty)
+            throw std::logic_error("box: used after a move, and the held type has no T()");
+        return static_cast<const T *>(m_vtable->empty());
+    }
+    /// The held value, made (a T()) for a moved-from box.
+    T *get()
+    {
+        if(!m_ptr)
+            m_ptr = static_cast<T *>(m_vtable->clone(std::as_const(*this).get()));
+        return m_ptr;
+    }
 
     struct tag
     {
@@ -135,8 +155,21 @@ private:
             [](const void *p) -> void * { return new T(*static_cast<const T *>(p)); },
             [](void *p) noexcept { delete static_cast<T *>(p); },
             equal_fn(),
+            empty_fn(),
         };
         return &vt;
+    }
+
+    static constexpr const void *(*empty_fn())()
+    {
+        if constexpr(std::default_initializable<T>)
+            return []() -> const void *
+            {
+                static const T e{};
+                return &e;
+            };
+        else
+            return nullptr;
     }
 
     static constexpr bool (*equal_fn())(const void *, const void *)

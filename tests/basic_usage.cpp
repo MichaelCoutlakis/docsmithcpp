@@ -17,6 +17,7 @@
  *****************************************************************************/
 
 #include <iostream>
+#include <sstream>
 
 #include <gtest/gtest.h>
 
@@ -47,6 +48,25 @@ TEST(BASIC_USAGE, ValueSemantics)
 
     std::get<heading>(copy.body.front().v).level = 2;
     EXPECT_NE(copy, doc);
+}
+
+TEST(BASIC_USAGE, MovedFromNodeIsEmpty)
+{
+    span a("x");
+    const span b = std::move(a);
+    EXPECT_EQ(b, span("x"));
+    EXPECT_TRUE(std::as_const(a).children().empty());
+    EXPECT_EQ(a, span{});
+    a.add("y");
+    EXPECT_EQ(a, span("y"));
+
+    // A moved-from node left in a document can still be written.
+    text_doc doc{paragraph(span("z"))};
+    auto &p = std::get<paragraph>(doc.body.front().v);
+    const auto moved = std::move(p.children().front());
+    std::ostringstream os;
+    io_writer{os}(doc);
+    EXPECT_NE(os.str().find("Span"), std::string::npos);
 }
 
 TEST(BASIC_USAGE, EqualityIncludesResources)

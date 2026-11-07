@@ -327,6 +327,9 @@ held in `std::variant`. This is a breaking change to almost every public API.
 - The empty placeholder tests in `test_main.cpp`, and the `architecture/` sketches.
 
 ### Fixed
+- A moved-from `span`, `hyperlink`, `list_item` or `table_cell` is empty. Its
+  children were a null pointer, so reading or adding to it, or writing a document
+  that still held it, crashed.
 - A string placeholder (`doc.replace("{{summary}}", ...)`) is the paragraph's text.
   It converted to a `style_name`, so it looked for a style of that name and
   matched nothing. `placeholder` is now a struct holding the variant (`v`).
