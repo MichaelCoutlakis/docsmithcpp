@@ -595,6 +595,17 @@ public:
         m_cell_props = props;
         return *this;
     }
+
+    /// The style's properties of a kind, to change some and keep the rest
+    /// (set() replaces them all). Added, empty, if it has none:
+    ///
+    ///     doc.builtin_style(builtin::heading(1)).text().set(font_size(20));
+    text_props &text() { return m_text_props ? *m_text_props : m_text_props.emplace(); }
+    paragraph_props &paragraph()
+    { return m_paragraph_props ? *m_paragraph_props : m_paragraph_props.emplace(); }
+    table_props &table() { return m_table_props ? *m_table_props : m_table_props.emplace(); }
+    cell_props &cell() { return m_cell_props ? *m_cell_props : m_cell_props.emplace(); }
+
     operator style_name() const { return m_name; }
     bool operator==(const style &rhs) const = default;
 

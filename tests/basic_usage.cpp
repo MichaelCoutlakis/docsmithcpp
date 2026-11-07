@@ -133,6 +133,21 @@ TEST(BASIC_USAGE, BuiltinStyle)
     EXPECT_THROW(doc.builtin_style(builtin::default_list), std::invalid_argument);
 }
 
+TEST(BASIC_USAGE, StylePropsInPlace)
+{
+    style s("Body", text_props(font_name("Liberation Serif"), font_size(11)));
+    s.text().set(font_size(12)).set(font_weight::bold);
+    EXPECT_EQ(
+        s.m_text_props, text_props(font_name("Liberation Serif"), font_size(12), font_weight::bold))
+        << "the rest kept";
+    s.paragraph().set(space_after{pt(6)});
+    EXPECT_EQ(s.m_paragraph_props, paragraph_props(space_after{pt(6)})) << "added";
+    s.table().set(table_align::centre);
+    s.cell().set(cell_valign::middle);
+    EXPECT_EQ(s.m_table_props->m_align, table_align::centre);
+    EXPECT_EQ(s.m_cell_props->m_valign, cell_valign::middle);
+}
+
 TEST(BASIC_USAGE, AppendCombinesBodiesAndRegistries)
 {
     text_doc doc{paragraph("first")};

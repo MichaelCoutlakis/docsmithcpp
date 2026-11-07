@@ -561,8 +561,7 @@ TEST(ODT_XML, TemplateDefaultStylesCanBeReplacedOrEdited)
     ASSERT_NE(f.doc.styles().find(builtin::link.get_name()), nullptr);
 
     // Edited in place: the rest of its definition stays.
-    h1->m_text_props = h1->m_text_props.value_or(text_props{});
-    h1->m_text_props->set(font_size(20));
+    h1->text().set(font_size(20));
     // Replaced.
     f.doc.add_or_overwrite_style(style(builtin::default_paragraph,
         style_family::paragraph,

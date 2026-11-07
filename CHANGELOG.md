@@ -240,7 +240,9 @@ held in `std::variant`. This is a breaking change to almost every public API.
   step, keeping an existing definition of that name (like `std::map::insert`);
   `add_or_overwrite_style()` replaces it, and `builtin_style(name)` gives the
   definition to edit, adding an empty one of the builtin's family if there is none:
-  `doc.builtin_style(builtin::default_paragraph).set(text_props(...))`.
+  `doc.builtin_style(builtin::default_paragraph).set(text_props(...))`. A style's
+  `text()`, `paragraph()`, `table()` and `cell()` give its properties of that kind to
+  change some and keep the rest: `style.text().set(font_size(20))`.
   `text_doc::append()` appends another document's body, styles and resources and
   throws on a name defined differently in both.
 - Text properties `font_weight` and `colour` (`fo:font-weight` / `fo:color` in ODT,
