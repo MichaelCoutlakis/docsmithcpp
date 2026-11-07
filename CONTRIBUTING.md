@@ -20,7 +20,14 @@ Use the std c++ naming conventions.
 
 Further notes:
 
-- `snake_case` for types, functions, and variables; members prefixed `m_`.
+- `snake_case` for types, functions, and variables; private members prefixed
+  `m_`.
+- Public fields: bare names on nodes, style types and list levels (`level`,
+  `parent`, `para`, `start_from`); `m_` on the property value types
+  (`text_props::m_font_size`, `length::m_points`, `space_after::m_length`).
+  There the prefix lets a field share its name with its tag type, which C++
+  doesn't allow unprefixed (`std::optional<font_size> font_size;`), so keep it
+  for consistency across all property types.
 - `PascalCase` for template parameters and for the case name in
   `TEST(Suite, CaseName)` per GTest convention.
 - Every file starts with the SPDX header block.
