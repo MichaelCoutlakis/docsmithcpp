@@ -280,6 +280,8 @@ default applies; defined, in code or by a loaded template, it applies in every
 format. Reading maps each format's default back to the definition, with the
 nodes that use it unstyled, so content added to a template gets the template's
 defaults and a round trip doesn't turn "no style" into a named one.
+`text_doc::builtin_style(name)` gives the definition to edit, the template's if
+there is one, else a new empty one of the builtin's family.
 
 | Default | ODT | DOCX | HTML |
 |---|---|---|---|

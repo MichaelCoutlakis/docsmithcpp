@@ -18,6 +18,7 @@
 #include "docsmithcpp/text_doc.h"
 
 #include <fstream>
+#include <optional>
 #include <set>
 #include <stdexcept>
 #include <utility>
@@ -135,11 +136,27 @@ found_block find_placeholder(std::vector<block_node> &blocks, const placeholder 
 }
 
 template <typename Registry, typename T>
-style_name add_checked(Registry &to, const T &value, const char *what)
+style_name add_if_new(Registry &to, const T &value)
 {
-    check_no_clash(to, value.m_name.get_name(), value, what);
-    to.add(value);
+    if(!to.find(value.m_name.get_name()))
+        to.add(value);
     return value.m_name;
+}
+
+/// The family of a builtin style, if it is one.
+std::optional<style_family> builtin_family(const style_name &name)
+{
+    if(name == builtin::source_text || name == builtin::link)
+        return style_family::text;
+    if(name == builtin::default_table)
+        return style_family::table;
+    if(name == builtin::default_paragraph || name == builtin::title ||
+        name == builtin::preformatted)
+        return style_family::paragraph;
+    for(int level = 1; level <= 10; ++level)
+        if(name == builtin::heading(level))
+            return style_family::paragraph;
+    return std::nullopt;
 }
 } // namespace
 
@@ -195,10 +212,26 @@ bool text_doc::fill(const placeholder &p, const text_doc &content, fill_mode mod
     return true;
 }
 
-style_name text_doc::add_style(const style &s) { return add_checked(m_styles, s, "Style"); }
+style_name text_doc::add_style(const style &s) { return add_if_new(m_styles, s); }
 
-style_name text_doc::add_style(const list_style &ls)
-{ return add_checked(m_list_styles, ls, "List style"); }
+style_name text_doc::add_style(const list_style &ls) { return add_if_new(m_list_styles, ls); }
+
+style_name text_doc::add_or_overwrite_style(const style &s) { return m_styles.add(s).m_name; }
+
+style_name text_doc::add_or_overwrite_style(const list_style &ls)
+{ return m_list_styles.add(ls).m_name; }
+
+style &text_doc::builtin_style(const style_name &name)
+{
+    if(name == builtin::default_list)
+        throw std::invalid_argument("builtin::default_list is a list style");
+    if(style *s = m_styles.find(name.get_name()))
+        return *s;
+    style s(name);
+    if(auto f = builtin_family(name))
+        s.set(*f);
+    return m_styles.add(s);
+}
 
 image text_doc::add_image(std::string name, std::string data, std::string media_type)
 {

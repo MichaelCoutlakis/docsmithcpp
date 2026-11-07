@@ -95,11 +95,28 @@ public:
     resource_registry &resources() { return m_resources; }
     const resource_registry &resources() const { return m_resources; }
 
-    /// Adds the style definition and returns its name, for set_style(). Adding
-    /// an equal definition again does nothing; a different definition under the
-    /// same name throws std::invalid_argument.
+    /// Adds the style definition, if none of that name is defined yet, and
+    /// returns its name, for set_style(). Like std::map::insert, an existing
+    /// definition stays as it is.
     style_name add_style(const style &s);
     style_name add_style(const list_style &ls);
+    /// Adds the style definition, replacing any of that name, and returns its
+    /// name. Like std::map::insert_or_assign.
+    style_name add_or_overwrite_style(const style &s);
+    style_name add_or_overwrite_style(const list_style &ls);
+
+    /// The definition of a style, to edit: the document's (loaded from a
+    /// template, say), else a new empty one, of the builtin's family for a
+    /// builtin. Meant for the builtin defaults:
+    ///
+    ///     doc.builtin_style(builtin::default_paragraph)
+    ///         .set(text_props(font_name("Liberation Serif"), font_size(11)));
+    ///
+    /// A new one starts empty, so the look a writer gives an undefined builtin
+    /// (ODT's Title or Heading 1, say) isn't in it. builtin::default_list is a
+    /// list style: use list_styles() or add_or_overwrite_style() for it. The
+    /// reference stays valid until the style is removed from styles().
+    style &builtin_style(const style_name &name);
 
     /// Adds data as the resource name (a relative path, e.g. "Pictures/a.png")
     /// and returns an image that refers to it.

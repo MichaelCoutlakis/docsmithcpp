@@ -237,7 +237,11 @@ held in `std::variant`. This is a breaking change to almost every public API.
   links to a bookmark; writers add the `#`, and the ODT parser turns `#x` back into a
   bookmark target. This replaces `hyperlink::url`.
 - `text_doc::add_style()` registers a style (or list style) and returns its name in one
-  step; `text_doc::append()` appends another document's body, styles and resources and
+  step, keeping an existing definition of that name (like `std::map::insert`);
+  `add_or_overwrite_style()` replaces it, and `builtin_style(name)` gives the
+  definition to edit, adding an empty one of the builtin's family if there is none:
+  `doc.builtin_style(builtin::default_paragraph).set(text_props(...))`.
+  `text_doc::append()` appends another document's body, styles and resources and
   throws on a name defined differently in both.
 - Text properties `font_weight` and `colour` (`fo:font-weight` / `fo:color` in ODT,
   `font-weight` / `color` in CSS).

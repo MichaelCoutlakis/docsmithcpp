@@ -110,10 +110,27 @@ TEST(BASIC_USAGE, AddStyle)
     EXPECT_EQ(doc.add_style(bold), style_name("Bold"));
     EXPECT_EQ(*doc.styles().find("Bold"), bold);
 
-    EXPECT_NO_THROW(doc.add_style(bold)) << "an equal definition again is fine";
-    EXPECT_THROW(
-        doc.add_style(style("Bold", text_props(font_style::italic))), std::invalid_argument);
-    EXPECT_EQ(*doc.styles().find("Bold"), bold);
+    const style italic("Bold", text_props(font_style::italic));
+    EXPECT_EQ(doc.add_style(italic), style_name("Bold"));
+    EXPECT_EQ(*doc.styles().find("Bold"), bold) << "an existing definition stays";
+
+    EXPECT_EQ(doc.add_or_overwrite_style(italic), style_name("Bold"));
+    EXPECT_EQ(*doc.styles().find("Bold"), italic);
+}
+
+TEST(BASIC_USAGE, BuiltinStyle)
+{
+    text_doc doc;
+    style &body = doc.builtin_style(builtin::default_paragraph);
+    EXPECT_EQ(body.m_family, style_family::paragraph) << "added, of the builtin's family";
+    body.set(text_props(font_size(11)));
+    EXPECT_EQ(doc.styles().find(builtin::default_paragraph.get_name())->m_text_props,
+        text_props(font_size(11)));
+    EXPECT_EQ(&doc.builtin_style(builtin::default_paragraph), &body) << "found the second time";
+    EXPECT_EQ(doc.builtin_style(builtin::link).m_family, style_family::text);
+    EXPECT_EQ(doc.builtin_style(builtin::default_table).m_family, style_family::table);
+    EXPECT_FALSE(doc.builtin_style(style_name("Mine")).m_family);
+    EXPECT_THROW(doc.builtin_style(builtin::default_list), std::invalid_argument);
 }
 
 TEST(BASIC_USAGE, AppendCombinesBodiesAndRegistries)

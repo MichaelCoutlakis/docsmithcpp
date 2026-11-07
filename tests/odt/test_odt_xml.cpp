@@ -550,14 +550,12 @@ TEST(ODT_XML, BuiltinHeadingAndLinkStylesAreDefined)
         << "only the levels used";
 }
 
-// A template's defaults are loaded as the builtin styles. Replacing one in
-// the registry (add_style() refuses a different definition of a name), or
-// editing the one find() gives, is what is saved, in place.
+// A template's defaults are loaded as the builtin styles. Replacing one, or
+// editing the one builtin_style() gives, is what is saved, in place.
 TEST(ODT_XML, TemplateDefaultStylesCanBeReplacedOrEdited)
 {
     auto f = odt::file::load("odt/moderate.odt");
-    style *h1 = f.doc.styles().find(builtin::heading(1).get_name());
-    ASSERT_NE(h1, nullptr);
+    style *h1 = &f.doc.builtin_style(builtin::heading(1));
     EXPECT_EQ(h1->m_parent_style, style_name("Heading")) << "as LibreOffice defines it";
     ASSERT_NE(f.doc.styles().find(builtin::default_paragraph.get_name()), nullptr);
     ASSERT_NE(f.doc.styles().find(builtin::link.get_name()), nullptr);
@@ -566,7 +564,7 @@ TEST(ODT_XML, TemplateDefaultStylesCanBeReplacedOrEdited)
     h1->m_text_props = h1->m_text_props.value_or(text_props{});
     h1->m_text_props->set(font_size(20));
     // Replaced.
-    f.doc.styles().add(style(builtin::default_paragraph,
+    f.doc.add_or_overwrite_style(style(builtin::default_paragraph,
         style_family::paragraph,
         text_props(font_name("Liberation Sans"), font_size(11))));
     f.doc.add(paragraph("added"));
