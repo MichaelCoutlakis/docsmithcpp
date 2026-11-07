@@ -18,8 +18,10 @@
 #pragma once
 
 // Private: the number each list item shows, for the writers that write the
-// numbers themselves (HTML, Markdown).
+// numbers themselves (HTML, Markdown), and the indent of a list level, for the
+// writers that lay lists out (ODT, DOCX).
 
+#include <algorithm>
 #include <map>
 #include <optional>
 #include <utility>
@@ -41,6 +43,13 @@ inline const number_level *numbering(const list_style *ls, int level)
             return std::get_if<number_level>(&s);
     return nullptr;
 }
+
+/// Where the text of a list level (1 at the top) starts: 0.5in a level, as
+/// Word's default. List levels have no indent in the model yet, so the ODT and
+/// DOCX writers give every level this, and a list looks the same in both.
+inline length list_indent(int level) { return inch(0.5 * std::max(level, 1)); }
+/// The width of the number or bullet, which hangs before the text.
+inline constexpr length list_label_width = inch(0.25);
 
 /// Numbers lists in document order, so that a list can continue the count of
 /// the last one before it with the same list style at the same level.

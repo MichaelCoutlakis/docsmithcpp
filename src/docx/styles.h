@@ -27,6 +27,7 @@
 #include <pugixml.hpp>
 
 #include "docsmithcpp/text_doc.h"
+#include "list_numbers.h"
 
 namespace docsmith::docx
 {
@@ -83,8 +84,9 @@ void write_abstract_num(pugi::xml_node n, int id, const list_style &ls);
 /// represent (no numbering, other number formats, picture bullets) are left out.
 list_style read_abstract_num(const pugi::xml_node &n, const list_style_name &name);
 
-/// The indent of list level ilvl (0-based), in twips: left, hanging.
-inline int list_indent(int ilvl) { return 720 * (ilvl + 1); }
-inline constexpr int list_hanging = 360;
+/// The indent of list level ilvl (0-based), in twips: left, hanging. The same
+/// as the ODT writer's (detail::list_indent()).
+inline int list_indent(int ilvl) { return twips(detail::list_indent(ilvl + 1)); }
+inline const int list_hanging = twips(detail::list_label_width);
 
 } // namespace docsmith::docx

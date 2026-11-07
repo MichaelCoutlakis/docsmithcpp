@@ -82,6 +82,26 @@ the `m_` naming of the property value types (`style.text.m_font_size->m_points`,
 (CONTRIBUTING.md, *Conventions*). Consider bare public names on the value
 types, or accessors (`font_size()->points()`).
 
+### Builtins in use get their default, in every format
+
+A builtin the body uses without defining it gets its default
+(`builtin::default_style()`) from the ODT and DOCX writers, but not from the
+HTML one, which writes no rule for it (DESIGN.md, *Builtin defaults*). So an
+undefined Title is 28pt bold in LibreOffice and Word and plain text on a
+page, and code has to write `doc.styles()[builtin::title];` to get the CSS, a
+line that does nothing visible. Give HTML the same rule: write the default's
+CSS for every builtin used and not defined. Headings would then lose the
+browser's own `h1` look for the default's, as they already do in ODT and DOCX.
+
+Review DESIGN.md's *Default styles*, *Builtin styles and code blocks* and
+*Builtin defaults* together while at it: the first says an undefined default
+gets each format's own look, the last that writers define one, and the
+middle that HTML leaves an undefined builtin to `html::file::css`. One rule,
+stated once, with the exceptions (`para`, `table` and `list` have no default)
+in one place. `list` would get one with level indents (*Model gaps*, *List
+level indents*). Start in `src/html/file.cpp`, where the style sheet is
+written.
+
 ### Saving a document without copying it
 
 `odt::save(doc, p)` and `docx::save(doc, p)` were removed: next to
@@ -131,6 +151,18 @@ page, or a landscape section, needs a registry of page styles and a way to start
 one in the body (ODF master pages, DOCX sections). See DESIGN.md, _Pages,
 headers and footers_.
 
+### AsciiDoc output
+
+AsciiDoc is common for technical documentation and reports (Asciidoctor,
+Antora, GitLab and GitHub render it). It holds more of the model than
+Markdown does: a table of contents (`:toc:`), anchors and links to them
+(`[[id]]`, `<<id,text>>`), page breaks (`<<<`), header rows and column widths
+(`[cols="3,1",options="header"]`), and a code block's language. Start with a
+writer, `adoc::file` / `adoc::save()` next to `md::file`, modelled on
+`src/md/file.cpp`. Reading would need a parser, and there's no maintained
+C or C++ AsciiDoc parser (Asciidoctor is Ruby), so leave it out unless one
+appears.
+
 ### DOCX gaps
 
 Roughly by how much a report or a loaded file would miss it:
@@ -160,6 +192,13 @@ Roughly by how much a report or a loaded file would miss it:
 
 ### Model gaps
 
+- **List level indents**. `bullet_level` and `number_level` hold no indent, so
+  the ODT and DOCX writers give every level the same one (`detail::list_indent()`
+  in `src/list_numbers.h`), and a template's own list indents are lost
+  wherever a list style is written from the model. Optional `indent` (where the text
+  starts) and `label_width` (the hanging label) on each level, read from ODT
+  `style:list-level-label-alignment` and DOCX `w:lvl/w:pPr/w:ind`, with the
+  writers' default for an unset one.
 - A node names its style, of its family. `styles().insert()` registers a
   definition and returns its name, but nothing yet checks that every style a
   node names is defined.
@@ -177,6 +216,25 @@ Roughly by how much a report or a loaded file would miss it:
   `language`) would make them first class. ODT would still write it as a
   Preformatted Text paragraph, keeping the language in a derived style or an
   attribute, and HTML as `<pre><code class="language-…">`.
+- **A title node**. A title is a paragraph styled `builtin::title`, found by
+  searching the body (`find_title()`, `set_title()`), next to a separate
+  `meta.title`. Nearly every document has one, and each writer treats it
+  specially: HTML's `<title>`, Markdown's `#` (or front matter, below), and a
+  table of contents leaves it out. A node of its own (a `title` block holding
+  inline content, styled, with `builtin::title` as its default) would make it
+  first class, and writers would still write it as a paragraph in that style.
+  To decide: a block node anywhere in the body, or a field on `text_doc` that
+  is always first; whether readers turn every Title paragraph into one or only
+  the first; whether it fills `meta.title` when that's empty; and whether a
+  subtitle goes the same way (LibreOffice and Word both have Subtitle).
+- **Markdown titles**. Markdown has no title: the writer writes a
+  `builtin::title` paragraph as `# ...`, and `md::parse` reads every `#` as
+  `heading(1)`, so a title written to Markdown and read back becomes a heading,
+  and appears in the table of contents. YAML front matter (`title: ...`), which
+  Pandoc and many renderers read, would keep it: the writer writes it for the
+  title paragraph or `meta.title`, and the parser (md4c doesn't read front
+  matter) takes it off the start and sets both. Start in `src/md/file.cpp`
+  and `src/md/parser.cpp`.
 - **Frame placement**. Frames are always in the line of text. A portable subset
   all of ODT, DOCX and HTML can hold: in the line; a block on its own line,
   left, centred or right, text above and below; floating left or right with

@@ -24,6 +24,7 @@
 #include <sstream>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include <gtest/gtest.h>
 #include <pugixml.hpp>
@@ -374,6 +375,36 @@ TEST(ODT_XML, ListNumbering)
     EXPECT_EQ(
         first.select_node("text:list-item[2]").node().attribute("text:start-value").as_int(), 5);
     EXPECT_TRUE(lists[1].node().attribute("text:continue-numbering").as_bool());
+}
+
+// Each level of a list style is indented further than the one above, as in
+// DOCX: without the level's properties LibreOffice starts every level at the
+// margin.
+TEST(ODT_XML, ListLevelIndent)
+{
+    text_doc doc{list(list_item("one", list(list_item("two")))).set_style("Steps")};
+    doc.styles().insert(
+        list_style("Steps", {bullet_level{.level = 1}, number_level{.level = 2}}));
+    odt::file(doc).save("odt/out/list_level_indent.odt");
+
+    const part content("odt/out/list_level_indent.odt", "content.xml");
+    const auto levels = content.xml.select_nodes(
+        "//text:list-style[@style:name='Steps']/*/style:list-level-properties");
+    ASSERT_EQ(levels.size(), 2U);
+    std::vector<double> margins;
+    for(const auto &l : levels)
+    {
+        const auto props = l.node();
+        EXPECT_STREQ(props.attribute("text:list-level-position-and-space-mode").as_string(),
+            "label-alignment");
+        const auto align = props.child("style:list-level-label-alignment");
+        const std::string margin = align.attribute("fo:margin-left").as_string();
+        EXPECT_EQ(margin, align.attribute("text:list-tab-stop-position").as_string());
+        EXPECT_LT(align.attribute("fo:text-indent").as_double(), 0); // a hanging label
+        margins.push_back(std::stod(margin));
+    }
+    EXPECT_GT(margins[0], 0);
+    EXPECT_GT(margins[1], margins[0]);
 }
 
 // A column's cell style is its default cell style, and its paragraph style

@@ -26,6 +26,7 @@
 
 #include "builtin_styles.h"
 #include "format.h"
+#include "list_numbers.h"
 #include "odf/names.h"
 #include "odf/package.h"
 
@@ -426,6 +427,25 @@ void write_xml(pugi::xml_node &n, const list_style &ls)
         std::visit([&](const auto &l) { write_xml(ls_node, l); }, level);
 }
 
+namespace
+{
+/// The level's indent, as LibreOffice writes it: the label hangs before the
+/// text, followed by a tab to where the text starts. Without it every level
+/// starts at the margin.
+void write_level_indent(pugi::xml_node level_node, int level)
+{
+    const std::string indent = to_odf(detail::list_indent(level));
+    auto props = level_node.append_child("style:list-level-properties");
+    props.append_attribute("text:list-level-position-and-space-mode") = "label-alignment";
+    auto align = props.append_child("style:list-level-label-alignment");
+    align.append_attribute("text:label-followed-by") = "listtab";
+    align.append_attribute("text:list-tab-stop-position") = indent.c_str();
+    align.append_attribute("fo:text-indent") =
+        to_odf(pt(-detail::list_label_width.m_points)).c_str();
+    align.append_attribute("fo:margin-left") = indent.c_str();
+}
+} // namespace
+
 void write_xml(pugi::xml_node &n, const bullet_level &b)
 {
     auto bullet_node = n.append_child("text:list-level-style-bullet");
@@ -433,6 +453,7 @@ void write_xml(pugi::xml_node &n, const bullet_level &b)
     if(!b.style.empty())
         bullet_node.append_attribute("text:style-name") = odf::odf_name(b.style.str()).c_str();
     bullet_node.append_attribute("text:bullet-char") = b.bullet.c_str();
+    write_level_indent(bullet_node, b.level);
 }
 
 void write_xml(pugi::xml_node &n, const number_level &s)
@@ -449,6 +470,7 @@ void write_xml(pugi::xml_node &n, const number_level &s)
     num_node.append_attribute("text:start-value") = s.start_from;
     num_node.append_attribute("style:num-suffix") = s.suffix.c_str();
     num_node.append_attribute("style:num-prefix") = s.prefix.c_str();
+    write_level_indent(num_node, s.level);
 }
 
 void write_xml(pugi::xml_node &n, const text_props &tp)

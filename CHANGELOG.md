@@ -7,6 +7,12 @@ breaking changes.
 
 ## [Unreleased]
 
+### Fixed
+- **ODT list indents**: list styles written to ODT now indent each level
+  (0.5in a level, with the bullet or number hanging 0.25in before the text),
+  as DOCX already did. LibreOffice drew every level at the margin, so nested
+  lists didn't look nested.
+
 ## [0.1.0] - 2026-11-07
 
 First release: a C++20 library for building, reading, editing and writing rich-text
