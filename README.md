@@ -34,6 +34,23 @@ Test software written in C++ could use `docsmithcpp` to generate test reports.
   languages
 - Once-off conversions or formatting: `pandoc` is the appropriate tool here
 - Typesetting or maths-heavy documents: use `LaTeX`.
+- Documents from untrusted sources, for now: see
+  [Untrusted documents](#-untrusted-documents).
+
+## 🔒 Untrusted documents
+
+DocSmith++ assumes the documents it reads are trusted, as they are when you
+generate your own reports or export from your own application. Don't use it
+yet on files from someone else, e.g. in a service that converts uploads:
+
+- An image path in a document that isn't embedded in it is read from disk when
+  the document is saved (and by `md::file::load()`), so a hostile `.md` or
+  `.odt` can copy any file your process can read into the output.
+- Archive entries are unpacked without a size limit, so a small crafted `.odt`
+  or `.docx` can use up memory.
+
+Restricting file access to a trusted root folder and limiting archive sizes is
+planned (see [TODO.md](TODO.md), *Untrusted documents*).
 
 ---
 

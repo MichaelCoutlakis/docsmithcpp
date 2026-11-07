@@ -16,10 +16,33 @@ yardstick.
 Once the above is in, move `[Unreleased]` in `CHANGELOG.md` to `[0.1.0]` and
 tag it.
 
-## 2. For 0.2.0: API review
+## 2. For 0.2.0
 
-Usability points from a review of the public API. None loses content; each is
-a way a new user is likely to get surprised.
+Reading documents from someone else safely, then usability points from a
+review of the public API: none of those loses content, but each is a way a new
+user is likely to get surprised.
+
+### Untrusted documents
+
+The library assumes the documents it reads are trusted (README, *Untrusted
+documents*), which suits generating reports and exporting from an app, but not
+a service that converts what it's sent:
+
+- **Files on disk.** An image's uri that names no resource is read from disk
+  when the document is saved, and `md::file::load()` reads relative image
+  paths that exist. In a file someone else wrote, they choose the path, so
+  loading and saving can copy any file the process can read into the output
+  (`![](../../.ssh/id_rsa)`). Only files under a trusted root should be read:
+  e.g. a root the caller gives, with nothing read when there is none, and an
+  error for a path that leaves it. This covers every place the library reads a
+  file a document names, not only images.
+- **Archive sizes.** An ODT or DOCX entry is unpacked to the size its header
+  claims, with no limit, so a small crafted file can make the library allocate
+  gigabytes. Reading should limit an entry's size and the total, with an error
+  past them.
+
+Add a test for each with a hostile fixture, and update the README note when
+it's done.
 
 ### New styles don't inherit from the default
 
