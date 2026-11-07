@@ -214,8 +214,65 @@ void write_rpr(pugi::xml_node rpr, const text_props &props)
 
 void write_ppr(pugi::xml_node ppr, const paragraph_props &props)
 {
+    auto on_off = [&](const char *name, const std::optional<bool> &v)
+    {
+        if(!v)
+            return;
+        auto n = ordered_child(ppr, name, ppr_order);
+        if(!*v)
+            set_val(n, "0");
+    };
+    on_off("w:keepNext", props.m_keep_with_next);
+    on_off("w:keepLines", props.m_keep_together);
     if(props.m_break_before && props.m_break_before->m_break_type == break_type::page)
         ordered_child(ppr, "w:pageBreakBefore", ppr_order);
+    auto tw = [](const length &l) { return std::to_string(std::lround(l.m_points * 20)); };
+    auto set = [](pugi::xml_node n, const char *attr, const std::string &v)
+    {
+        if(!n.attribute(attr))
+            n.append_attribute(attr);
+        n.attribute(attr).set_value(v.c_str());
+    };
+    if(props.m_space_before || props.m_space_after)
+    {
+        auto sp = ordered_child(ppr, "w:spacing", ppr_order);
+        if(props.m_space_before)
+            set(sp, "w:before", tw(*props.m_space_before));
+        if(props.m_space_after)
+            set(sp, "w:after", tw(*props.m_space_after));
+    }
+    if(props.m_indent_start || props.m_indent_end || props.m_first_line_indent)
+    {
+        auto ind = ordered_child(ppr, "w:ind", ppr_order);
+        if(props.m_indent_start)
+            set(ind, "w:left", tw(*props.m_indent_start));
+        if(props.m_indent_end)
+            set(ind, "w:right", tw(*props.m_indent_end));
+        if(const auto &f = props.m_first_line_indent)
+        {
+            ind.remove_attribute("w:firstLine");
+            ind.remove_attribute("w:hanging");
+            if(f->m_points < 0)
+                set(ind, "w:hanging", tw(pt(-f->m_points)));
+            else
+                set(ind, "w:firstLine", tw(*f));
+        }
+    }
+    if(props.m_align)
+    {
+        // start and end as left and right: older Word reads only those.
+        const char *jc = "left";
+        switch(*props.m_align)
+        {
+        case text_align::start:
+        case text_align::left: jc = "left"; break;
+        case text_align::end:
+        case text_align::right: jc = "right"; break;
+        case text_align::centre: jc = "center"; break;
+        case text_align::justify: jc = "both"; break;
+        }
+        set_val(ordered_child(ppr, "w:jc", ppr_order), jc);
+    }
 }
 
 std::optional<text_props> read_rpr(const pugi::xml_node &rpr)
@@ -247,6 +304,45 @@ std::optional<paragraph_props> read_ppr(const pugi::xml_node &ppr)
     paragraph_props pp;
     if(auto b = ppr.child("w:pageBreakBefore"); b && on(b))
         pp.set(break_before{break_type::page});
+    if(auto k = ppr.child("w:keepNext"))
+        pp.m_keep_with_next = on(k);
+    if(auto k = ppr.child("w:keepLines"))
+        pp.m_keep_together = on(k);
+    auto tw = [](const pugi::xml_attribute &a) -> std::optional<length>
+    {
+        if(!a)
+            return std::nullopt;
+        return pt(a.as_double() / 20);
+    };
+    if(auto sp = ppr.child("w:spacing"))
+    {
+        pp.m_space_before = tw(sp.attribute("w:before"));
+        pp.m_space_after = tw(sp.attribute("w:after"));
+    }
+    if(auto ind = ppr.child("w:ind"))
+    {
+        auto a = ind.attribute("w:left");
+        pp.m_indent_start = tw(a ? a : ind.attribute("w:start"));
+        a = ind.attribute("w:right");
+        pp.m_indent_end = tw(a ? a : ind.attribute("w:end"));
+        if(auto h = tw(ind.attribute("w:hanging")))
+            pp.m_first_line_indent = pt(-h->m_points);
+        else
+            pp.m_first_line_indent = tw(ind.attribute("w:firstLine"));
+    }
+    const std::string jc = val(ppr, "w:jc");
+    if(jc == "left")
+        pp.set(text_align::left);
+    else if(jc == "start")
+        pp.set(text_align::start);
+    else if(jc == "right")
+        pp.set(text_align::right);
+    else if(jc == "end")
+        pp.set(text_align::end);
+    else if(jc == "center")
+        pp.set(text_align::centre);
+    else if(jc == "both" || jc == "distribute")
+        pp.set(text_align::justify);
     return pp == paragraph_props{} ? std::nullopt : std::optional(std::move(pp));
 }
 

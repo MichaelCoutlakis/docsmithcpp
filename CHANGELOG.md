@@ -72,6 +72,14 @@ held in `std::variant`. This is a breaking change to almost every public API.
   directory. Generated test files go to `tests/odt/out/`.
 
 ### Added
+- **Paragraph spacing and alignment**: `paragraph_props` holds space above and below
+  (`space_before`, `space_after`), indents (`indent_start`, `indent_end`,
+  `first_line_indent`, negative for hanging), alignment (`text_align`) and
+  `keep_with_next` / `keep_together`. ODT (`fo:margin-*`, `fo:text-indent`,
+  `fo:text-align`, `fo:keep-*`) and DOCX (`w:spacing`, `w:ind`, `w:jc`, `w:keepNext`,
+  `w:keepLines`) read and write them, and HTML writes them as CSS. So LibreOffice's
+  heading spacing now shows in HTML from a loaded `.odt`, and a style defined in code
+  can set its own. DOCX writes start and end alignment as left and right.
 - **Link styles**: `hyperlink` is styled (a text style), read and written as ODT's
   `text:style-name` on `text:a` (a loaded LibreOffice link keeps "Internet link"), as
   the DOCX run style of the link's text in place of `Hyperlink`, and as an HTML class.
@@ -342,8 +350,8 @@ held in `std::variant`. This is a breaking change to almost every public API.
 
 ### Known limitations
 - HTML from a *parsed* `.odt` is plainer than the original: the CSS covers only the
-  properties the style model holds (font, weight, size, colour, page breaks), not
-  margins, indents or borders.
+  properties the style model holds (font, weight, size, colour, paragraph spacing,
+  indents, alignment and breaks), not line spacing, tabs or paragraph borders.
 - HTML leaves out `unknown` nodes, which hold another format's markup. List number
   prefixes and suffixes aren't reflected in the CSS.
 - Font sizes in units other than points (e.g. `130%`) aren't read into the model.

@@ -47,6 +47,12 @@ constexpr spelling<break_type> break_names[] = {{break_type::automatic, "auto"},
     {break_type::page, "page"},
     {break_type::even_page, "even-page"},
     {break_type::odd_page, "odd-page"}};
+constexpr spelling<text_align> align_names[] = {{text_align::start, "start"},
+    {text_align::end, "end"},
+    {text_align::left, "left"},
+    {text_align::right, "right"},
+    {text_align::centre, "center"},
+    {text_align::justify, "justify"}};
 constexpr spelling<style_family> family_names[] = {{style_family::paragraph, "paragraph"},
     {style_family::text, "text"},
     {style_family::graphic, "graphic"},
@@ -182,6 +188,19 @@ std::optional<paragraph_props> read_paragraph_props(const pugi::xml_node &n)
         pp.set(break_before{*b});
     if(auto b = from_odf(break_names, n.attribute("fo:break-after").as_string()))
         pp.set(break_after{*b});
+    if(auto a = from_odf(align_names, n.attribute("fo:text-align").as_string()))
+        pp.set(*a);
+    // Lengths only: a percentage of the parent's is dropped.
+    auto len = [&](const char *attr) { return length_from(n.attribute(attr).as_string()); };
+    pp.m_space_before = len("fo:margin-top");
+    pp.m_space_after = len("fo:margin-bottom");
+    pp.m_indent_start = len("fo:margin-left");
+    pp.m_indent_end = len("fo:margin-right");
+    pp.m_first_line_indent = len("fo:text-indent");
+    if(auto k = n.attribute("fo:keep-with-next"))
+        pp.m_keep_with_next = std::string_view(k.as_string()) == "always";
+    if(auto k = n.attribute("fo:keep-together"))
+        pp.m_keep_together = std::string_view(k.as_string()) == "always";
     return pp == paragraph_props{} ? std::nullopt : std::optional(std::move(pp));
 }
 
@@ -421,6 +440,24 @@ void write_xml(pugi::xml_node &n, const paragraph_props &props)
     if(props.m_break_before)
         para_props_node.append_attribute("fo:break-before") =
             to_odf(break_names, props.m_break_before->m_break_type);
+    auto len = [&](const char *attr, const std::optional<length> &l)
+    {
+        if(l)
+            para_props_node.append_attribute(attr) = to_odf(*l).c_str();
+    };
+    len("fo:margin-top", props.m_space_before);
+    len("fo:margin-bottom", props.m_space_after);
+    len("fo:margin-left", props.m_indent_start);
+    len("fo:margin-right", props.m_indent_end);
+    len("fo:text-indent", props.m_first_line_indent);
+    if(props.m_align)
+        para_props_node.append_attribute("fo:text-align") = to_odf(align_names, *props.m_align);
+    if(props.m_keep_with_next)
+        para_props_node.append_attribute("fo:keep-with-next") =
+            *props.m_keep_with_next ? "always" : "auto";
+    if(props.m_keep_together)
+        para_props_node.append_attribute("fo:keep-together") =
+            *props.m_keep_together ? "always" : "auto";
 }
 
 void write_xml(pugi::xml_node &n, const table_props &props)

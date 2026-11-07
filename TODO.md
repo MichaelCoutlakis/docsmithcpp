@@ -16,14 +16,6 @@ yardstick.
 The reader doesn't see a nested styled list continue, and an unnumbered item
 reads back as more of the item before it.
 
-### Paragraph spacing and alignment
-
-Paragraph properties are only page breaks, so the template's headings have no
-space above or below them, and a style defined in code replaces LibreOffice's
-spacing for a style of the same name (e.g. Heading 1). Add margins, alignment
-(`text_align` exists but isn't used) and keep-with-next. Alignment is also what
-a column's paragraph style needs for centred or right-aligned cells.
-
 ### Fonts in HTML
 
 A style's `font_name` is ODF's `style:font-name`, the name of a font

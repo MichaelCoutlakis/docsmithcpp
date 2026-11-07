@@ -253,6 +253,12 @@ the same style can be set on a span and on a paragraph. HTML has no families: a
 style is a CSS class either way, and its rule includes what it inherits from its
 parent styles.
 
+A style holds properties by kind: `text_props` (font, size, weight, slant,
+colour), `paragraph_props` (breaks, space above and below, indents, alignment,
+keep with next, keep together), `table_props` and `cell_props`. Each property
+is optional; an unset one comes from the parent style, or the format's
+default.
+
 - **ODT**: loading reads the definitions in `styles.xml` and `content.xml` into
   the registries, as far as the model holds their properties. On save, the writer
   starts from the loaded `styles.xml` and `content.xml` style containers. A

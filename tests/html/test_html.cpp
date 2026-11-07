@@ -313,9 +313,32 @@ TEST(HTML, ParsedOdtHasStylesAndNumbering)
     EXPECT_TRUE(has(html, R"(<ol class="L1" start="7">)"));
     EXPECT_TRUE(has(html, R"(<ul class="L2">)"));
     EXPECT_TRUE(has(html, R"(<ol class="L3" type="a" start="3">)"));
-    // P3's own definition only sets rsids; the rest comes from its parents.
-    EXPECT_TRUE(has(
-        html, R"(.P3 { font-size: 18pt; font-family: "Liberation Sans"; font-weight: bold; })"));
+    // P3's own definition only sets rsids; the rest comes from its parents,
+    // the spacing and keep-with-next from LibreOffice's Heading.
+    EXPECT_TRUE(has(html,
+        R"(.P3 { font-size: 18pt; font-family: "Liberation Sans"; font-weight: bold; )"
+        R"(margin-top: 11.991pt; margin-bottom: 6.009pt; break-after: avoid; })"))
+        << html;
+}
+
+TEST(HTML, ParagraphSpacingAndAlignment)
+{
+    text_doc doc;
+    doc.add_style(style("Base",
+        style_family::paragraph,
+        paragraph_props(space_before{pt(12)}, text_align::justify, keep_together{})));
+    style child("Note",
+        style_family::paragraph,
+        paragraph_props(text_align::centre, indent_start{pt(18)}, first_line_indent{pt(-9)},
+            keep_with_next{}));
+    child.m_parent_style = "Base";
+    doc.add_style(child);
+    doc.add(paragraph("x").set_style("Note"));
+    const auto html = html::file(doc).to_string();
+    EXPECT_TRUE(has(html,
+        ".Note { margin-top: 12pt; margin-left: 18pt; text-indent: -9pt; text-align: center; "
+        "break-after: avoid; break-inside: avoid; }"))
+        << html;
 }
 
 TEST(HTML, CssIncludesInheritedProperties)

@@ -169,7 +169,8 @@ struct text_props
     std::optional<colour> m_colour;
 };
 
-/// fo:text-align
+/// How a paragraph's lines line up. start and end are left and right in
+/// left-to-right text; DOCX writes them as left and right.
 enum class text_align
 {
     start,
@@ -192,6 +193,18 @@ enum class break_type
 // clang-format off
 struct break_before { break_type m_break_type; bool operator==(const break_before&) const = default; };
 struct break_after { break_type m_break_type; bool operator==(const break_after&) const = default; };
+/// Space above and below a paragraph.
+struct space_before { length m_length; bool operator==(const space_before&) const = default; };
+struct space_after { length m_length; bool operator==(const space_after&) const = default; };
+/// Indents from the start (left in left-to-right text) and end edges.
+struct indent_start { length m_length; bool operator==(const indent_start&) const = default; };
+struct indent_end { length m_length; bool operator==(const indent_end&) const = default; };
+/// The first line's indent beyond indent_start; negative for a hanging indent.
+struct first_line_indent { length m_length; bool operator==(const first_line_indent&) const = default; };
+/// Keep the paragraph on the same page as the next one (e.g. a heading).
+struct keep_with_next { bool m_on{true}; bool operator==(const keep_with_next&) const = default; };
+/// Don't split the paragraph across pages.
+struct keep_together { bool m_on{true}; bool operator==(const keep_together&) const = default; };
 // clang-format on
 
 class paragraph_props
@@ -213,11 +226,81 @@ public:
         m_break_after = b;
         return *this;
     }
+    paragraph_props &set(text_align a)
+    {
+        m_align = a;
+        return *this;
+    }
+    paragraph_props &set(const space_before &s)
+    {
+        m_space_before = s.m_length;
+        return *this;
+    }
+    paragraph_props &set(const space_after &s)
+    {
+        m_space_after = s.m_length;
+        return *this;
+    }
+    paragraph_props &set(const indent_start &i)
+    {
+        m_indent_start = i.m_length;
+        return *this;
+    }
+    paragraph_props &set(const indent_end &i)
+    {
+        m_indent_end = i.m_length;
+        return *this;
+    }
+    paragraph_props &set(const first_line_indent &i)
+    {
+        m_first_line_indent = i.m_length;
+        return *this;
+    }
+    paragraph_props &set(const keep_with_next &k)
+    {
+        m_keep_with_next = k.m_on;
+        return *this;
+    }
+    paragraph_props &set(const keep_together &k)
+    {
+        m_keep_together = k.m_on;
+        return *this;
+    }
+    /// Sets each property over holds, keeping the others.
+    paragraph_props &overlay(const paragraph_props &over);
     bool operator==(const paragraph_props &rhs) const = default;
 
     std::optional<break_before> m_break_before;
     std::optional<break_after> m_break_after;
+    std::optional<text_align> m_align;
+    std::optional<length> m_space_before;
+    std::optional<length> m_space_after;
+    std::optional<length> m_indent_start;
+    std::optional<length> m_indent_end;
+    std::optional<length> m_first_line_indent;
+    std::optional<bool> m_keep_with_next;
+    std::optional<bool> m_keep_together;
 };
+
+inline paragraph_props &paragraph_props::overlay(const paragraph_props &over)
+{
+    auto take = [](auto &into, const auto &from)
+    {
+        if(from)
+            into = from;
+    };
+    take(m_break_before, over.m_break_before);
+    take(m_break_after, over.m_break_after);
+    take(m_align, over.m_align);
+    take(m_space_before, over.m_space_before);
+    take(m_space_after, over.m_space_after);
+    take(m_indent_start, over.m_indent_start);
+    take(m_indent_end, over.m_indent_end);
+    take(m_first_line_indent, over.m_first_line_indent);
+    take(m_keep_with_next, over.m_keep_with_next);
+    take(m_keep_together, over.m_keep_together);
+    return *this;
+}
 
 enum class border_line
 {

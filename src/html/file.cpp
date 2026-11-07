@@ -101,6 +101,20 @@ const char *css_value(font_style fs)
 
 const char *css_value(font_weight fw) { return fw == font_weight::bold ? "bold" : "normal"; }
 
+const char *css_value(text_align a)
+{
+    switch(a)
+    {
+    case text_align::start: return "start";
+    case text_align::end: return "end";
+    case text_align::left: return "left";
+    case text_align::right: return "right";
+    case text_align::centre: return "center";
+    case text_align::justify: return "justify";
+    }
+    return "start";
+}
+
 const char *css_value(border_line l)
 {
     switch(l)
@@ -213,8 +227,9 @@ style resolved(const style &s, const style_registry &styles)
         {
             auto &pp =
                 out.m_paragraph_props ? *out.m_paragraph_props : out.m_paragraph_props.emplace();
-            fill(pp.m_break_before, parent->m_paragraph_props->m_break_before);
-            fill(pp.m_break_after, parent->m_paragraph_props->m_break_after);
+            // The parent's properties under this style's own.
+            paragraph_props merged = *parent->m_paragraph_props;
+            pp = merged.overlay(pp);
         }
         parent = styles.find(parent->m_parent_style.get_name());
     }
@@ -272,6 +287,22 @@ std::string generated_css(const text_doc &doc)
                 decls += std::string(" break-before: ") + css_value(pp->m_break_before->m_break_type) + ";";
             if(pp->m_break_after)
                 decls += std::string(" break-after: ") + css_value(pp->m_break_after->m_break_type) + ";";
+            auto len = [&](const char *prop, const std::optional<length> &l)
+            {
+                if(l)
+                    decls += std::string(" ") + prop + ": " + detail::to_string(l->m_points) + "pt;";
+            };
+            len("margin-top", pp->m_space_before);
+            len("margin-bottom", pp->m_space_after);
+            len("margin-left", pp->m_indent_start);
+            len("margin-right", pp->m_indent_end);
+            len("text-indent", pp->m_first_line_indent);
+            if(pp->m_align)
+                decls += std::string(" text-align: ") + css_value(*pp->m_align) + ";";
+            if(pp->m_keep_with_next.value_or(false) && !pp->m_break_after)
+                decls += " break-after: avoid;";
+            if(pp->m_keep_together.value_or(false))
+                decls += " break-inside: avoid;";
         }
         if(s->m_table_props)
             decls += css_decls(effective_table_style(s->m_name, doc.styles()));

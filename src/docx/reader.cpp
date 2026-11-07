@@ -648,6 +648,8 @@ private:
                 style def;
                 def.set(style_family::paragraph);
                 def.m_parent_style = own_style;
+                if(auto pp = read_ppr(copy))
+                    def.set(*pp);
                 own_style = direct_style("P", def, xml::serialize(copy));
             }
         }

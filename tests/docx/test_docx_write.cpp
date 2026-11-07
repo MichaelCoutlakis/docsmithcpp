@@ -145,6 +145,42 @@ TEST(DOCX_Write, SpansAndStyles)
 
 // A styled link's text gets the link's style instead of Hyperlink, and reads
 // back as the link's style.
+TEST(DOCX_Write, ParagraphProps)
+{
+    text_doc doc;
+    const paragraph_props pp(space_before{pt(12)},
+        space_after{pt(6)},
+        indent_start{pt(18)},
+        indent_end{pt(9)},
+        first_line_indent{pt(-9)},
+        text_align::centre,
+        keep_with_next{},
+        keep_together{false});
+    doc.add_style(style("Spaced", style_family::paragraph, pp));
+    doc.add(paragraph("x").set_style("Spaced"));
+    saved s(doc, "paragraph_props");
+
+    const auto styles = s.xml("word/styles.xml");
+    auto ppr = style_def(styles, "Spaced").child("w:pPr");
+    EXPECT_TRUE(ppr.child("w:keepNext"));
+    EXPECT_STREQ(ppr.child("w:keepLines").attribute("w:val").as_string(), "0");
+    EXPECT_EQ(ppr.child("w:spacing").attribute("w:before").as_int(), 240);
+    EXPECT_EQ(ppr.child("w:spacing").attribute("w:after").as_int(), 120);
+    EXPECT_EQ(ppr.child("w:ind").attribute("w:left").as_int(), 360);
+    EXPECT_EQ(ppr.child("w:ind").attribute("w:right").as_int(), 180);
+    EXPECT_EQ(ppr.child("w:ind").attribute("w:hanging").as_int(), 180);
+    EXPECT_EQ(docx::val(ppr, "w:jc"), "center");
+    // In schema order.
+    std::string order;
+    for(auto c : ppr.children())
+        order += std::string(c.name()) + " ";
+    EXPECT_EQ(order, "w:keepNext w:keepLines w:spacing w:ind w:jc ");
+
+    const auto back = docx::file::load(s.path).doc;
+    ASSERT_NE(back.styles().find("Spaced"), nullptr);
+    EXPECT_EQ(back.styles().find("Spaced")->m_paragraph_props, pp);
+}
+
 TEST(DOCX_Write, StyledLink)
 {
     text_doc doc;

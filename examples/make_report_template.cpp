@@ -43,16 +43,20 @@ int main(int argc, char **argv)
     // LibreOffice's own style names, so the template's look replaces its
     // defaults for Heading 1, Text Body and so on.
     const colour accent = colour::rgb(31, 56, 100);
+    // Headings stay with the paragraph after them.
     auto heading_1 = doc.add_style(style("Heading_20_1",
         style_family::paragraph,
-        text_props(font_name("Liberation Sans"), font_size(18), font_weight::bold, accent)));
+        text_props(font_name("Liberation Sans"), font_size(18), font_weight::bold, accent),
+        paragraph_props(space_before{pt(18)}, space_after{pt(6)}, keep_with_next{})));
     // For the filled-in report's test case headings.
     doc.add_style(style("Heading_20_2",
         style_family::paragraph,
-        text_props(font_name("Liberation Sans"), font_size(14), font_weight::bold, accent)));
+        text_props(font_name("Liberation Sans"), font_size(14), font_weight::bold, accent),
+        paragraph_props(space_before{pt(12)}, space_after{pt(4)}, keep_with_next{})));
     auto body = doc.add_style(style("Text_20_body",
         style_family::paragraph,
-        text_props(font_name("Liberation Serif"), font_size(11))));
+        text_props(font_name("Liberation Serif"), font_size(11)),
+        paragraph_props(space_after{pt(6)})));
     auto header = doc.add_style(style("Header",
         style_family::paragraph,
         text_props(font_name("Liberation Sans"), font_size(9), colour::rgb(89, 89, 89))));

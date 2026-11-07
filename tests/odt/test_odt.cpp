@@ -241,6 +241,25 @@ TEST(ODT, StyledLinkRoundTrips)
     EXPECT_EQ(odt::file::load("odt/out/styled_link.odt").doc.body, doc.body);
 }
 
+TEST(ODT, ParagraphPropsRoundTrip)
+{
+    text_doc doc;
+    const paragraph_props pp(space_before{pt(12)},
+        space_after{pt(6)},
+        indent_start{pt(18)},
+        indent_end{pt(9)},
+        first_line_indent{pt(-9)},
+        text_align::centre,
+        keep_with_next{},
+        keep_together{false});
+    doc.add_style(style("Spaced", style_family::paragraph, pp));
+    doc.add(paragraph("x").set_style("Spaced"));
+    odt::file(doc).save("odt/out/paragraph_props.odt");
+    const auto again = odt::file::load("odt/out/paragraph_props.odt").doc;
+    ASSERT_NE(again.styles().find("Spaced"), nullptr);
+    EXPECT_EQ(again.styles().find("Spaced")->m_paragraph_props, pp);
+}
+
 TEST(ODT, BlockFrameRoundTrips)
 {
     text_doc doc;
