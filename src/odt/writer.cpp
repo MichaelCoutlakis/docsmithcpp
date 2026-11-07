@@ -18,6 +18,7 @@
 #include "odt/writer.h"
 #include "docsmithcpp/error.h"
 
+#include "builtin_styles.h"
 #include "cell_text.h"
 
 #include <algorithm>
@@ -110,16 +111,6 @@ constexpr const char *base_styles = R"~~(<?xml version="1.0" encoding="UTF-8"?>
 </office:document-styles>
 )~~";
 
-// LibreOffice's Title, its Heading parent's properties included.
-constexpr const char *title_style =
-    R"~~(<style:style style:name="Title" style:family="paragraph" style:class="chapter"><style:paragraph-properties fo:margin-top="0.423cm" fo:margin-bottom="0.212cm" fo:keep-with-next="always" fo:text-align="center"/><style:text-properties fo:font-family="'Liberation Sans'" style:font-family-generic="swiss" fo:font-size="28pt" fo:font-weight="bold" style:font-size-asian="28pt" style:font-weight-asian="bold" style:font-size-complex="28pt" style:font-weight-complex="bold"/></style:style>)~~";
-
-// LibreOffice's Preformatted Text and Source Text.
-constexpr const char *preformatted_style =
-    R"~~(<style:style style:name="Preformatted_20_Text" style:display-name="Preformatted Text" style:family="paragraph" style:class="html"><style:paragraph-properties fo:margin-top="0cm" fo:margin-bottom="0cm"/><style:text-properties fo:font-family="'Liberation Mono'" style:font-family-generic="modern" style:font-pitch="fixed" fo:font-size="10pt" style:font-size-asian="10pt" style:font-size-complex="10pt"/></style:style>)~~";
-constexpr const char *source_text_style =
-    R"~~(<style:style style:name="Source_20_Text" style:display-name="Source Text" style:family="text"><style:text-properties fo:font-family="'Liberation Mono'" style:font-family-generic="modern" style:font-pitch="fixed"/></style:style>)~~";
-
 // YYYY-MM-DD, for date fields. A common style, so fields in content.xml and
 // in styles.xml (headers, footers) can both use it.
 constexpr const char *date_style_name = "docsmith_iso_date";
@@ -141,54 +132,6 @@ std::string contents_style(int level)
         R"~~(cm" fo:margin-right="0cm" fo:text-indent="0cm"><style:tab-stops><style:tab-stop style:position=")~~" +
         detail::to_string(17 - 0.5f * static_cast<float>(level - 1)) +
         R"~~(cm" style:type="right" style:leader-style="dotted" style:leader-text="."/></style:tab-stops></style:paragraph-properties></style:style>)~~";
-}
-
-// LibreOffice's Internet Link.
-constexpr const char *link_style =
-    R"~~(<style:style style:name="Internet_20_link" style:display-name="Internet Link" style:family="text"><style:text-properties fo:color="#000080" style:text-underline-style="solid" style:text-underline-width="auto" style:text-underline-color="font-color"/></style:style>)~~";
-
-/// A heading level's style, as the DOCX writer's: sans, bold, kept with the
-/// next paragraph.
-std::string heading_style(int level)
-{
-    constexpr int sizes[] = {18, 16, 14, 13, 12, 11, 11, 10, 10, 10};
-    const std::string n = std::to_string(level);
-    const std::string size = std::to_string(sizes[level - 1]) + "pt";
-    return R"~~(<style:style style:name="Heading_20_)~~" + n +
-        R"~~(" style:display-name="Heading )~~" + n +
-        R"~~(" style:family="paragraph" style:parent-style-name="Standard" style:next-style-name="Standard" style:default-outline-level=")~~" +
-        n +
-        R"~~(" style:class="text"><style:paragraph-properties fo:margin-top="12pt" fo:margin-bottom="6pt" fo:keep-with-next="always"/><style:text-properties fo:font-family="'Liberation Sans'" style:font-family-generic="swiss" fo:font-size=")~~" +
-        size + R"~~(" fo:font-weight="bold" style:font-size-asian=")~~" + size +
-        R"~~(" style:font-weight-asian="bold" style:font-size-complex=")~~" + size +
-        R"~~(" style:font-weight-complex="bold"/></style:style>)~~";
-}
-
-/// The builtin styles the writer defines when the document uses one and
-/// neither it nor the loaded file defines it: LibreOffice applies a style only
-/// if the file defines it, even one of its own such as Heading 1.
-struct builtin_def
-{
-    std::string name;
-    style_family family; //!< para or text
-    std::string xml;
-};
-const std::vector<builtin_def> &builtin_defs()
-{
-    static const std::vector<builtin_def> defs = []
-    {
-        std::vector<builtin_def> out{
-            {builtin::title.str(), style_family::para, title_style},
-            {builtin::preformatted.str(), style_family::para, preformatted_style},
-            {builtin::source_text.str(), style_family::text, source_text_style},
-            {builtin::link.str(), style_family::text, link_style},
-        };
-        for(int level = 1; level <= 10; ++level)
-            out.push_back(
-                {builtin::heading(level).str(), style_family::para, heading_style(level)});
-        return out;
-    }();
-    return defs;
 }
 
 /// The paragraph and text style names the body's nodes use, the defaults of
@@ -367,6 +310,20 @@ void writer::load_styles_xml()
 // automatic styles. One that is unchanged since loading keeps its original XML.
 void writer::write_styles(const text_doc &doc)
 {
+    // The builtins the body uses that neither the document nor the loaded file
+    // defines get their default: LibreOffice applies a style only if the file
+    // defines it, even one of its own.
+    style_sheet sheet = doc.styles();
+    const auto used = names_used(doc);
+    for(const auto &[name, def] : detail::builtin_defaults().para)
+        if(used.para.contains(name.str()) && !sheet.para.contains(name) &&
+            !find_style(m_styles, name.str(), style_family::para))
+            sheet.insert(def);
+    for(const auto &[name, def] : detail::builtin_defaults().text)
+        if(used.text.contains(name.str()) && !sheet.text.contains(name) &&
+            !find_style(m_styles, name.str(), style_family::text))
+            sheet.insert(def);
+
     // Registries iterate in name order, so the output is stable.
     auto write_family = [&](const auto &registry)
     {
@@ -396,7 +353,7 @@ void writer::write_styles(const text_doc &doc)
             }
         }
     };
-    doc.styles().for_each(write_family);
+    sheet.for_each(write_family);
 
     // Both parts, as their styles may each use the font.
     auto root = m_styles_xml.child("office:document-styles");
@@ -409,23 +366,12 @@ void writer::write_styles(const text_doc &doc)
             for(auto decls : {fonts, m_font_faces})
                 add_font_face(decls, tp.m_font_name->str());
     };
-    for(const auto &[name, s] : doc.styles().para)
+    for(const auto &[name, s] : sheet.para)
         declare(s.text);
-    for(const auto &[name, s] : doc.styles().text)
+    for(const auto &[name, s] : sheet.text)
         declare(s.text);
-    for(const auto &[name, s] : doc.styles().cell)
+    for(const auto &[name, s] : sheet.cell)
         declare(s.text);
-
-    const auto used = names_used(doc);
-    for(const auto &b : builtin_defs())
-    {
-        const bool is_para = b.family == style_family::para;
-        const bool defined =
-            is_para ? doc.styles().para.contains(b.name) : doc.styles().text.contains(b.name);
-        if((is_para ? used.para : used.text).contains(b.name) && !defined &&
-            !find_style(m_styles, b.name, b.family))
-            m_styles.append_buffer(b.xml.data(), b.xml.size());
-    }
 }
 
 // Archive path for an image. A document resource is embedded under its name; an

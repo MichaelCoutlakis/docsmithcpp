@@ -610,3 +610,39 @@ TEST(ODT_XML, StyleNamesAreSpelledAsOdfNames)
     EXPECT_TRUE(again.styles().para.contains(builtin::para));
     EXPECT_EQ(again.body, doc.body);
 }
+
+// Editing a builtin that the file doesn't define keeps its default look.
+TEST(ODT_XML, EditedBuiltinKeepsDefault)
+{
+    text_doc doc{heading(1, "Results"), paragraph("code").set_style(builtin::preformatted)};
+    doc.styles()[builtin::heading(1)].text.set(font_colour(colour::rgb(200, 0, 0)));
+    doc.styles()[builtin::preformatted].para.set(space_after(pt(6)));
+    odt::file(doc).save("odt/out/edited_builtin.odt");
+
+    const part styles("odt/out/edited_builtin.odt", "styles.xml");
+    auto h1 = styles.xml.select_node("//style:style[@style:name='Heading_20_1']").node();
+    ASSERT_TRUE(h1);
+    EXPECT_STREQ(h1.child("style:text-properties").attribute("fo:font-weight").as_string(), "bold");
+    EXPECT_STREQ(h1.child("style:text-properties").attribute("fo:color").as_string(), "#c80000");
+    EXPECT_STREQ(h1.attribute("style:default-outline-level").as_string(), "1");
+    auto pre = styles.xml.select_node("//style:style[@style:name='Preformatted_20_Text']").node();
+    ASSERT_TRUE(pre);
+    EXPECT_STREQ(
+        pre.child("style:text-properties").attribute("style:font-name").as_string(), "Courier New");
+
+    // What is saved reads back as the definition.
+    auto back = odt::file::load("odt/out/edited_builtin.odt");
+    EXPECT_EQ(
+        *back.doc.styles().find(builtin::heading(1)), *doc.styles().find(builtin::heading(1)));
+}
+
+TEST(ODT_XML, UnderlineRoundTrips)
+{
+    text_doc doc{paragraph(span("u").set_style("U"), span("n").set_style("N"))};
+    doc.styles().insert(text_style("U", text_props(underline::single)));
+    doc.styles().insert(text_style("N", text_props(underline::none)));
+    odt::file(doc).save("odt/out/underline.odt");
+    auto back = odt::file::load("odt/out/underline.odt");
+    EXPECT_EQ(back.doc.styles().text.find("U")->text.m_underline, underline::single);
+    EXPECT_EQ(back.doc.styles().text.find("N")->text.m_underline, underline::none);
+}

@@ -180,6 +180,11 @@ enum class font_weight
     normal,
     bold
 };
+enum class underline
+{
+    none,
+    single
+};
 
 /// A font size: font_size(11) is 11pt, as is font_size(pt(11)).
 struct font_size
@@ -283,6 +288,11 @@ struct text_props
         m_font_colour = c.m_colour;
         return *this;
     }
+    text_props &set(underline u)
+    {
+        m_underline = u;
+        return *this;
+    }
     /// Sets each property over holds, keeping the others.
     text_props &overlay(const text_props &over)
     {
@@ -296,6 +306,7 @@ struct text_props
         take(m_font_name, over.m_font_name);
         take(m_font_weight, over.m_font_weight);
         take(m_font_colour, over.m_font_colour);
+        take(m_underline, over.m_underline);
         return *this;
     }
     bool empty() const { return *this == text_props{}; }
@@ -306,6 +317,7 @@ struct text_props
     std::optional<font_name> m_font_name;
     std::optional<font_weight> m_font_weight;
     std::optional<colour> m_font_colour;
+    std::optional<underline> m_underline;
 };
 
 /// How a paragraph's lines line up. start and end are left and right in
@@ -724,6 +736,10 @@ public:
         style_base(std::move(name))
     { (assign(props), ...); }
 
+    /// What a registry's operator[] starts a new definition of name from: a
+    /// builtin's default (builtin::default_style()), else an empty style.
+    static paragraph_style initial(const name_type &name);
+
     name_type parent; //!< The style it inherits from; empty for none
     paragraph_props para;
     text_props text;
@@ -744,11 +760,35 @@ public:
     {
     }
 
+    /// As paragraph_style::initial().
+    static text_style initial(const name_type &name);
+
     name_type parent; //!< The style it inherits from; empty for none
     text_props text;
 
     bool operator==(const text_style &) const = default;
 };
+
+namespace builtin
+{
+/// The format-agnostic definition of a builtin style, or nullopt for a name
+/// with none. It is the look every writer gives a builtin the document uses
+/// but neither it nor a loaded file defines, and where operator[] starts a
+/// definition of it, so setting one property keeps the rest:
+///
+///     doc.styles()[builtin::heading(1)].text.set(font_colour(red)); // still bold
+///
+/// Title, heading(1-10), preformatted, source_text, link, emphasis and strong
+/// have one. The other defaults (para, table, list) have none: undefined,
+/// each format's own applies.
+std::optional<paragraph_style> default_style(const para_style_name &name);
+std::optional<text_style> default_style(const text_style_name &name);
+} // namespace builtin
+
+inline paragraph_style paragraph_style::initial(const name_type &name)
+{ return builtin::default_style(name).value_or(paragraph_style(name)); }
+inline text_style text_style::initial(const name_type &name)
+{ return builtin::default_style(name).value_or(text_style(name)); }
 
 /// How a table looks. The lines and the header apply to cells by their
 /// position when the document is written, under each cell's own style and
@@ -919,9 +959,10 @@ public:
     const auto &of() const
     { return of_impl<F>(*this); }
 
-    /// The definition of that name in its family, added (empty) if there's
-    /// none, as std::map::operator[]. The reference stays valid until the
-    /// style is erased.
+    /// The definition of that name in its family, added if there's none, as
+    /// std::map::operator[]: a builtin's default (builtin::default_style()),
+    /// else an empty style. The reference stays valid until the style is
+    /// erased.
     template <style_family F>
     auto &operator[](const style_name<F> &name)
     { return of<F>()[name]; }

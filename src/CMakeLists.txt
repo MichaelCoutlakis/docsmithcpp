@@ -20,6 +20,8 @@ add_library(docsmithcpp
     "../include/docsmithcpp/docx/file.h"
 
     # Private: the archive and XML details stay out of the public headers.
+    "builtin_styles.h"
+    "builtin_styles.cpp"
     "bytes.h"
     "bytes.cpp"
     "cell_text.h"

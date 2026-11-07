@@ -24,6 +24,7 @@
 #include <string_view>
 #include <utility>
 
+#include "builtin_styles.h"
 #include "format.h"
 #include "odf/names.h"
 #include "odf/package.h"
@@ -203,6 +204,8 @@ std::optional<text_props> read_text_props(const pugi::xml_node &n)
         tp.set(*fw);
     if(auto c = colour_from(n.attribute("fo:color").as_string()))
         tp.set(font_colour(*c));
+    if(auto u = n.attribute("style:text-underline-style"))
+        tp.set(std::string_view(u.as_string()) == "none" ? underline::none : underline::single);
     return tp == text_props{} ? std::nullopt : std::optional(std::move(tp));
 }
 
@@ -375,6 +378,8 @@ pugi::xml_node style_node(pugi::xml_node &n, const S &s)
 void write_xml(pugi::xml_node &n, const paragraph_style &s)
 {
     auto node = style_node(n, s);
+    if(const int level = detail::builtin_heading_level(s.name()))
+        node.append_attribute("style:default-outline-level") = level;
     if(!s.para.empty())
         write_xml(node, s.para);
     if(!s.text.empty())
@@ -466,6 +471,15 @@ void write_xml(pugi::xml_node &n, const text_props &tp)
 
     if(tp.m_font_colour)
         text_props_node.append_attribute("fo:color") = detail::to_hex(*tp.m_font_colour).c_str();
+
+    if(tp.m_underline == underline::none)
+        text_props_node.append_attribute("style:text-underline-style") = "none";
+    else if(tp.m_underline == underline::single)
+    {
+        text_props_node.append_attribute("style:text-underline-style") = "solid";
+        text_props_node.append_attribute("style:text-underline-width") = "auto";
+        text_props_node.append_attribute("style:text-underline-color") = "font-color";
+    }
 }
 
 void write_xml(pugi::xml_node &n, const paragraph_props &props)

@@ -22,6 +22,7 @@
 #include <cmath>
 #include <string_view>
 
+#include "builtin_styles.h"
 #include "docx/ooxml.h"
 #include "format.h"
 
@@ -204,6 +205,9 @@ void write_rpr(pugi::xml_node rpr, const text_props &props)
             c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
         set_val(ordered_child(rpr, "w:color", rpr_order), hex);
     }
+    if(props.m_underline)
+        set_val(ordered_child(rpr, "w:u", rpr_order),
+            *props.m_underline == underline::single ? "single" : "none");
     if(props.m_font_size)
     {
         const auto half_points = std::to_string(std::lround(props.m_font_size->m_points * 2));
@@ -294,6 +298,9 @@ std::optional<text_props> read_rpr(const pugi::xml_node &rpr)
         tp.set(on(b) ? font_weight::bold : font_weight::normal);
     if(auto c = colour_from(val(rpr, "w:color")))
         tp.set(font_colour(*c));
+    if(auto u = rpr.child("w:u"))
+        tp.set(std::string_view(u.attribute("w:val").as_string()) == "none" ? underline::none
+                                                                            : underline::single);
     return tp == text_props{} ? std::nullopt : std::optional(std::move(tp));
 }
 
@@ -470,8 +477,11 @@ void drop_empty(pugi::xml_node n)
 void write_style(pugi::xml_node n, const paragraph_style &s, const style_ids &ids)
 {
     style_head(n, "paragraph", ids);
+    auto ppr = n.append_child("w:pPr");
     if(!s.para.empty())
-        write_ppr(n.append_child("w:pPr"), s.para);
+        write_ppr(ppr, s.para);
+    if(const int level = detail::builtin_heading_level(s.name()); level >= 1 && level <= 9)
+        set_val(ordered_child(ppr, "w:outlineLvl", ppr_order), std::to_string(level - 1));
     if(!s.text.empty())
         write_rpr(n.append_child("w:rPr"), s.text);
     drop_empty(n);

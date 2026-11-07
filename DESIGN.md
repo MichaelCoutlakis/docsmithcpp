@@ -275,7 +275,8 @@ paragraph style is written as `<id>Char`.
 
 The registries are like `std::map`: `insert()` keeps an existing definition,
 `insert_or_assign()` replaces it, `operator[]` gives the definition of a name,
-adding an empty one if there is none, and `erase()` removes one. The style
+adding one if there is none (a builtin's default, else an empty one; see
+*Builtin defaults*), and `erase()` removes one. The style
 sheet's `operator[]` takes a typed name and picks the registry from it:
 
     doc.styles()[builtin::para].text.set(font_size(11));
@@ -326,7 +327,8 @@ format. Reading maps each format's default back to the definition, with the
 nodes that use it unstyled, so content added to a template gets the template's
 defaults and a round trip doesn't turn "no style" into a named one.
 `doc.styles()[name]` gives the definition to edit, the template's if there is
-one, else a new empty one, of the builtin's family.
+one, else a new one of the builtin's family, starting from its default if it
+has one (see *Builtin defaults*).
 
 | Default (its name) | ODT | DOCX | HTML |
 |---|---|---|---|
@@ -352,14 +354,48 @@ set on each paragraph: ODF can't say that new paragraphs get Text Body, so a
 
 The other names in `builtin` are styles writers know without a definition in
 `text_doc::styles()`: `title`, `preformatted` (a monospace paragraph for code
-and logs) and `source_text` (monospace text within a line). They are
-LibreOffice's own Title, Preformatted Text and Source Text, so ODT defines each
-as LibreOffice does when the document uses it and neither the document nor the
-loaded file defines it. It does the same for the default heading styles (as the
-DOCX writer's: sans, bold, kept with the next paragraph) and Internet Link:
-LibreOffice applies a style only if the file defines it, even one of its own. HTML writes the class and leaves its look to
-`html::file::css`, except that a preformatted paragraph is `<pre>` and a source
-text span `<code>`, as is anything styled with a style based on them.
+and logs) and `source_text` (monospace text within a line), LibreOffice's own
+Title, Preformatted Text and Source Text. HTML writes the class and leaves an
+undefined one's look to `html::file::css`, except that a preformatted
+paragraph is `<pre>` and a source text span `<code>`, as is anything styled
+with a style based on them.
+
+### Builtin defaults
+
+Several builtins have a format-agnostic default definition,
+`builtin::default_style(name)`, in the model rather than in each writer, so
+the formats can't drift apart:
+
+| Builtin | Default |
+|---|---|
+| `title` | based on `para`; Arial 28pt bold, centred, 12pt above and 6pt below, kept with the next |
+| `heading(n)` | based on `para`; Arial bold, 18, 16, 14, 13, 12, 11, 11, 10, 10, 10pt, 12pt above and 6pt below, kept with the next |
+| `preformatted` | based on `para`; Courier New 10pt, no space above or below |
+| `source_text` | Courier New |
+| `link` | `#0563C1`, underlined |
+| `emphasis`, `strong` | italic, bold |
+
+`para`, `table` and `list` have none: undefined, each format's own applies.
+Arial and Courier New are on Windows and macOS, and LibreOffice substitutes
+the metric-compatible Liberation Sans and Liberation Mono where they aren't.
+
+The default is used in two places:
+
+- **`operator[]`** starts a definition of a builtin from its default, so
+  `doc.styles()[builtin::heading(1)].text.set(font_colour(red))` gives a red
+  heading that is still bold. A definition from a loaded file is returned as
+  it is, and `insert()` / `insert_or_assign()` of a style of your own replaces
+  the default entirely.
+- **Writers** define a builtin the body uses that neither the document nor
+  the loaded file defines as its default: ODT and DOCX must, since
+  LibreOffice applies a style only if the file defines it, even one of its
+  own. On top of the model's properties, a writer adds what only its format
+  holds: a heading style's outline level (ODT `style:default-outline-level`,
+  DOCX `w:outlineLvl`). HTML writes no rule for an undefined builtin.
+
+So a document built in code reads back with the defaults of the builtins it
+used defined, as `operator[]` would have made them: a round trip is equal
+until a document mutates a default it didn't define.
 
 A code block is a paragraph, not a node of its own: its lines are separated by
 `'\n'` in the text, and its white space is kept like any other text's (see
@@ -701,12 +737,13 @@ are kept, renamed only if they clash, and `mc:Ignorable` follows them.
   styles `table`; frame, row and cell styles have no DOCX form (a cell style's
   `para` and `text` go on its paragraphs, see *Styles*). Ids are unique across
   types, so a text style with a paragraph style's name is `<name>Char`. Font,
-  size (half-points), weight, italic, colour and `break_before` page map to
-  `w:rFonts`, `w:sz`, `w:b`, `w:i`, `w:color` and `w:pageBreakBefore`. As with
+  size (half-points), weight, italic, colour, underline and `break_before`
+  page map to `w:rFonts`, `w:sz`, `w:b`, `w:i`, `w:color`, `w:u` and
+  `w:pageBreakBefore`. As with
   ODT, an unchanged loaded style keeps its XML and an edited one replaces it.
   The writer defines the styles it uses that neither the document nor the file
-  defines: the builtins (Title; Preformatted Text and Source Text in Courier
-  New), `Heading1`-`9`, `Hyperlink` and the table of contents ones. When
+  defines: the builtins from their defaults (see *Builtin defaults*), and the
+  table of contents ones. When
   reading, Word's `HTML Preformatted` and `HTML Code`, and LibreOffice's names
   for its own, are the builtins.
 - **Direct formatting**: Word puts formatting on the run or paragraph itself
@@ -715,7 +752,7 @@ are kept, renamed only if they clash, and `mc:Ignorable` follows them.
   runs and `P1`, ... for paragraphs, based on the run's or paragraph's own
   style, so the model sees bold text as bold. The file keeps the original XML,
   and while the definition is unchanged the writer writes that XML back instead
-  of the style, so properties the model doesn't hold (underline, spacing,
+  of the style, so properties the model doesn't hold (spacing,
   alignment, a section break) survive. Properties that repeat what the style
   already says, or set a default (as LibreOffice writes `w:jc="left"` on every
   paragraph), aren't direct formatting.

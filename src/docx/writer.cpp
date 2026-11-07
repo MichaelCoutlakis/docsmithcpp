@@ -18,6 +18,7 @@
 #include "docx/writer.h"
 #include "docsmithcpp/error.h"
 
+#include "builtin_styles.h"
 #include "cell_text.h"
 
 #include <algorithm>
@@ -93,8 +94,6 @@ constexpr const char *base_sect_pr =
     R"~~(<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1134" w:right="1134" w:bottom="1134" w:left="1134" w:header="567" w:footer="567" w:gutter="0"/><w:cols w:space="720"/></w:sectPr>)~~";
 
 constexpr const char *sans = R"~~(<w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/>)~~";
-constexpr const char *mono =
-    R"~~(<w:rFonts w:ascii="Courier New" w:hAnsi="Courier New" w:cs="Courier New"/>)~~";
 
 std::string paragraph_style(
     const std::string &id, const std::string &name, const std::string &ppr, const std::string &rpr)
@@ -110,41 +109,15 @@ std::string size(int half_points)
     return R"~~(<w:sz w:val=")~~" + v + R"~~("/><w:szCs w:val=")~~" + v + R"~~("/>)~~";
 }
 
-/// Definitions for the styles the writer uses without the document defining
-/// them: the builtins, the default heading styles, and those of the table of
-/// contents and links. Word knows most by name, but other readers may not.
-std::string builtin_style(const std::string &id)
+/// Definitions for the table of contents styles the writer uses. Word knows
+/// them by name, but other readers may not. The builtins come from
+/// builtin::default_style() instead.
+std::string toc_style(const std::string &id)
 {
     constexpr const char *keep = R"~~(<w:keepNext/><w:spacing w:before="240" w:after="120"/>)~~";
-    if(id == "Title")
-        return paragraph_style(id,
-            "Title",
-            std::string(keep) + R"~~(<w:jc w:val="center"/>)~~",
-            std::string(sans) + "<w:b/><w:bCs/>" + size(56));
-    if(id == "PreformattedText")
-        return paragraph_style(id,
-            "Preformatted Text",
-            R"~~(<w:spacing w:before="0" w:after="0" w:line="240" w:lineRule="auto"/>)~~",
-            std::string(mono) + size(20));
-    if(id == "SourceText")
-        return R"~~(<w:style w:type="character" w:styleId=")~~" + id +
-            R"~~("><w:name w:val="Source Text"/><w:qFormat/><w:rPr>)~~" + mono +
-            "</w:rPr></w:style>";
-    if(id == "Hyperlink")
-        return R"~~(<w:style w:type="character" w:styleId="Hyperlink"><w:name w:val="Hyperlink"/><w:rPr><w:color w:val="0563C1"/><w:u w:val="single"/></w:rPr></w:style>)~~";
     if(id == "TOCHeading")
         return paragraph_style(
             id, "TOC Heading", keep, std::string(sans) + "<w:b/><w:bCs/>" + size(32));
-    if(id.size() == 8 && id.starts_with("Heading") && id[7] >= '1' && id[7] <= '9')
-    {
-        const int level = id[7] - '0';
-        constexpr int sizes[] = {36, 32, 28, 26, 24, 22, 22, 20, 20};
-        return paragraph_style(id,
-            "heading " + id.substr(7),
-            std::string(keep) + R"~~(<w:outlineLvl w:val=")~~" + std::to_string(level - 1) +
-                R"~~("/>)~~",
-            std::string(sans) + "<w:b/><w:bCs/>" + size(sizes[level - 1]));
-    }
     if(id.size() == 4 && id.starts_with("TOC") && id[3] >= '1' && id[3] <= '9')
     {
         const int level = id[3] - '0';
@@ -615,9 +588,26 @@ private:
         write_family(m_doc.styles().text);
         write_family(m_doc.styles().table);
 
+        // The builtins the body uses that neither the document nor the loaded
+        // file defines get their default.
+        style_registry<docsmith::paragraph_style> para_defaults;
+        for(const auto &[name, def] : detail::builtin_defaults().para)
+            if(!m_doc.styles().para.contains(name))
+                if(const std::string id = id_of(name.str());
+                    m_used_ids.contains({id, "paragraph"}) && !find_style(id, "paragraph"))
+                    para_defaults.insert(def);
+        style_registry<text_style> text_defaults;
+        for(const auto &[name, def] : detail::builtin_defaults().text)
+            if(!m_doc.styles().text.contains(name))
+                if(const std::string id = char_id(name.str());
+                    m_used_ids.contains({id, "character"}) && !find_style(id, "character"))
+                    text_defaults.insert(def);
+        write_family(para_defaults);
+        write_family(text_defaults);
+
         for(const auto &[id, type] : m_used_ids)
             if(!find_style(id, type))
-                if(const std::string def = builtin_style(id); !def.empty())
+                if(const std::string def = toc_style(id); !def.empty())
                     root.append_buffer(def.data(), def.size());
 
         m_parts.erase(m_styles_name);

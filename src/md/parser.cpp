@@ -336,8 +336,8 @@ public:
         }
         switch(type)
         {
-        case MD_SPAN_EM: open_span(builtin::emphasis, text_props(font_style::italic)); break;
-        case MD_SPAN_STRONG: open_span(builtin::strong, text_props(font_weight::bold)); break;
+        case MD_SPAN_EM: open_span(builtin::emphasis); break;
+        case MD_SPAN_STRONG: open_span(builtin::strong); break;
         case MD_SPAN_CODE:
         {
             inlines().push_back(inline_node{span().set_style(builtin::source_text)});
@@ -448,9 +448,10 @@ private:
         close_paragraph();
     }
 
-    void open_span(const text_style_name &name, const text_props &props)
+    /// A span of a builtin text style, defined in doc as its default.
+    void open_span(const text_style_name &name)
     {
-        doc.styles().insert(text_style(name, props));
+        doc.styles().text[name];
         inlines().push_back(inline_node{span().set_style(name)});
         m_inlines.push_back(&std::get<span>(inlines().back().v).items());
     }

@@ -257,6 +257,9 @@ std::string css_decls(const text_props &tp)
         decls += std::string(" font-weight: ") + css_value(*tp.m_font_weight) + ";";
     if(const auto &c = tp.m_font_colour)
         decls += " color: " + detail::to_hex(*c) + ";";
+    if(tp.m_underline)
+        decls += *tp.m_underline == underline::single ? " text-decoration: underline;"
+                                                      : " text-decoration: none;";
     return decls;
 }
 

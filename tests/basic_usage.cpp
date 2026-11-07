@@ -340,3 +340,28 @@ TEST(BASIC_USAGE, ValueTypesTakeParenthesesOrBraces)
         table_props(table_width(percent(50)), outer_border(border::solid()), cell_padding(pt(2))),
         table_props(table_width(percent{50}), outer_border{border::solid()}, cell_padding{pt(2)}));
 }
+
+// A builtin's definition made with operator[] starts from its default, so
+// setting one property keeps the look; a builtin without a default starts empty.
+TEST(BASIC_USAGE, BuiltinDefinitionStartsFromDefault)
+{
+    text_doc doc;
+    auto &h1 = doc.styles()[builtin::heading(1)];
+    h1.text.set(font_colour(colour::rgb(200, 0, 0)));
+    EXPECT_EQ(h1.text.m_font_weight, font_weight::bold);
+    EXPECT_TRUE(h1.text.m_font_size.has_value());
+    EXPECT_EQ(h1.parent, builtin::para);
+    EXPECT_EQ(h1.text.m_font_colour, colour::rgb(200, 0, 0));
+
+    EXPECT_EQ(doc.styles().text[builtin::link].text.m_underline, underline::single);
+    EXPECT_TRUE(doc.styles().para[builtin::preformatted].text.m_font_name.has_value());
+
+    EXPECT_EQ(doc.styles()[builtin::para], paragraph_style(builtin::para));
+    EXPECT_EQ(doc.styles().para["Note"], paragraph_style("Note"));
+    EXPECT_FALSE(builtin::default_style(builtin::para));
+    EXPECT_FALSE(builtin::default_style(text_style_name("Note")));
+
+    // An existing definition is returned as it is.
+    doc.styles().insert_or_assign(paragraph_style(builtin::title));
+    EXPECT_EQ(doc.styles()[builtin::title], paragraph_style(builtin::title));
+}

@@ -638,3 +638,24 @@ TEST(DOCX_Write, SameStyleNamesAsOdt)
     EXPECT_TRUE(from_docx.styles().para.contains("Note"));
     EXPECT_TRUE(from_odt.styles().para.contains("Note"));
 }
+
+// Editing a builtin that the file doesn't define keeps its default look.
+TEST(DOCX_Write, EditedBuiltinKeepsDefault)
+{
+    text_doc doc{heading(1, "Results"), paragraph(hyperlink("https://example.com", "site"))};
+    doc.styles()[builtin::heading(1)].text.set(font_colour(colour::rgb(200, 0, 0)));
+    saved s(doc, "edited_builtin");
+    const auto styles = s.xml("word/styles.xml");
+    auto h1 = style_def(styles, "Heading1");
+    EXPECT_TRUE(h1.child("w:rPr").child("w:b"));
+    EXPECT_EQ(docx::val(h1.child("w:rPr"), "w:color"), "C80000");
+    EXPECT_EQ(docx::val(h1.child("w:pPr"), "w:outlineLvl"), "0");
+    EXPECT_EQ(docx::val(h1, "w:basedOn"), "Normal");
+    auto link = style_def(styles, "Hyperlink");
+    EXPECT_EQ(docx::val(link.child("w:rPr"), "w:u"), "single");
+
+    auto back = docx::file::load(s.path);
+    EXPECT_EQ(
+        *back.doc.styles().find(builtin::heading(1)), *doc.styles().find(builtin::heading(1)));
+    EXPECT_EQ(back.doc.styles().find(builtin::link)->text.m_underline, underline::single);
+}

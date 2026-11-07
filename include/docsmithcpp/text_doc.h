@@ -123,9 +123,9 @@ public:
     ///     doc.styles()[builtin::para].text.set(font_size(11));
     ///     auto [note, added] = doc.styles().insert(paragraph_style("Note", ...));
     ///
-    /// A builtin's definition made with operator[] starts empty, so the look
-    /// a writer gives an undefined builtin (ODT's Title or Heading 1, say)
-    /// isn't in it.
+    /// A builtin's definition made with operator[] starts from its default
+    /// (builtin::default_style()), so setting one property keeps the rest of
+    /// its look.
     style_sheet &styles() { return m_styles; }
     const style_sheet &styles() const { return m_styles; }
     resource_registry &resources() { return m_resources; }

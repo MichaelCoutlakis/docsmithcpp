@@ -52,11 +52,19 @@ public:
         Key key = value.name();
         return m_data.insert_or_assign(std::move(key), std::move(value));
     }
-    /// The definition of that name, added (empty) if there's none, as
-    /// std::map::operator[].
+    /// The definition of that name, added if there's none, as
+    /// std::map::operator[]. A new one is T::initial(name) where T has it (a
+    /// builtin style's default), else T(name).
     T &operator[](const Key &name)
         requires std::constructible_from<T, const Key &>
-    { return m_data.try_emplace(name, name).first->second; }
+    {
+        if(auto it = m_data.find(name); it != m_data.end())
+            return it->second;
+        if constexpr(requires { T::initial(name); })
+            return m_data.emplace(name, T::initial(name)).first->second;
+        else
+            return m_data.try_emplace(name, name).first->second;
+    }
 
     /// The definition of that name, or nullptr.
     [[nodiscard]] T *find(const Key &name)

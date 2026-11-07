@@ -269,7 +269,8 @@ TEST(HTML, ConvertsParsedOdt)
     EXPECT_TRUE(
         has(html, R"(<a href="https://github.com/MichaelCoutlakis/docsmithcpp">docsmith</a>)"))
         << "LibreOffice's link style is the default one";
-    EXPECT_TRUE(has(html, ".Hyperlink, a:not([class]) { color: #000080; }"));
+    EXPECT_TRUE(
+        has(html, ".Hyperlink, a:not([class]) { color: #000080; text-decoration: underline; }"));
     EXPECT_EQ(count(html, "<li"), 8U); // 2 + 2 + 1 + (1 with a nested 1) + 1
 }
 

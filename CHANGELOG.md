@@ -11,6 +11,14 @@ The document model was rewritten from a polymorphic class hierarchy into value t
 held in `std::variant`. This is a breaking change to almost every public API.
 
 ### Changed
+- **Builtin styles have format-agnostic defaults** (`builtin::default_style()`):
+  title, headings, preformatted, source text, link, emphasis and strong. A
+  definition made with `styles()[builtin::...]` starts from the default, so
+  setting one property (a heading's colour) no longer drops the rest of its look
+  (bold, size, keep with next). The ODT and DOCX writers define an undefined
+  builtin from the same default instead of their own, so the two formats now
+  agree: headings and the title in Arial, code in Courier New, links `#0563C1` and
+  underlined. Emphasis and strong are now bold and italic in ODT and DOCX too.
 - **Style names are format-agnostic**: a style is named as it is shown ("Text body",
   "Heading 1"), and readers and writers translate to the format's own spelling (ODF's
   `Text_20_body`, a DOCX `w:styleId` made from the name). The builtins are renamed to
@@ -106,6 +114,9 @@ held in `std::variant`. This is a breaking change to almost every public API.
   directory. Generated test files go to `tests/odt/out/`.
 
 ### Added
+- **Underline**: `text_props::set(underline::single)` (or `underline::none`), read
+  and written in ODT (`style:text-underline-style`), DOCX (`w:u`) and HTML
+  (`text-decoration`).
 - **`odt::save(doc, path)`**, and `docx::`, `html::` and `md::save()`: save a document
   without copying it into a `file`.
 - **Content concepts**: `inline_content`, `block_content` and `content_for` constrain
