@@ -74,8 +74,8 @@ target_include_directories(docsmithcpp
 
 target_compile_features(docsmithcpp PUBLIC cxx_std_20)
 
-# All private: no public header includes them. A static library still needs
-# them at link time, which CMake propagates and the package config finds.
+# All private: no public header includes them. The project using DocSmith++
+# still defines these targets itself (cmake/DocSmithCppDependencies.cmake).
 target_link_libraries(docsmithcpp PRIVATE pugixml::pugixml miniz::miniz)
 
 # Markdown output needs nothing; input uses md4c. The definition is public, so

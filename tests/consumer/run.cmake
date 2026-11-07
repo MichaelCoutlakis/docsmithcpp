@@ -31,6 +31,28 @@ foreach(var IN LISTS FORWARD)
     endif()
 endforeach()
 
+list(APPEND args "-DWITH_MARKDOWN=${WITH_MARKDOWN}")
+
+# Without its dependencies found first, DocSmith++ refuses to load, naming
+# them.
+execute_process(
+    COMMAND "${CMAKE_COMMAND}" -S "${CONSUMER_SOURCE_DIR}" -B "${CONSUMER_BINARY_DIR}-bare"
+        ${args} -DFIND_DEPENDENCIES=OFF
+    RESULT_VARIABLE result
+    OUTPUT_VARIABLE output
+    ERROR_VARIABLE output)
+file(REMOVE_RECURSE "${CONSUMER_BINARY_DIR}-bare")
+if(result EQUAL 0)
+    message(FATAL_ERROR "find_package(DocSmithCpp) succeeded without its dependencies")
+endif()
+# CMake wraps the message, so only look for each piece in it.
+foreach(piece IN ITEMS "Missing:" pugixml::pugixml miniz::miniz)
+    string(FIND "${output}" "${piece}" at)
+    if(at EQUAL -1)
+        message(FATAL_ERROR "The failure doesn't say \"${piece}\":\n${output}")
+    endif()
+endforeach()
+
 run("${CMAKE_COMMAND}" -S "${CONSUMER_SOURCE_DIR}" -B "${CONSUMER_BINARY_DIR}" ${args})
 run("${CMAKE_COMMAND}" --build "${CONSUMER_BINARY_DIR}" --config "${CONFIG}")
 run("${CTEST_COMMAND}" --test-dir "${CONSUMER_BINARY_DIR}" -C "${CONFIG}" --output-on-failure --no-tests=error)

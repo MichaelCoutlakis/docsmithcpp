@@ -119,12 +119,27 @@ ctest --test-dir build
 ### Using it from another CMake project
 
 Whichever route you take, link `docsmith::docsmithcpp`, the same target name in
-every case. pugixml and miniz are linked privately, but a static library still
-needs them at link time, so they must be findable (e.g. through the same vcpkg
-toolchain). So must md4c when the library is built with `DOCSMITHCPP_MARKDOWN`:
-the package config then looks for it, and the `docsmith::docsmithcpp` target
-defines `DOCSMITHCPP_MARKDOWN` for its users, which `md/file.h` uses to declare
-the input functions. Markdown output needs nothing, so it is always built.
+every case.
+
+**Your project finds DocSmith++'s dependencies.** DocSmith++ links
+`pugixml::pugixml` and `miniz::miniz`, and `md4c::md4c` when built with
+`DOCSMITHCPP_MARKDOWN`. They are private to its code, but they end up in what
+you ship, so their licences, versions and vulnerabilities are yours to choose
+and check. DocSmith++ doesn't find them for you: define those targets before
+`find_package(DocSmithCpp)` or `add_subdirectory`, or it stops with a message
+naming the missing ones. A later release that adds a dependency fails the same
+way, rather than bringing it in unnoticed. The targets only need these names, so
+a package manager that names them differently is fine:
+
+```cmake
+find_package(pugixml CONFIG REQUIRED)
+find_package(miniz CONFIG REQUIRED)
+# or, e.g. with Conan's names: add_library(pugixml::pugixml ALIAS Pugi::xml)
+```
+
+Built with `DOCSMITHCPP_MARKDOWN`, the `docsmith::docsmithcpp` target defines
+`DOCSMITHCPP_MARKDOWN` for its users, which `md/file.h` uses to declare the input
+functions. Markdown output needs nothing, so it is always built.
 
 Installed, with `find_package`:
 
@@ -133,6 +148,8 @@ cmake --install build --prefix <prefix>
 ```
 
 ```cmake
+find_package(pugixml CONFIG REQUIRED)
+find_package(miniz CONFIG REQUIRED)
 find_package(DocSmithCpp CONFIG REQUIRED) # with <prefix> in CMAKE_PREFIX_PATH
 target_link_libraries(my_app PRIVATE docsmith::docsmithcpp)
 ```
@@ -171,6 +188,8 @@ every file they wrote. Skip it with `ctest -LE libreoffice`.
 
 The `consumer` test installs the library into the build directory and builds
 `tests/consumer/` against it with `find_package`, using the same toolchain. It
+also checks that `find_package(DocSmithCpp)` fails, naming the targets, when the
+consumer hasn't found the dependencies. It
 configures a project from scratch, so skip it with `ctest -LE consumer` when
 iterating.
 

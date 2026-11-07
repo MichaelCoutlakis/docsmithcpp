@@ -4,6 +4,18 @@ cmake_minimum_required(VERSION 3.20)
 
 project(DocSmithCppConsumer LANGUAGES CXX)
 
+# The consumer finds what DocSmith++ links: it decides which libraries are in
+# its build. FIND_DEPENDENCIES OFF checks that DocSmith++ then refuses to load.
+option(FIND_DEPENDENCIES "Find DocSmith++'s dependencies first" ON)
+option(WITH_MARKDOWN "DocSmith++ was built with DOCSMITHCPP_MARKDOWN" OFF)
+if(FIND_DEPENDENCIES)
+    find_package(pugixml CONFIG REQUIRED)
+    find_package(miniz CONFIG REQUIRED)
+    if(WITH_MARKDOWN)
+        find_package(md4c CONFIG REQUIRED)
+    endif()
+endif()
+
 find_package(DocSmithCpp CONFIG REQUIRED)
 
 add_executable(consumer main.cpp)

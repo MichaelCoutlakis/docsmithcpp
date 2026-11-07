@@ -76,6 +76,7 @@ add_test(NAME consumer
         "-DPLATFORM=${CMAKE_GENERATOR_PLATFORM}"
         "-DCTEST_COMMAND=${CMAKE_CTEST_COMMAND}"
         "-DFORWARD=${consumer_forward_arg}"
+        "-DWITH_MARKDOWN=${DOCSMITHCPP_MARKDOWN}"
         ${consumer_args}
         "-DCMAKE_BUILD_TYPE=$<CONFIG>"
         -P ${CMAKE_CURRENT_SOURCE_DIR}/consumer/run.cmake)

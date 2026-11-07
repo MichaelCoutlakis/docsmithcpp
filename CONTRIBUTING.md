@@ -37,8 +37,9 @@ current ones are pugixml and miniz, plus md4c for the optional Markdown input.
 When one is added:
 
 - Keep it private: no public header includes it, and it is linked `PRIVATE` in
-  `src/CMakeLists.txt`. A static library still needs it at link time, so add a
-  `find_dependency` for it to `cmake/DocSmithCppConfig.cmake.in`.
+  `src/CMakeLists.txt`. Add its target to `cmake/DocSmithCppDependencies.cmake`,
+  so projects using DocSmith++ are told to find it (they find every dependency
+  themselves), and to the README's list. It's a breaking change for them.
 - Its licence must be compatible with Apache-2.0 (e.g. MIT, BSD, zlib,
   Apache-2.0).
 - If it is Apache-licensed and ships a `NOTICE` file, add its attribution to

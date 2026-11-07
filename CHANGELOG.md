@@ -11,6 +11,12 @@ The document model was rewritten from a polymorphic class hierarchy into value t
 held in `std::variant`. This is a breaking change to almost every public API.
 
 ### Changed
+- **Dependencies are the consumer's to find.** The project using DocSmith++ defines
+  `pugixml::pugixml` and `miniz::miniz` (and `md4c::md4c` with Markdown input) before
+  `find_package(DocSmithCpp)`, `add_subdirectory` or FetchContent; DocSmith++ checks
+  they exist and stops with a message naming any that are missing. So every library
+  in a build is one its project chose, and a package manager's own target names can
+  be aliased to these. Built on its own, DocSmith++ still finds them.
 - **`table`** keeps its cells private, row by row, and is always rectangular. Read
   them with `cell()`, `row()`, `col()` and `cells()`; add rows with
   `add_row(cells, row_style)`. `header_rows` is now `header_rows()` /
@@ -176,7 +182,7 @@ held in `std::variant`. This is a breaking change to almost every public API.
 - **Markdown input** (CMake option `DOCSMITHCPP_MARKDOWN`, off by default and on in
   the `dev` preset): `md::parse(std::string_view)` and `md::file::load()` read
   CommonMark with GFM tables, strikethrough and autolinks, using md4c. md4c is linked
-  privately, and the package config looks for it only when the option is on. Parsed
+  privately, and the package config requires it only when the option is on. Parsed
   emphasis, strong, code and quotes get LibreOffice's style names, so the result
   writes back to the same Markdown and looks right as `.odt`; it can be added to a
   document with `text_doc::append()`. Raw HTML is dropped, apart from bookmark
@@ -327,8 +333,6 @@ held in `std::variant`. This is a breaking change to almost every public API.
   and `loext:num-list-format` ignored the number's prefix and suffix.
 - The parser now reads heading outline levels and style names.
 - `odt/file.h` was missing `#pragma once`.
-- The installed `DocSmithCppConfig.cmake` now finds its dependencies (pugixml,
-  miniz), so `find_package(DocSmithCpp)` works from another project.
 - `.odt` files with non-ASCII names can be loaded and saved on Windows. Files are
   opened through `std::filesystem::path`, not `path::string()` (the ANSI code page).
 - The ODT `mimetype` entry has its CRC and sizes in its local header, with no data

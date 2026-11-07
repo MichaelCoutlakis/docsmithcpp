@@ -29,10 +29,21 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
-find_package(pugixml CONFIG REQUIRED)
-find_package(miniz CONFIG REQUIRED)
-if(DOCSMITHCPP_MARKDOWN)
-    find_package(md4c CONFIG REQUIRED)
+# Built on its own, DocSmith++ finds its dependencies. Included in another
+# project (add_subdirectory, FetchContent), that project defines them, as it
+# does for an installed DocSmith++ (cmake/DocSmithCppDependencies.cmake).
+include(cmake/DocSmithCppDependencies.cmake)
+if(docsmithcpp_is_top_level)
+    find_package(pugixml CONFIG REQUIRED)
+    find_package(miniz CONFIG REQUIRED)
+    if(DOCSMITHCPP_MARKDOWN)
+        find_package(md4c CONFIG REQUIRED)
+    endif()
+else()
+    docsmithcpp_check_dependencies(${DOCSMITHCPP_MARKDOWN} docsmithcpp_missing)
+    if(docsmithcpp_missing)
+        message(FATAL_ERROR "${docsmithcpp_missing}")
+    endif()
 endif()
 
 add_subdirectory(src)
@@ -66,4 +77,5 @@ write_basic_package_version_file(
 install(FILES
         "${CMAKE_CURRENT_BINARY_DIR}/DocSmithCppConfig.cmake"
         "${CMAKE_CURRENT_BINARY_DIR}/DocSmithCppConfigVersion.cmake"
+        "${CMAKE_CURRENT_SOURCE_DIR}/cmake/DocSmithCppDependencies.cmake"
         DESTINATION lib/cmake/DocSmithCpp)
