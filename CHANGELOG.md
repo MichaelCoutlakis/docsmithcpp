@@ -327,6 +327,8 @@ held in `std::variant`. This is a breaking change to almost every public API.
 - The empty placeholder tests in `test_main.cpp`, and the `architecture/` sketches.
 
 ### Fixed
+- A non-const `text_props` or `paragraph_props` can be copied. Its variadic
+  constructor took the copy and failed to compile.
 - A moved-from `span`, `hyperlink`, `list_item` or `table_cell` is empty. Its
   children were a null pointer, so reading or adding to it, or writing a document
   that still held it, crashed.

@@ -156,6 +156,7 @@ struct percent
 struct text_props
 {
     template <typename... Args>
+        requires(!std::is_same_v<std::decay_t<Args>, text_props> && ...)
     explicit text_props(Args &&...args)
     {
         (set(args), ...);
@@ -237,6 +238,7 @@ class paragraph_props
 {
 public:
     template <typename... Args>
+        requires(!std::is_same_v<std::decay_t<Args>, paragraph_props> && ...)
     explicit paragraph_props(Args &&...args)
     {
         (set(std::forward<Args>(args)), ...);

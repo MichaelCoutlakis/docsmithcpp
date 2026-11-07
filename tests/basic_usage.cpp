@@ -275,3 +275,19 @@ TEST(BASIC_USAGE, FillMergesRegistries)
     EXPECT_THROW(doc.insert_after(text{"bold"}, clash), std::invalid_argument);
     EXPECT_EQ(doc, before);
 }
+
+TEST(BASIC_USAGE, PropsCopyFromNonConst)
+{
+    text_props tp(font_size(11));
+    text_props tp_copy(tp);
+    paragraph_props pp(space_after{pt(6)});
+    paragraph_props pp_copy(pp);
+    cell_props cp(colour::rgb(1, 2, 3));
+    cell_props cp_copy(cp);
+    table_props tbp(percent{100});
+    table_props tbp_copy(tbp);
+    EXPECT_EQ(tp_copy, tp);
+    EXPECT_EQ(pp_copy, pp);
+    EXPECT_EQ(cp_copy, cp);
+    EXPECT_EQ(tbp_copy, tbp);
+}
