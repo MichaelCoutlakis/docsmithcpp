@@ -107,6 +107,7 @@ private:
     std::vector<std::tuple<style_name, cell_props, std::string>> m_cell_styles;
     /// For paragraphs with no style in the cells being written (header rows).
     style_name m_cell_paragraph_style;
+    int m_list_depth{0}; //!< Lists the writer is in
 };
 
 } // namespace docsmith::odt

@@ -210,20 +210,24 @@ std::map<std::string, std::set<style_family>> used_families(const text_doc &doc)
         [&out, &doc](const auto &n)
         {
             using T = std::decay_t<decltype(n)>;
-            if constexpr(std::is_same_v<T, paragraph> || std::is_same_v<T, heading>)
-            {
-                if(!n.style.is_empty())
-                    out[n.style.get_name()].insert(style_family::paragraph);
-            }
-            else if constexpr(std::is_same_v<T, span> || std::is_same_v<T, hyperlink>)
+            if constexpr(std::is_same_v<T, paragraph>)
+                out[(n.style.is_empty() ? builtin::default_paragraph : n.style).get_name()].insert(
+                    style_family::paragraph);
+            else if constexpr(std::is_same_v<T, heading>)
+                out[(n.style.is_empty() ? builtin::heading(n.level) : n.style).get_name()].insert(
+                    style_family::paragraph);
+            else if constexpr(std::is_same_v<T, span>)
             {
                 if(!n.style.is_empty())
                     out[n.style.get_name()].insert(style_family::text);
             }
+            else if constexpr(std::is_same_v<T, hyperlink>)
+                out[(n.style.is_empty() ? builtin::link : n.style).get_name()].insert(
+                    style_family::text);
             else if constexpr(std::is_same_v<T, table>)
             {
-                if(!n.style.is_empty())
-                    out[n.style.get_name()].insert(style_family::table);
+                out[(n.style.is_empty() ? builtin::default_table : n.style).get_name()].insert(
+                    style_family::table);
                 for(size_t r = 0; r != n.num_rows(); ++r)
                     for(size_t c = 0; c != n.num_cols(); ++c)
                         if(const auto ps =
@@ -269,6 +273,8 @@ public:
         }
         m_main = m_st.main_part;
         load_parts();
+        m_default_paragraph_id = default_id("paragraph", "Normal");
+        m_default_table_id = default_id("table", "TableNormal");
         plan_toc();
 
         m_part = m_main;
@@ -489,9 +495,49 @@ private:
         return !s || *s == it->second.def;
     }
 
+    /// The id of the loaded or base styles' default of a type.
+    std::string default_id(std::string_view type, const char *fallback) const
+    {
+        for(auto s : m_styles.document_element().children("w:style"))
+            if(type == s.attribute("w:type").as_string("paragraph"))
+                if(const std::string_view d = s.attribute("w:default").as_string();
+                    d == "1" || d == "true" || d == "on")
+                    return s.attribute("w:styleId").as_string();
+        return fallback;
+    }
+
+    /// The style id for a style name: the builtin defaults have Word's.
+    std::string id_of(const std::string &name) const
+    {
+        if(name == builtin::default_paragraph.get_name())
+            return m_default_paragraph_id;
+        if(name == builtin::default_table.get_name())
+            return m_default_table_id;
+        if(name == builtin::link.get_name())
+            return "Hyperlink";
+        for(int level = 1; level <= 9; ++level)
+            if(name == builtin::heading(level).get_name())
+                return "Heading" + std::to_string(level);
+        return name;
+    }
+
+    /// The style name for a style id, as the reader gives it.
+    std::string style_name_of(const std::string &id) const
+    {
+        if(id == m_default_paragraph_id)
+            return builtin::default_paragraph.get_name();
+        if(id == m_default_table_id)
+            return builtin::default_table.get_name();
+        if(id == "Hyperlink")
+            return builtin::link.get_name();
+        if(const int level = heading_level(id, {}))
+            return builtin::heading(level).get_name();
+        return id;
+    }
+
     /// The w:rStyle for a span's style.
     std::string char_id(const std::string &name) const
-    { return m_dual.contains(name) ? name + "Char" : name; }
+    { return m_dual.contains(name) ? id_of(name) + "Char" : id_of(name); }
 
     pugi::xml_node find_style(const std::string &id, std::string_view type) const
     {
@@ -525,11 +571,11 @@ private:
                 if(!type)
                     continue;
                 const bool as_char = dual && f == style_family::text;
-                const std::string id = as_char ? char_id(name) : name;
-                const std::string link = dual ? (as_char ? name : char_id(name)) : std::string();
+                const std::string id = as_char ? char_id(name) : id_of(name);
+                const std::string link =
+                    dual ? (as_char ? id_of(name) : char_id(name)) : std::string();
                 std::string based_on = s->m_parent_style.get_name();
-                if(f == style_family::text)
-                    based_on = char_id(based_on);
+                based_on = f == style_family::text ? char_id(based_on) : id_of(based_on);
 
                 style def = *s;
                 def.m_family = f;
@@ -538,12 +584,15 @@ private:
                     if(auto old = read_style(existing))
                     {
                         old->m_name = def.m_name;
+                        old->m_parent_style = style_name_of(old->m_parent_style.get_name());
                         if(*old == def)
                             continue;
                     }
                 pugi::xml_node n = existing ? root.insert_child_before("w:style", existing)
                                             : root.append_child("w:style");
                 write_style(n, def, type, id, based_on, link);
+                if(id == (f == style_family::table ? m_default_table_id : m_default_paragraph_id))
+                    n.insert_attribute_after("w:default", n.attribute("w:type")) = "1";
                 if(existing)
                     root.remove_child(existing);
             }
@@ -561,9 +610,19 @@ private:
 
     // ---- numbering ----
 
-    /// The abstractNum for a list style name, added (or updated) as needed.
-    int abstract_num(const std::string &name)
+    /// The list style of a list with that style: builtin::default_list, if
+    /// defined, for none.
+    std::string resolved_list_style(const std::string &name) const
     {
+        if(name.empty() && m_doc.list_styles().find(builtin::default_list.get_name()))
+            return builtin::default_list.get_name();
+        return name;
+    }
+
+    /// The abstractNum for a list style name, added (or updated) as needed.
+    int abstract_num(const std::string &requested)
+    {
+        const std::string name = resolved_list_style(requested);
         if(auto it = m_abstract_ids.find(name); it != m_abstract_ids.end())
             return it->second;
 
@@ -616,7 +675,7 @@ private:
         n.append_attribute("w:numId") = id;
         set_val(n.append_child("w:abstractNumId"), std::to_string(abstract));
         m_num_abstract[id] = abstract;
-        if(const list_style *ls = m_doc.list_styles().find(list_style_name))
+        if(const list_style *ls = m_doc.list_styles().find(resolved_list_style(list_style_name)))
             for(const auto &lvl : ls->m_level_styles)
                 if(const auto *num = std::get_if<list_style_num>(&lvl))
                 {
@@ -825,6 +884,10 @@ private:
         }
         if(!ppr)
             ppr = p.append_child("w:pPr");
+        // The default paragraph style is no style.
+        style_id = id_of(style_id);
+        if(style_id == m_default_paragraph_id)
+            style_id.clear();
         if(!style_id.empty())
         {
             set_val(ordered_child(ppr, "w:pStyle", ppr_order), style_id);
@@ -860,7 +923,8 @@ private:
     void emit(pugi::xml_node parent, const heading &h)
     {
         auto n = parent.append_child("w:p");
-        const style_name sn = h.style.is_empty() ? style_name(heading_style(h.level)) : h.style;
+        const style_name sn =
+            h.style.is_empty() ? builtin::heading(std::clamp(h.level, 1, 9)) : h.style;
         auto ppr = paragraph_props(n, sn);
         set_val(ordered_child(ppr, "w:outlineLvl", ppr_order),
             std::to_string(std::clamp(h.level, 1, 9) - 1));
@@ -935,8 +999,8 @@ private:
         auto tbl_pr = tbl.append_child("w:tblPr");
         if(!t.style.is_empty())
         {
-            set_val(tbl_pr.append_child("w:tblStyle"), t.style.get_name());
-            m_used_ids.emplace(t.style.get_name(), "table");
+            set_val(tbl_pr.append_child("w:tblStyle"), id_of(t.style.get_name()));
+            m_used_ids.emplace(id_of(t.style.get_name()), "table");
         }
         auto w = tbl_pr.append_child("w:tblW");
         int table_width = text_width_twips;
@@ -1153,7 +1217,7 @@ private:
         auto r = parent.append_child("w:r");
         std::string style_id = rf.style;
         if(style_id.empty() && rf.in_link)
-            style_id = rf.link_style.empty() ? "Hyperlink" : rf.link_style;
+            style_id = rf.link_style.empty() ? builtin::link.get_name() : rf.link_style;
         if(is_direct(style_id))
         {
             const auto &d = m_st.direct.at(style_id);
@@ -1442,6 +1506,7 @@ private:
     /// For paragraphs with no style in the cells being written (header rows).
     style_name m_cell_paragraph_style;
     std::set<std::string> m_dual; //!< Styles written as a paragraph and a character style
+    std::string m_default_paragraph_id, m_default_table_id;   //!< Normal, TableNormal
     std::set<std::pair<std::string, std::string>> m_used_ids; //!< styleId, w:type
 
     std::string m_main; //!< The main document part

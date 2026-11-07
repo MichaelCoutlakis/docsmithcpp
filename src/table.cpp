@@ -369,7 +369,7 @@ cell_props effective_cell_style(const style_name &sn, const style_registry &styl
 }
 
 table_props effective_table_props(const table &t, const style_registry &styles)
-{ return effective_table_style(t.style, styles); }
+{ return effective_table_style(t.style.is_empty() ? builtin::default_table : t.style, styles); }
 
 table_props effective_table_style(const style_name &sn, const style_registry &styles)
 {

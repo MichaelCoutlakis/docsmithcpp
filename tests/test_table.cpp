@@ -201,3 +201,15 @@ TEST(Table, PropsCopy)
     EXPECT_EQ(a, b);
     EXPECT_EQ(c, d);
 }
+
+TEST(Table, DefaultTableStyle)
+{
+    text_doc doc;
+    doc.add_style(style(builtin::default_table,
+        style_family::table,
+        table_props(outer_border{thin}, cell_padding{pt(2)})));
+    const table t = table::from_cells({{"a"}});
+    EXPECT_EQ(effective_table_props(t, doc.styles()).m_padding, pt(2));
+    EXPECT_EQ(effective_cell_props(t, doc.styles(), 0, 0).m_borders.m_top, thin)
+        << "an unstyled table has the default's lines";
+}

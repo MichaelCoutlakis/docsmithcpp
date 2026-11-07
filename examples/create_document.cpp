@@ -93,8 +93,9 @@ void write_example_test_report()
     text_doc details;
     for(auto &r : records)
     {
-        // Heading with link target from summary table
-        details.add(heading(2, span(r.name, bookmark{r.name})).set_style("Heading_20_2"));
+        // Heading with link target from summary table. An unstyled heading
+        // has the template's Heading 2 (builtin::heading(2)).
+        details.add(heading(2, span(r.name, bookmark{r.name})));
         details.append(r.detail);
     }
     doc.replace(bookmark{"details"}, details);

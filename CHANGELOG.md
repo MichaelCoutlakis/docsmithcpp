@@ -78,6 +78,13 @@ held in `std::variant`. This is a breaking change to almost every public API.
   directory. Generated test files go to `tests/odt/out/`.
 
 ### Added
+- **Default styles**: `builtin::default_paragraph`, `builtin::heading(level)`,
+  `builtin::link`, `builtin::default_table` and the list style
+  `builtin::default_list` are the styles of nodes with none of their own. Define
+  one to style every unstyled paragraph, heading, link, table or list in every
+  format; a loaded template's defaults (LibreOffice's Default Paragraph Style,
+  Heading 1, Internet Link; Word's Normal, Heading 1, Hyperlink, Normal Table)
+  read as these definitions, with the nodes using them unstyled.
 - **Paragraph spacing and alignment**: `paragraph_props` holds space above and below
   (`space_before`, `space_after`), indents (`indent_start`, `indent_end`,
   `first_line_indent`, negative for hanging), alignment (`text_align`) and

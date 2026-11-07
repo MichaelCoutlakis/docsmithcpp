@@ -524,3 +524,68 @@ TEST(DOCX_Write, TableFormatting)
         body.next_sibling("w:tc").child("w:tcPr").child("w:shd").attribute("w:fill").as_string(),
         "ffcccc");
 }
+
+namespace
+{
+/// Every builtin default defined, and a node of each kind using it.
+text_doc defaults_doc()
+{
+    text_doc doc;
+    doc.add_style(style(builtin::default_paragraph,
+        style_family::paragraph,
+        text_props(font_name("Liberation Serif"), font_size(11)),
+        paragraph_props(space_after{pt(6)})));
+    doc.add_style(
+        style(builtin::heading(1), style_family::paragraph, text_props(font_weight::bold)));
+    doc.add_style(style(builtin::link, style_family::text, text_props(colour::rgb(0, 0, 200))));
+    doc.add_style(
+        style(builtin::default_table, style_family::table, table_props(cell_padding{pt(2)})));
+    doc.add_style(
+        list_style(builtin::default_list, {list_style_num(style{}, 1, list_enum::arabic, ".", 1)}));
+    list_item nested("one");
+    nested.add(list(list_item("one.one")));
+    doc.add(heading(1, "Introduction"))
+        .add(paragraph("Hello ", hyperlink("https://example.com", "site")))
+        .add(table::from_cells({{"a", "b"}}))
+        .add(list(std::move(nested), list_item("two")));
+    return doc;
+}
+} // namespace
+
+// The builtin defaults are Word's own: Normal, Heading1, Hyperlink and
+// TableNormal, which unstyled nodes use without naming them.
+TEST(DOCX_Write, DefaultStyles)
+{
+    const text_doc doc = defaults_doc();
+    saved s(doc, "default_styles");
+
+    const auto styles = s.xml("word/styles.xml");
+    EXPECT_FALSE(style_def(styles, "Standard"));
+    auto normal = style_def(styles, "Normal");
+    EXPECT_STREQ(normal.attribute("w:default").as_string(), "1");
+    EXPECT_EQ(docx::val(normal.child("w:rPr"), "w:sz"), "22");
+    EXPECT_EQ(styles.select_nodes("//w:style[@w:default='1'][@w:type='paragraph']").size(), 1U);
+    auto h1 = style_def(styles, "Heading1");
+    EXPECT_EQ(docx::val(h1, "w:name"), "heading 1");
+    EXPECT_TRUE(h1.child("w:rPr").child("w:b"));
+    EXPECT_EQ(docx::val(style_def(styles, "Hyperlink").child("w:rPr"), "w:color"), "0000C8");
+    auto table_normal = style_def(styles, "TableNormal");
+    EXPECT_STREQ(table_normal.attribute("w:default").as_string(), "1");
+    EXPECT_EQ(docx::val(table_normal, "w:name"), "Normal Table");
+
+    auto body = s.body();
+    EXPECT_EQ(docx::val(body.child("w:p").child("w:pPr"), "w:pStyle"), "Heading1");
+    EXPECT_FALSE(body.child("w:p").next_sibling("w:p").child("w:pPr").child("w:pStyle"));
+    EXPECT_FALSE(body.child("w:tbl").child("w:tblPr").child("w:tblStyle"));
+    const auto numbering = s.xml("word/numbering.xml");
+    EXPECT_TRUE(numbering.select_node("//w:abstractNum/w:name[@w:val='Default_20_List']"));
+
+    const auto back = docx::file::load(s.path).doc;
+    EXPECT_EQ(back.body, doc.body) << "the defaults read back as no style";
+    for(const auto &sn :
+        {builtin::default_paragraph, builtin::heading(1), builtin::link, builtin::default_table})
+        ASSERT_NE(back.styles().find(sn.get_name()), nullptr) << sn.get_name();
+    EXPECT_EQ(back.styles().find(builtin::default_paragraph.get_name())->m_text_props,
+        doc.styles().find(builtin::default_paragraph.get_name())->m_text_props);
+    EXPECT_NE(back.list_styles().find(builtin::default_list.get_name()), nullptr);
+}

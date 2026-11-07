@@ -167,17 +167,23 @@ std::map<std::string, std::set<style_family>> used_families(const text_doc &doc)
                 if(!sn.is_empty())
                     out[sn.get_name()].insert(f);
             };
-            if constexpr(std::is_same_v<T, paragraph> || std::is_same_v<T, heading>)
-                use(n.style, style_family::paragraph);
-            else if constexpr(std::is_same_v<T, span> || std::is_same_v<T, hyperlink>)
+            if constexpr(std::is_same_v<T, paragraph>)
+                use(n.style.is_empty() ? builtin::default_paragraph : n.style,
+                    style_family::paragraph);
+            else if constexpr(std::is_same_v<T, heading>)
+                use(n.style.is_empty() ? builtin::heading(n.level) : n.style,
+                    style_family::paragraph);
+            else if constexpr(std::is_same_v<T, span>)
                 use(n.style, style_family::text);
+            else if constexpr(std::is_same_v<T, hyperlink>)
+                use(n.style.is_empty() ? builtin::link : n.style, style_family::text);
             else if constexpr(std::is_same_v<T, frame>)
                 use(n.style, style_family::graphic);
             else if constexpr(std::is_same_v<T, table_cell>)
                 use(n.style, style_family::table_cell);
             else if constexpr(std::is_same_v<T, table>)
             {
-                use(n.style, style_family::table);
+                use(n.style.is_empty() ? builtin::default_table : n.style, style_family::table);
                 for(size_t r = 0; r != n.num_rows(); ++r)
                     use(n.row_style(r), style_family::table_row);
                 for(size_t c = 0; c != n.num_cols(); ++c)
@@ -598,7 +604,13 @@ void writer::write_inline(pugi::xml_node parent, const inline_node &i)
 void writer::emit(pugi::xml_node parent, const paragraph &p)
 {
     auto n = parent.append_child("text:p");
-    if(const char *style = block_style(p.style.is_empty() ? m_cell_paragraph_style : p.style))
+    style_name sn = p.style.is_empty() ? m_cell_paragraph_style : p.style;
+    // An unstyled paragraph holding only a frame names the default style, as
+    // without a style it would read back as a block frame.
+    if(sn.is_empty() && p.children().size() == 1 &&
+        std::holds_alternative<frame>(p.children().front().v))
+        sn = builtin::default_paragraph;
+    if(const char *style = block_style(sn))
         n.append_attribute("text:style-name").set_value(style);
     for(const auto &c : p.children())
         write_inline(n, c);
@@ -608,7 +620,8 @@ void writer::emit(pugi::xml_node parent, const heading &h)
 {
     auto n = parent.append_child("text:h");
     n.append_attribute("text:outline-level").set_value(h.level);
-    if(const char *style = block_style(h.style))
+    // LibreOffice gives an unstyled heading no heading style.
+    if(const char *style = block_style(h.style.is_empty() ? builtin::heading(h.level) : h.style))
         n.append_attribute("text:style-name").set_value(style);
     for(const auto &c : h.children())
         write_inline(n, c);
@@ -627,8 +640,9 @@ void writer::emit(pugi::xml_node parent, const hyperlink &h)
 {
     auto n = parent.append_child("text:a");
     n.append_attribute("xlink:type").set_value("simple");
-    if(!h.style.is_empty())
-        n.append_attribute("text:style-name").set_value(h.style.get_name().c_str());
+    // Named on every link, as LibreOffice writes it.
+    n.append_attribute("text:style-name")
+        .set_value((h.style.is_empty() ? builtin::link : h.style).get_name().c_str());
     const std::string href = std::visit(overloaded{[](const url_target &u) { return u.url; },
                                             [](const bookmark_target &b) { return "#" + b.name; }},
         h.target);
@@ -864,15 +878,19 @@ void writer::emit(pugi::xml_node parent, const list &l)
     auto n = parent.append_child("text:list");
     if(!l.style.is_empty())
         n.append_attribute("text:style-name").set_value(l.style.get_name().c_str());
+    else if(m_list_depth == 0 && m_doc->list_styles().find(builtin::default_list.get_name()))
+        n.append_attribute("text:style-name").set_value(builtin::default_list.get_name().c_str());
     if(l.continue_numbering)
         n.append_attribute("text:continue-numbering") = "true";
     // Only the first item can be unnumbered (text:list-header); a later one is
     // more of the item before it, as LibreOffice saves one.
+    ++m_list_depth;
     for(const auto &it : l.items())
         if(!it.numbered && n.last_child())
             write_blocks(n.last_child(), it.children());
         else
             emit(n, it);
+    --m_list_depth;
 }
 
 void writer::emit(pugi::xml_node parent, const list_item &it)
@@ -938,6 +956,8 @@ void writer::emit(pugi::xml_node parent, const table &t)
         n.append_attribute("table:name") = t.name.c_str();
     if(!t.style.is_empty())
         n.append_attribute("table:style-name") = t.style.get_name().c_str();
+    else if(m_doc->styles().find(builtin::default_table.get_name()))
+        n.append_attribute("table:style-name") = builtin::default_table.get_name().c_str();
     if(!t.accessibility_title.empty())
         n.append_child("table:title").text() = t.accessibility_title.c_str();
     if(!t.accessibility_description.empty())

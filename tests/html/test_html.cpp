@@ -253,10 +253,10 @@ TEST(HTML, ConvertsParsedOdt)
     const auto html = read("html/out/moderate.html");
 
     EXPECT_TRUE(has(html, "Heading 1</h1>"));
-    EXPECT_TRUE(has(html,
-        R"(<a class="Internet_20_link" href="https://github.com/MichaelCoutlakis/docsmithcpp">docsmith</a>)"))
-        << "the link keeps LibreOffice's link style";
-    EXPECT_TRUE(has(html, ".Internet_20_link { color: #000080; }"));
+    EXPECT_TRUE(
+        has(html, R"(<a href="https://github.com/MichaelCoutlakis/docsmithcpp">docsmith</a>)"))
+        << "LibreOffice's link style is the default one";
+    EXPECT_TRUE(has(html, ".Internet_20_link, a:not([class]) { color: #000080; }"));
     EXPECT_EQ(count(html, "<li"), 8U); // 2 + 2 + 1 + (1 with a nested 1) + 1
 }
 
@@ -558,4 +558,44 @@ TEST(HTML, ImageSize)
     f.width = pt(36);
     EXPECT_TRUE(has(html::file(text_doc{paragraph(f)}).to_string(),
         R"(<img src="https://example.com/a.png" style="width: 36pt;" alt="">)"));
+}
+
+namespace
+{
+/// Every builtin default defined, and a node of each kind using it.
+text_doc defaults_doc()
+{
+    text_doc doc;
+    doc.add_style(style(builtin::default_paragraph,
+        style_family::paragraph,
+        text_props(font_name("Liberation Serif"), font_size(11)),
+        paragraph_props(space_after{pt(6)})));
+    doc.add_style(
+        style(builtin::heading(1), style_family::paragraph, text_props(font_weight::bold)));
+    doc.add_style(style(builtin::link, style_family::text, text_props(colour::rgb(0, 0, 200))));
+    doc.add_style(
+        style(builtin::default_table, style_family::table, table_props(cell_padding{pt(2)})));
+    doc.add_style(
+        list_style(builtin::default_list, {list_style_num(style{}, 1, list_enum::arabic, ".", 1)}));
+    list_item nested("one");
+    nested.add(list(list_item("one.one")));
+    doc.add(heading(1, "Introduction"))
+        .add(paragraph("Hello ", hyperlink("https://example.com", "site")))
+        .add(table::from_cells({{"a", "b"}}))
+        .add(list(std::move(nested), list_item("two")));
+    return doc;
+}
+} // namespace
+
+// A default style's rule also applies to the elements with no class.
+TEST(HTML, DefaultStyles)
+{
+    const auto html = html::file(defaults_doc()).to_string();
+    EXPECT_TRUE(has(html, ".Standard, p:not([class]) {"));
+    EXPECT_TRUE(has(html, ".Heading_20_1, h1:not([class]) { font-weight: bold; }"));
+    EXPECT_TRUE(has(html, ".Internet_20_link, a:not([class]) {"));
+    EXPECT_TRUE(has(html, ".Default_20_Table, table:not([class]) {"));
+    EXPECT_TRUE(has(html, "<h1>Introduction</h1>"));
+    EXPECT_TRUE(has(html, "<ol>")) << "the default list is numbered";
+    EXPECT_TRUE(has(html, "padding: 2pt")) << "the default table's cells";
 }

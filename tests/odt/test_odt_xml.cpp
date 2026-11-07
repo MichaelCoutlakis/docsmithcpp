@@ -452,3 +452,84 @@ TEST(ODT_XML, FrameSize)
     EXPECT_STREQ(n.attribute("svg:width").as_string(), "36pt");
     EXPECT_STREQ(n.attribute("svg:height").as_string(), "28.346pt");
 }
+
+namespace
+{
+/// Every builtin default defined, and a node of each kind using it.
+text_doc defaults_doc()
+{
+    text_doc doc;
+    doc.add_style(style(builtin::default_paragraph,
+        style_family::paragraph,
+        text_props(font_name("Liberation Serif"), font_size(11)),
+        paragraph_props(space_after{pt(6)})));
+    doc.add_style(
+        style(builtin::heading(1), style_family::paragraph, text_props(font_weight::bold)));
+    doc.add_style(style(builtin::link, style_family::text, text_props(colour::rgb(0, 0, 200))));
+    doc.add_style(
+        style(builtin::default_table, style_family::table, table_props(cell_padding{pt(2)})));
+    doc.add_style(
+        list_style(builtin::default_list, {list_style_num(style{}, 1, list_enum::arabic, ".", 1)}));
+    list_item nested("one");
+    nested.add(list(list_item("one.one")));
+    doc.add(heading(1, "Introduction"))
+        .add(paragraph("Hello ", hyperlink("https://example.com", "site")))
+        .add(table::from_cells({{"a", "b"}}))
+        .add(list(std::move(nested), list_item("two")));
+    return doc;
+}
+} // namespace
+
+// An unstyled node has its kind's default style. ODF writes an unstyled
+// paragraph and link as such, and names the others' defaults.
+TEST(ODT_XML, DefaultStyles)
+{
+    const text_doc doc = defaults_doc();
+    odt::file(doc).save("odt/out/default_styles.odt");
+
+    const part content("odt/out/default_styles.odt", "content.xml");
+    EXPECT_STREQ(
+        content.xml.select_node("//text:h").node().attribute("text:style-name").as_string(),
+        "Heading_20_1");
+    EXPECT_FALSE(
+        content.xml.select_node("//office:text/text:p").node().attribute("text:style-name"));
+    EXPECT_STREQ(
+        content.xml.select_node("//table:table").node().attribute("table:style-name").as_string(),
+        "Default_20_Table");
+    const auto lists = content.xml.select_nodes("//text:list");
+    ASSERT_EQ(lists.size(), 2U);
+    EXPECT_STREQ(lists[0].node().attribute("text:style-name").as_string(), "Default_20_List");
+    EXPECT_FALSE(lists[1].node().attribute("text:style-name"))
+        << "a nested list continues the enclosing one's style";
+
+    const part styles("odt/out/default_styles.odt", "styles.xml");
+    for(const char *name : {"Standard", "Heading_20_1", "Internet_20_link", "Default_20_Table"})
+        EXPECT_TRUE(styles.xml.select_node(
+            (std::string("//office:styles/style:style[@style:name='") + name + "']").c_str()))
+            << name;
+
+    const auto back = odt::file::load("odt/out/default_styles.odt").doc;
+    // The table's cells read back with the default table's formatting, as a
+    // table style's does (DESIGN.md, Tables).
+    ASSERT_EQ(back.body.size(), doc.body.size());
+    for(size_t i : {0, 1, 3})
+        EXPECT_EQ(back.body[i], doc.body[i]) << "the defaults read back as no style";
+    const auto &t = std::get<table>(back.body[2].v);
+    EXPECT_TRUE(t.style.is_empty());
+    EXPECT_EQ(effective_cell_props(t, back.styles(), 0, 0).m_padding, pt(2));
+    for(const auto &sn :
+        {builtin::default_paragraph, builtin::heading(1), builtin::link, builtin::default_table})
+        ASSERT_NE(back.styles().find(sn.get_name()), nullptr) << sn.get_name();
+    EXPECT_EQ(back.styles().find(builtin::default_paragraph.get_name())->m_text_props,
+        doc.styles().find(builtin::default_paragraph.get_name())->m_text_props);
+    EXPECT_NE(back.list_styles().find(builtin::default_list.get_name()), nullptr);
+}
+
+// A template's defaults are what content added to it gets.
+TEST(ODT_XML, LoadedDefaultStyles)
+{
+    auto f = odt::file::load("odt/moderate.odt");
+    EXPECT_NE(f.doc.styles().find(builtin::default_paragraph.get_name()), nullptr);
+    for(const paragraph *p : find_all<paragraph>(f.doc, [](const paragraph &) { return true; }))
+        EXPECT_FALSE(p->style == builtin::default_paragraph) << "read as no style";
+}

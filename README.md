@@ -227,6 +227,11 @@ int main() {
                   hyperlink("https://example.com", "link"), "."),
         paragraph().set_style("Quote").add("built incrementally"),
     };
+    // A node with no style has its kind's default (builtin::default_paragraph,
+    // heading(n), link, ...); define one to style them all, in every format.
+    hello.add_style(style(builtin::default_paragraph,
+        text_props(font_name("Liberation Serif"), font_size(11)),
+        paragraph_props(space_after{pt(6)})));
     odt::file(hello).save("hello_world.odt");
     docx::file(hello).save("hello_world.docx");
     html::file(hello).save("hello_world.html");

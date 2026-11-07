@@ -271,6 +271,36 @@ default.
   automatic styles). Removing a definition from the registry doesn't remove it
   from the file, since nodes or `unknown` markup may still use it.
 
+### Default styles
+
+A node with no style has its kind's default, and the default is a style like
+any other: `builtin::default_paragraph`, `heading(level)`, `link`,
+`default_table`, and the list style `default_list`. Undefined, each format's own
+default applies; defined, in code or by a loaded template, it applies in every
+format. Reading maps each format's default back to the definition, with the
+nodes that use it unstyled, so content added to a template gets the template's
+defaults and a round trip doesn't turn "no style" into a named one.
+
+| Default | ODT | DOCX | HTML |
+|---|---|---|---|
+| `default_paragraph` | `Standard` (an unstyled `text:p`) | the `w:default` paragraph style, `Normal` (no `w:pStyle`) | `p:not([class])` |
+| `heading(n)` | `Heading_20_n`, named on `text:h` | `Heading<n>` | `hn:not([class])` |
+| `link` | `Internet_20_link`, named on `text:a` | `Hyperlink` | `a:not([class])` |
+| `default_table` | `Default_20_Table`, named on tables | the `w:default` table style, `TableNormal` (no `w:tblStyle`) | `table:not([class])`, and the cells' layers |
+| `default_list` | `Default_20_List`, named on lists | the list's numbering definition | the numbering of `<ol>` / `<ul>` |
+
+Only a list that isn't nested has `default_list`: a nested unstyled list
+continues the enclosing list's style, as ODF and DOCX have it.
+
+The default is the style of unstyled nodes, not the parent of every style: in
+ODF and DOCX a style with no parent derives from the format's base properties
+(`style:default-style`, `w:docDefaults`), not from `Standard` or `Normal`.
+LibreOffice's and Word's own styles name `Standard` or `Normal` as their parent,
+which is what makes a font set on the default reach headings too. A template
+whose body text is in Text Body rather than the default style still needs it
+set on each paragraph: ODF can't say that new paragraphs get Text Body, so a
+"default style is X" setting couldn't be read back.
+
 ### Builtin styles and code blocks
 
 Names in `builtin` are styles writers know without a definition in

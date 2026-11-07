@@ -252,6 +252,25 @@ bool based_on(const style_name &sn, const style_name &base, const style_registry
     return false;
 }
 
+/// The selector for a style's rule: its class, and for a default style the
+/// elements with no class it applies to.
+std::string selector(const style_name &sn)
+{
+    std::string out = "." + css_class(sn.get_name());
+    auto also = [&](const std::string &element) { out += ", " + element + ":not([class])"; };
+    if(sn == builtin::default_paragraph)
+        also("p");
+    else if(sn == builtin::link)
+        also("a");
+    else if(sn == builtin::default_table)
+        also("table");
+    else
+        for(int level = 1; level <= 6; ++level)
+            if(sn == builtin::heading(level))
+                also("h" + std::to_string(level));
+    return out;
+}
+
 /// CSS rules for the style definitions in the document, sorted by name so the
 /// output is stable.
 std::string generated_css(const text_doc &doc)
@@ -309,7 +328,7 @@ std::string generated_css(const text_doc &doc)
         if(s->m_cell_props)
             decls += css_decls(effective_cell_style(s->m_name, doc.styles()));
         if(!decls.empty())
-            css += "." + css_class(s->m_name.get_name()) + " {" + decls + " }\n";
+            css += selector(s->m_name) + " {" + decls + " }\n";
     }
     return css;
 }
@@ -534,7 +553,8 @@ private:
         // A nested list usually has no style of its own and continues the
         // enclosing list's style at the next level.
         const list_style *ls = l.style.is_empty()
-            ? (m_lists.empty() ? nullptr : m_lists.back())
+            ? (m_lists.empty() ? m_doc.list_styles().find(builtin::default_list.get_name())
+                               : m_lists.back())
             : m_doc.list_styles().find(l.style.get_name());
         const int level = static_cast<int>(m_lists.size()) + 1;
         const auto *num = numbering(ls, level);

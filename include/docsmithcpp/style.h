@@ -16,6 +16,7 @@
  * limitations under the License.
  *****************************************************************************/
 #pragma once
+#include <algorithm>
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -51,8 +52,31 @@ private:
 
 /// Style names writers know without a definition in text_doc::styles(). Each
 /// writer maps them to its format's own style of that name.
+///
+/// The defaults are the styles of nodes with none of their own: an unstyled
+/// paragraph has default_paragraph, and so on. Each is a definable style like
+/// any other. Undefined, the format's own default applies; defined (in code, or
+/// by the template loaded), it applies in every format. Reading a file gives
+/// its defaults as these definitions and the nodes using them as unstyled.
 namespace builtin
 {
+/// Paragraphs: LibreOffice's Default Paragraph Style, Word's Normal, and a
+/// plain <p> in HTML. Other paragraph styles, headings' included, usually
+/// derive from it, so a font set here applies to them too.
+inline const style_name default_paragraph{"Standard"};
+/// Headings of a level (1-10): LibreOffice's and Word's Heading 1, ..., and
+/// <h1>, ... in HTML.
+inline style_name heading(int level)
+{ return style_name("Heading_20_" + std::to_string(std::clamp(level, 1, 10))); }
+/// Links: LibreOffice's Internet Link, Word's Hyperlink, and a plain <a> in
+/// HTML.
+inline const style_name link{"Internet_20_link"};
+/// Tables: Word's Normal Table. ODF has none of its own, so an ODT file names
+/// it on its tables.
+inline const style_name default_table{"Default_20_Table"};
+/// Lists, as a list_style: a list with no style that isn't nested in another
+/// (a nested one continues the enclosing list's style).
+inline const style_name default_list{"Default_20_List"};
 inline const style_name title{"Title"};
 /// A monospace paragraph for code and logs, with its lines separated by '\n':
 /// LibreOffice's Preformatted Text, and <pre> in HTML.

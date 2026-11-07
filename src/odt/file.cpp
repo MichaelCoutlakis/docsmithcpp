@@ -55,6 +55,16 @@ style_name style_of(const pugi::xml_node &node, const char *attr)
     return style_name(node.attribute(attr).as_string());
 }
 
+/// A node's style, unstyled if it's the default the node has without one
+/// (builtin::default_paragraph, ...).
+style_name style_of(const pugi::xml_node &node, const char *attr, const style_name &default_style)
+{
+    style_name sn = style_of(node, attr);
+    return sn == default_style ? style_name{} : sn;
+}
+
+thread_local int t_list_depth = 0; //!< Lists the reader is in
+
 std::vector<inline_node> parse_inline_children(const pugi::xml_node &node);
 std::vector<block_node> parse_block_children(const pugi::xml_node &node);
 std::optional<block_node> parse_block(const pugi::xml_node &node);
@@ -90,7 +100,7 @@ inline_node parse_inline(const pugi::xml_node &node)
         const std::string href = node.attribute("xlink:href").as_string();
         hyperlink h = href.starts_with('#') ? hyperlink(bookmark_target{href.substr(1)})
                                             : hyperlink(url_target{href});
-        h.style = style_of(node, "text:style-name"); // its visited style is dropped
+        h.style = style_of(node, "text:style-name", builtin::link); // its visited style is dropped
         h.children() = parse_inline_children(node);
         return inline_node{std::move(h)};
     }
@@ -286,7 +296,7 @@ table parse_table(const pugi::xml_node &node)
         t.add_row(std::move(r.cells), std::move(r.style));
     }
     t.set_header_rows(header_rows);
-    t.style = style_of(node, "table:style-name");
+    t.style = style_of(node, "table:style-name", builtin::default_table);
     t.name = node.attribute("table:name").as_string();
     t.accessibility_title = node.child("table:title").text().as_string();
     t.accessibility_description = node.child("table:desc").text().as_string();
@@ -308,7 +318,15 @@ table parse_table(const pugi::xml_node &node)
 list parse_list(const pugi::xml_node &node)
 {
     list l;
-    l.style = style_of(node, "text:style-name");
+    l.style = t_list_depth == 0 ? style_of(node, "text:style-name", builtin::default_list)
+                                : style_of(node, "text:style-name");
+    struct depth_guard
+    {
+        depth_guard() { ++t_list_depth; }
+        ~depth_guard() { --t_list_depth; }
+        depth_guard(const depth_guard &) = delete;
+        depth_guard &operator=(const depth_guard &) = delete;
+    } guard;
     // text:continue-list names the list it continues: usually the last one
     // before with the same style, which is what continue_numbering means.
     l.continue_numbering =
@@ -337,10 +355,10 @@ std::optional<block_node> parse_block(const pugi::xml_node &node)
     if(tag == "text:p")
     {
         paragraph p;
-        p.style = style_of(node, "text:style-name");
+        p.style = style_of(node, "text:style-name", builtin::default_paragraph);
         p.children() = parse_inline_children(node);
         // The writer puts a block frame in an unstyled paragraph of its own.
-        if(p.style.is_empty() && p.children().size() == 1 &&
+        if(!node.attribute("text:style-name") && p.children().size() == 1 &&
             std::holds_alternative<frame>(p.children().front().v))
             return block_node{std::get<frame>(p.children().front().v)};
         return block_node{std::move(p)};
@@ -348,7 +366,7 @@ std::optional<block_node> parse_block(const pugi::xml_node &node)
     if(tag == "text:h")
     {
         heading h(node.attribute("text:outline-level").as_int(1));
-        h.style = style_of(node, "text:style-name");
+        h.style = style_of(node, "text:style-name", builtin::heading(h.level));
         h.children() = parse_inline_children(node);
         return block_node{std::move(h)};
     }
@@ -422,6 +440,13 @@ void expand_page_breaks(
                         out.push_back(block_node{page_break{}});
                         drop = it->first == page_break_only;
                         n.style = it->second;
+                        if constexpr(std::is_same_v<T, paragraph>)
+                        {
+                            if(n.style == builtin::default_paragraph)
+                                n.style = {};
+                        }
+                        else if(n.style == builtin::heading(n.level))
+                            n.style = {};
                     }
                 },
             },

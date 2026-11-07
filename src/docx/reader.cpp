@@ -233,24 +233,40 @@ private:
         std::set<std::string> ids;
         for(auto s : root.children("w:style"))
             ids.insert(s.attribute("w:styleId").as_string());
+        auto alias = [&](const std::string &id, const std::string &builtin)
+        {
+            if(id != builtin && !ids.contains(builtin) && !m_alias_used.contains(builtin) &&
+                !m_alias.contains(id))
+            {
+                m_alias[id] = builtin;
+                m_alias_used.insert(builtin);
+            }
+        };
         for(auto s : root.children("w:style"))
         {
             const std::string id = s.attribute("w:styleId").as_string();
             const std::string display = val(s, "w:name");
-            for(const auto &[alias, builtin] : builtin_aliases)
-                if(display == alias && id != builtin->get_name() &&
-                    !ids.contains(builtin->get_name()) &&
-                    !m_alias_used.contains(builtin->get_name()))
-                {
-                    m_alias[id] = builtin->get_name();
-                    m_alias_used.insert(builtin->get_name());
-                }
+            const std::string_view type = s.attribute("w:type").as_string("paragraph");
+            const std::string_view d = s.attribute("w:default").as_string();
+            const bool is_default = d == "1" || d == "true" || d == "on";
+            // The defaults by what they are, as their ids vary.
+            if(is_default && type == "paragraph")
+            {
+                m_default_paragraph = id;
+                alias(id, builtin::default_paragraph.get_name());
+            }
+            else if(is_default && type == "table")
+                alias(id, builtin::default_table.get_name());
+            else if(type == "paragraph" && heading_level(id, display))
+                alias(id, builtin::heading(heading_level(id, display)).get_name());
+            else if(type == "character" &&
+                (id == "Hyperlink" || display == "Hyperlink" || display == "Internet Link"))
+                alias(id, builtin::link.get_name());
+            for(const auto &[name, builtin] : builtin_aliases)
+                if(display == name)
+                    alias(id, builtin->get_name());
             m_parent[id] = val(s, "w:basedOn");
             m_style_nodes[id] = s;
-            if(const std::string_view d = s.attribute("w:default").as_string();
-                (d == "1" || d == "true" || d == "on") &&
-                std::string_view(s.attribute("w:type").as_string()) == "paragraph")
-                m_default_paragraph = id;
             auto ppr = s.child("w:pPr");
             if(auto o = ppr.child("w:outlineLvl"))
                 m_outline[id] = o.attribute("w:val").as_int();
@@ -271,8 +287,17 @@ private:
     /// The model's name for a style id.
     std::string name_of(const std::string &id) const
     {
-        auto it = m_alias.find(id);
-        return it != m_alias.end() ? it->second : id;
+        if(auto it = m_alias.find(id); it != m_alias.end())
+            return it->second;
+        // Word's own ids, used without a definition.
+        if(!m_style_nodes.contains(id))
+        {
+            if(const int level = heading_level(id, {}))
+                return builtin::heading(level).get_name();
+            if(id == "Hyperlink")
+                return builtin::link.get_name();
+        }
+        return id;
     }
 
     /// A paragraph style's outline level (0-8), through its parents.
@@ -393,7 +418,7 @@ private:
     {
         const std::string rstyle = val(rpr, "w:rStyle");
         std::string id = rstyle;
-        if(in_link && id == "Hyperlink")
+        if(in_link && name_of(id) == builtin::link.get_name())
             id.clear();
         pugi::xml_document own;
         auto copy = own.append_copy(rpr);
@@ -487,7 +512,7 @@ private:
             name = "WWNum" + std::string(a.attribute("w:abstractNumId").as_string());
         if(!m_doc.list_styles().find(name))
             m_doc.list_styles().add(read_abstract_num(a, style_name(name)));
-        return name;
+        return name == builtin::default_list.get_name() ? std::string() : name;
     }
 
     // ---- page ----
@@ -609,7 +634,9 @@ private:
         const int level = outline ? *outline + 1 : 0;
 
         // Direct formatting: what pPr says beyond what the model holds.
-        std::string own_style = name_of(style_id);
+        // A paragraph with no style has the default, which direct formatting
+        // then derives from.
+        std::string own_style = name_of(paragraph_style_id(style_id));
         bool break_before = false;
         if(ppr)
         {
@@ -653,11 +680,10 @@ private:
                 own_style = direct_style("P", def, xml::serialize(copy));
             }
         }
-        // No style is the default style in DOCX, and a heading's default is
-        // Heading<level>.
-        if((level && own_style == heading_style(level)) ||
-            (!style_id.empty() && style_id == m_default_paragraph &&
-                own_style == name_of(style_id)))
+        // The defaults read as no style: the default paragraph style, and a
+        // heading's Heading<level>.
+        if((level && own_style == builtin::heading(level).get_name()) ||
+            (!m_default_paragraph.empty() && own_style == name_of(m_default_paragraph)))
             own_style.clear();
 
         // Lists: numbering set directly or by the style. numId 0 says none.
@@ -1170,7 +1196,8 @@ private:
         t.set_header_rows(header_rows);
         auto tbl_pr = tbl.child("w:tblPr");
         if(const std::string id = val(tbl_pr, "w:tblStyle"); !id.empty())
-            t.style = style_name(name_of(id));
+            if(name_of(id) != builtin::default_table.get_name())
+                t.style = style_name(name_of(id));
         t.accessibility_title = val(tbl_pr, "w:tblCaption");
         t.accessibility_description = val(tbl_pr, "w:tblDescription");
 

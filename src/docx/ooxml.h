@@ -142,9 +142,25 @@ inline constexpr const char *default_list_name = "DocSmith Default List";
 /// link to. The reader drops them, as it drops Word's own _Toc bookmarks.
 inline constexpr std::string_view toc_bookmark_prefix = "_Toc";
 
-/// The style a heading of that level has when it has none of its own.
-inline std::string heading_style(int level)
-{ return "Heading" + std::to_string(std::clamp(level, 1, 9)); }
+/// The level of a heading style by Word's id (Heading1-Heading9) or name
+/// (heading 1, any case), else 0.
+inline int heading_level(std::string_view id, std::string_view name)
+{
+    auto digit = [](std::string_view rest)
+    { return rest.size() == 1 && rest[0] >= '1' && rest[0] <= '9' ? rest[0] - '0' : 0; };
+    if(id.starts_with("Heading"))
+        if(int n = digit(id.substr(7)))
+            return n;
+    if(name.size() == 9)
+    {
+        std::string lower(name.substr(0, 8));
+        for(char &c : lower)
+            c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        if(lower == "heading ")
+            return digit(name.substr(8));
+    }
+    return 0;
+}
 
 /// A style's display name: its name with ODF's escapes (_20_ for a space)
 /// decoded.
@@ -164,6 +180,16 @@ inline std::string display_name(const std::string &name)
             out += name[i];
     }
     return out;
+}
+
+/// The w:name Word gives its own styles, by id, else the id's display name.
+inline std::string word_style_name(const std::string &id)
+{
+    if(heading_level(id, {}))
+        return "heading " + id.substr(7);
+    if(id == "TableNormal")
+        return "Normal Table";
+    return display_name(id);
 }
 
 /// The w:val attribute of parent's child of that name ("" if there's none).

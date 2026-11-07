@@ -256,7 +256,8 @@ cell_props effective_cell_props(
 /// over their total, a column without one taking the others' average.
 std::vector<double> column_shares(const table &t);
 
-/// The table's style's table_props, with its parents' filled in.
+/// The table's style's table_props, with its parents' filled in: those of
+/// builtin::default_table for a table with no style.
 table_props effective_table_props(const table &t, const style_registry &styles);
 
 /// A style's table_props, with its parents' filled in.

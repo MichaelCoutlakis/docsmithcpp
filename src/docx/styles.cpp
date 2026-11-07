@@ -441,7 +441,7 @@ void write_style(pugi::xml_node n, const style &s, const char *type, const std::
 {
     n.append_attribute("w:type") = type;
     n.append_attribute("w:styleId") = id.c_str();
-    set_val(n.append_child("w:name"), display_name(id));
+    set_val(n.append_child("w:name"), word_style_name(id));
     if(!based_on.empty())
         set_val(n.append_child("w:basedOn"), based_on);
     if(!link.empty())
