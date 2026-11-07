@@ -251,7 +251,7 @@ std::string css_decls(const text_props &tp)
     if(tp.m_font_style)
         decls += std::string(" font-style: ") + css_value(*tp.m_font_style) + ";";
     if(tp.m_font_name)
-        decls += " font-family: \"" + tp.m_font_name->get_name() + "\";";
+        decls += " font-family: \"" + tp.m_font_name->str() + "\";";
     if(tp.m_font_weight)
         decls += std::string(" font-weight: ") + css_value(*tp.m_font_weight) + ";";
     if(const auto &c = tp.m_colour)

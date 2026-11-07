@@ -315,3 +315,13 @@ concept can_add = requires(N n, T t) { n.add(t); };
 static_assert(can_add<paragraph, text>);
 static_assert(!can_add<paragraph, table>);
 static_assert(!can_add<text_doc, span>);
+
+TEST(BASIC_USAGE, ValueTypesTakeParenthesesOrBraces)
+{
+    EXPECT_EQ(font_size(pt(11)), font_size(11));
+    EXPECT_EQ(font_name("Liberation Sans").str(), "Liberation Sans");
+    EXPECT_EQ(paragraph_props(space_after(pt(6)), keep_with_next()),
+        paragraph_props(space_after{pt(6)}, keep_with_next{}));
+    EXPECT_EQ(table_props(percent(50), outer_border(border::solid()), cell_padding(pt(2))),
+        table_props(percent{50}, outer_border{border::solid()}, cell_padding{pt(2)}));
+}

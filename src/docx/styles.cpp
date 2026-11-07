@@ -183,7 +183,7 @@ void write_rpr(pugi::xml_node rpr, const text_props &props)
     {
         auto f = ordered_child(rpr, "w:rFonts", rpr_order);
         for(const char *a : {"w:ascii", "w:hAnsi", "w:cs"})
-            f.append_attribute(a) = props.m_font_name->get_name().c_str();
+            f.append_attribute(a) = props.m_font_name->str().c_str();
     }
     if(props.m_font_weight)
     {

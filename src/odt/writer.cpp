@@ -401,7 +401,7 @@ void writer::write_styles(const text_doc &doc)
     {
         if(tp.m_font_name)
             for(auto decls : {fonts, m_font_faces})
-                add_font_face(decls, tp.m_font_name->get_name());
+                add_font_face(decls, tp.m_font_name->str());
     };
     for(const auto &[name, s] : doc.styles().para)
         declare(s.text);

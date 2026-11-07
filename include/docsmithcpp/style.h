@@ -122,6 +122,17 @@ inline const para_style_name preformatted{"Preformatted_20_Text"};
 inline const text_style_name source_text{"Source_20_Text"};
 } // namespace builtin
 
+/// A length, held in points. Writers convert it to their format's unit.
+struct length
+{
+    double m_points{};
+    bool operator==(const length &rhs) const = default;
+};
+constexpr length pt(double v) { return {v}; }
+constexpr length mm(double v) { return {v * 72.0 / 25.4}; }
+constexpr length cm(double v) { return {v * 72.0 / 2.54}; }
+constexpr length inch(double v) { return {v * 72.0}; }
+
 /// A font family, e.g. "Liberation Sans". ODT writes it as a font declaration
 /// of the same name, and reads a declaration's family.
 struct font_name
@@ -131,7 +142,7 @@ public:
         m_font_name{font_name}
     {
     }
-    const std::string &get_name() const { return m_font_name; }
+    const std::string &str() const { return m_font_name; }
     bool operator==(const font_name &rhs) const = default;
 
 private:
@@ -150,10 +161,15 @@ enum class font_weight
     bold
 };
 
+/// A font size: font_size(11) is 11pt, as is font_size(pt(11)).
 struct font_size
 {
     explicit font_size(float points) :
         m_points{points}
+    {
+    }
+    explicit font_size(length l) :
+        m_points{static_cast<float>(l.m_points)}
     {
     }
     bool operator==(const font_size &rhs) const = default;
@@ -172,20 +188,14 @@ struct colour
     std::uint8_t m_b{};
 };
 
-/// A length, held in points. Writers convert it to their format's unit.
-struct length
-{
-    double m_points{};
-    bool operator==(const length &rhs) const = default;
-};
-constexpr length pt(double v) { return {v}; }
-constexpr length mm(double v) { return {v * 72.0 / 25.4}; }
-constexpr length cm(double v) { return {v * 72.0 / 2.54}; }
-constexpr length inch(double v) { return {v * 72.0}; }
-
 /// A share of the text width, e.g. a table's width.
 struct percent
 {
+    constexpr percent() = default;
+    constexpr explicit percent(double value) :
+        m_value(value)
+    {
+    }
     double m_value{};
     bool operator==(const percent &rhs) const = default;
 };
@@ -272,20 +282,20 @@ enum class break_type
 };
 
 // clang-format off
-struct break_before { break_type m_break_type; bool operator==(const break_before&) const = default; };
-struct break_after { break_type m_break_type; bool operator==(const break_after&) const = default; };
+struct break_before { constexpr explicit break_before(break_type v) : m_break_type(v) {} break_type m_break_type; bool operator==(const break_before&) const = default; };
+struct break_after { constexpr explicit break_after(break_type v) : m_break_type(v) {} break_type m_break_type; bool operator==(const break_after&) const = default; };
 /// Space above and below a paragraph.
-struct space_before { length m_length; bool operator==(const space_before&) const = default; };
-struct space_after { length m_length; bool operator==(const space_after&) const = default; };
+struct space_before { constexpr explicit space_before(length v) : m_length(v) {} length m_length; bool operator==(const space_before&) const = default; };
+struct space_after { constexpr explicit space_after(length v) : m_length(v) {} length m_length; bool operator==(const space_after&) const = default; };
 /// Indents from the start (left in left-to-right text) and end edges.
-struct indent_start { length m_length; bool operator==(const indent_start&) const = default; };
-struct indent_end { length m_length; bool operator==(const indent_end&) const = default; };
+struct indent_start { constexpr explicit indent_start(length v) : m_length(v) {} length m_length; bool operator==(const indent_start&) const = default; };
+struct indent_end { constexpr explicit indent_end(length v) : m_length(v) {} length m_length; bool operator==(const indent_end&) const = default; };
 /// The first line's indent beyond indent_start; negative for a hanging indent.
-struct first_line_indent { length m_length; bool operator==(const first_line_indent&) const = default; };
+struct first_line_indent { constexpr explicit first_line_indent(length v) : m_length(v) {} length m_length; bool operator==(const first_line_indent&) const = default; };
 /// Keep the paragraph on the same page as the next one (e.g. a heading).
-struct keep_with_next { bool m_on{true}; bool operator==(const keep_with_next&) const = default; };
+struct keep_with_next { constexpr explicit keep_with_next(bool on = true) : m_on(on) {} bool m_on; bool operator==(const keep_with_next&) const = default; };
 /// Don't split the paragraph across pages.
-struct keep_together { bool m_on{true}; bool operator==(const keep_together&) const = default; };
+struct keep_together { constexpr explicit keep_together(bool on = true) : m_on(on) {} bool m_on; bool operator==(const keep_together&) const = default; };
 // clang-format on
 
 class paragraph_props
@@ -423,6 +433,10 @@ struct cell_borders
 /// The space between a cell's edges and its content, on every side.
 struct cell_padding
 {
+    constexpr explicit cell_padding(length l) :
+        m_length(l)
+    {
+    }
     length m_length;
     bool operator==(const cell_padding &rhs) const = default;
 };
@@ -517,17 +531,21 @@ enum class table_align
 
 // clang-format off
 /// The same line on all four edges of the table.
-struct outer_border { border m_border; bool operator==(const outer_border&) const = default; };
+struct outer_border { constexpr explicit outer_border(border v) : m_border(v) {} border m_border; bool operator==(const outer_border&) const = default; };
 /// The lines between rows.
-struct inside_h { border m_border; bool operator==(const inside_h&) const = default; };
+struct inside_h { constexpr explicit inside_h(border v) : m_border(v) {} border m_border; bool operator==(const inside_h&) const = default; };
 /// The lines between columns.
-struct inside_v { border m_border; bool operator==(const inside_v&) const = default; };
+struct inside_v { constexpr explicit inside_v(border v) : m_border(v) {} border m_border; bool operator==(const inside_v&) const = default; };
 // clang-format on
 
 /// How the cells of a table's header rows (table::header_rows()) look, over
 /// the table's lines and its columns' styles, under each cell's own style.
 struct header_cells
 {
+    explicit header_cells(cell_props p) :
+        m_props(std::move(p))
+    {
+    }
     cell_props m_props;
     bool operator==(const header_cells &rhs) const = default;
 };

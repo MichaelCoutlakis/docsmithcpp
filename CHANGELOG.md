@@ -11,6 +11,11 @@ The document model was rewritten from a polymorphic class hierarchy into value t
 held in `std::variant`. This is a breaking change to almost every public API.
 
 ### Changed
+- **Value types take parentheses as well as braces**: the property tags
+  (`space_after(pt(6))`, `keep_with_next()`, `outer_border(...)`, `percent(50)`,
+  `cell_padding(...)`, `header_cells(...)`) have constructors, as an aggregate takes
+  parentheses only from Clang 16. `font_size` also takes a `length`
+  (`font_size(pt(11))`), and `font_name::get_name()` is `str()`, as on `style_name`.
 - **Dependencies are the consumer's to find.** The project using DocSmith++ defines
   `pugixml::pugixml` and `miniz::miniz` (and `md4c::md4c` with Markdown input) before
   `find_package(DocSmithCpp)`, `add_subdirectory` or FetchContent; DocSmith++ checks

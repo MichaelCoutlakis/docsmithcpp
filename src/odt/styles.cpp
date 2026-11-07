@@ -478,7 +478,7 @@ void write_xml(pugi::xml_node &n, const text_props &tp)
             to_odf(font_style_names, tp.m_font_style.value());
 
     if(tp.m_font_name)
-        text_props_node.append_attribute("style:font-name") = tp.m_font_name->get_name().c_str();
+        text_props_node.append_attribute("style:font-name") = tp.m_font_name->str().c_str();
 
     if(tp.m_font_weight)
         text_props_node.append_attribute("fo:font-weight") = to_odf(tp.m_font_weight.value());
