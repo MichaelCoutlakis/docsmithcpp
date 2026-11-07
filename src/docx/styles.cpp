@@ -139,15 +139,15 @@ std::optional<length> read_margins(const pugi::xml_node &n)
 }
 
 /// The level's number or bullet text style and properties, as its w:rPr.
-void write_level_rpr(pugi::xml_node lvl, const style_name &sn, const std::optional<text_props> &tp)
+void write_level_rpr(pugi::xml_node lvl, const text_style_name &sn, const text_props &tp)
 {
-    if(sn.is_empty() && !tp)
+    if(sn.empty() && tp.empty())
         return;
     auto rpr = ordered_child(lvl, "w:rPr", lvl_order);
-    if(!sn.is_empty())
-        set_val(ordered_child(rpr, "w:rStyle", rpr_order), sn.get_name());
-    if(tp)
-        write_rpr(rpr, *tp);
+    if(!sn.empty())
+        set_val(ordered_child(rpr, "w:rStyle", rpr_order), sn.str());
+    if(!tp.empty())
+        write_rpr(rpr, tp);
 }
 
 pugi::xml_node add_level(pugi::xml_node n, int level)
@@ -170,7 +170,7 @@ const char *style_type(style_family f)
 {
     switch(f)
     {
-    case style_family::paragraph: return "paragraph";
+    case style_family::para: return "paragraph";
     case style_family::text: return "character";
     case style_family::table: return "table";
     default: return nullptr;
@@ -436,7 +436,10 @@ std::optional<table_props> read_style_tblpr(const pugi::xml_node &tbl_pr)
     return p == table_props{} ? std::nullopt : std::optional(std::move(p));
 }
 
-void write_style(pugi::xml_node n, const style &s, const char *type, const std::string &id,
+namespace
+{
+/// The w:style's own elements, before its properties.
+void style_head(pugi::xml_node n, const char *type, const std::string &id,
     const std::string &based_on, const std::string &link)
 {
     n.append_attribute("w:type") = type;
@@ -447,13 +450,11 @@ void write_style(pugi::xml_node n, const style &s, const char *type, const std::
     if(!link.empty())
         set_val(n.append_child("w:link"), link);
     n.append_child("w:qFormat");
-    const std::string_view t = type;
-    if(t == "paragraph" && s.m_paragraph_props)
-        write_ppr(n.append_child("w:pPr"), *s.m_paragraph_props);
-    if((t == "paragraph" || t == "character") && s.m_text_props)
-        write_rpr(n.append_child("w:rPr"), *s.m_text_props);
-    if(t == "table" && s.m_table_props)
-        write_style_tblpr(n.append_child("w:tblPr"), *s.m_table_props);
+}
+
+/// Removes the empty property elements.
+void drop_empty(pugi::xml_node n)
+{
     for(auto c = n.first_child(); c;)
     {
         auto next = c.next_sibling();
@@ -463,71 +464,102 @@ void write_style(pugi::xml_node n, const style &s, const char *type, const std::
         c = next;
     }
 }
+} // namespace
 
-std::optional<style> read_style(const pugi::xml_node &n)
+void write_style(pugi::xml_node n, const paragraph_style &s, const std::string &id,
+    const std::string &based_on, const std::string &link)
+{
+    style_head(n, "paragraph", id, based_on, link);
+    if(!s.para.empty())
+        write_ppr(n.append_child("w:pPr"), s.para);
+    if(!s.text.empty())
+        write_rpr(n.append_child("w:rPr"), s.text);
+    drop_empty(n);
+}
+
+void write_style(pugi::xml_node n, const text_style &s, const std::string &id,
+    const std::string &based_on, const std::string &link)
+{
+    style_head(n, "character", id, based_on, link);
+    if(!s.text.empty())
+        write_rpr(n.append_child("w:rPr"), s.text);
+    drop_empty(n);
+}
+
+void write_style(pugi::xml_node n, const table_style &s, const std::string &id,
+    const std::string &based_on, const std::string &link)
+{
+    style_head(n, "table", id, based_on, link);
+    if(!s.table.empty())
+        write_style_tblpr(n.append_child("w:tblPr"), s.table);
+    drop_empty(n);
+}
+
+std::optional<docx_style> read_style(
+    const pugi::xml_node &n, const std::string &name, const std::string &parent)
 {
     const std::string_view type = n.attribute("w:type").as_string("paragraph");
-    style s(style_name(n.attribute("w:styleId").as_string()));
     if(type == "paragraph")
-        s.set(style_family::paragraph);
-    else if(type == "character")
-        s.set(style_family::text);
-    else if(type == "table")
-        s.set(style_family::table);
-    else
-        return std::nullopt;
-    s.m_parent_style = style_name(val(n, "w:basedOn"));
-    if(type != "table")
-        if(auto tp = read_rpr(n.child("w:rPr")))
-            s.set(*tp);
-    if(type == "paragraph")
-        if(auto pp = read_ppr(n.child("w:pPr")))
-            s.set(*pp);
+    {
+        paragraph_style s(name,
+            read_ppr(n.child("w:pPr")).value_or(paragraph_props{}),
+            read_rpr(n.child("w:rPr")).value_or(text_props{}));
+        s.parent = parent;
+        return s;
+    }
+    if(type == "character")
+    {
+        text_style s(name, read_rpr(n.child("w:rPr")).value_or(text_props{}));
+        s.parent = parent;
+        return s;
+    }
     if(type == "table")
-        if(auto tp = read_style_tblpr(n.child("w:tblPr")))
-            s.set(*tp);
-    return s;
+    {
+        table_style s(name, read_style_tblpr(n.child("w:tblPr")).value_or(table_props{}));
+        s.parent = parent;
+        return s;
+    }
+    return std::nullopt;
 }
 
 void write_abstract_num(pugi::xml_node n, int id, const list_style &ls)
 {
     n.append_attribute("w:abstractNumId") = id;
     set_val(n.append_child("w:multiLevelType"), "hybridMultilevel");
-    set_val(n.append_child("w:name"), ls.m_name.get_name());
-    for(const auto &lvl_style : ls.m_level_styles)
+    set_val(n.append_child("w:name"), ls.name().str());
+    for(const auto &level : ls.levels)
         std::visit(
             overloaded{
-                [&](const list_style_num &num)
+                [&](const number_level &num)
                 {
-                    auto lvl = add_level(n, num.m_level);
-                    set_val(lvl.append_child("w:start"), std::to_string(num.m_start_from));
+                    auto lvl = add_level(n, num.level);
+                    set_val(lvl.append_child("w:start"), std::to_string(num.start_from));
                     const char *fmt = "decimal";
                     for(const auto &[e, name] : num_formats)
-                        if(e == num.m_format)
+                        if(e == num.format)
                             fmt = name;
                     set_val(lvl.append_child("w:numFmt"), fmt);
                     set_val(lvl.append_child("w:lvlText"),
-                        num.m_num_prefix + "%" + std::to_string(std::max(num.m_level, 1)) +
-                            num.m_num_suffix);
-                    write_indent(lvl, num.m_level);
-                    write_level_rpr(lvl, num.m_style_name, num.m_text_props);
+                        num.prefix + "%" + std::to_string(std::max(num.level, 1)) + num.suffix);
+                    write_indent(lvl, num.level);
+                    write_level_rpr(lvl, num.style, num.text);
                 },
-                [&](const list_style_bullet &b)
+                [&](const bullet_level &b)
                 {
-                    auto lvl = add_level(n, b.m_level);
+                    auto lvl = add_level(n, b.level);
                     set_val(lvl.append_child("w:start"), "1");
                     set_val(lvl.append_child("w:numFmt"), "bullet");
-                    set_val(lvl.append_child("w:lvlText"), b.m_bullet_char);
-                    write_indent(lvl, b.m_level);
-                    write_level_rpr(lvl, b.m_style_name, std::nullopt);
+                    set_val(lvl.append_child("w:lvlText"), b.bullet);
+                    write_indent(lvl, b.level);
+                    write_level_rpr(lvl, b.style, {});
                 },
             },
-            lvl_style);
+            level);
 }
 
-list_style read_abstract_num(const pugi::xml_node &n, const style_name &name)
+list_style read_abstract_num(const pugi::xml_node &n, const list_style_name &name)
 {
-    list_style ls(name, {});
+    list_style ls(name);
     for(auto lvl : n.children("w:lvl"))
     {
         if(lvl.child("w:lvlPicBulletId"))
@@ -536,10 +568,10 @@ list_style read_abstract_num(const pugi::xml_node &n, const style_name &name)
         const std::string fmt = val(lvl, "w:numFmt");
         const std::string text = val(lvl, "w:lvlText");
         const auto rpr = lvl.child("w:rPr");
-        const style rstyle(style_name(val(rpr, "w:rStyle")));
+        const text_style_name rstyle(val(rpr, "w:rStyle"));
         if(fmt == "bullet")
         {
-            ls.m_level_styles.emplace_back(list_style_bullet(rstyle, level, text));
+            ls.levels.emplace_back(bullet_level{.level = level, .bullet = text, .style = rstyle});
             continue;
         }
         std::optional<list_enum> format;
@@ -555,14 +587,13 @@ list_style read_abstract_num(const pugi::xml_node &n, const style_name &name)
         auto end = last + 1;
         while(end < text.size() && std::isdigit(static_cast<unsigned char>(text[end])))
             ++end;
-        list_style_num num(rstyle,
-            level,
-            *format,
-            text.substr(end),
-            lvl.child("w:start").attribute("w:val").as_int(1),
-            text.substr(0, first));
-        num.m_text_props = read_rpr(rpr);
-        ls.m_level_styles.emplace_back(std::move(num));
+        ls.levels.emplace_back(number_level{.level = level,
+            .format = *format,
+            .prefix = text.substr(0, first),
+            .suffix = text.substr(end),
+            .start_from = lvl.child("w:start").attribute("w:val").as_int(1),
+            .style = rstyle,
+            .text = read_rpr(rpr).value_or(text_props{})});
     }
     return ls;
 }

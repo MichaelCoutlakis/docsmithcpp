@@ -26,6 +26,7 @@
 
 #include "bytes.h"
 #include "format.h"
+#include "lineage.h"
 #include "list_numbers.h"
 #include "md/names.h"
 #include "outline.h"
@@ -43,17 +44,18 @@ namespace
 {
 
 /// Whether sn is base, or a style defined (through its parents) from base.
-bool based_on(const style_name &sn, const style_name &base, const style_registry &styles)
+template <style_family F>
+bool based_on(const style_name<F> &sn, const style_name<F> &base, const style_sheet &styles)
 {
-    style_name s = sn;
-    for(int depth = 0; !s.is_empty() && depth != 32; ++depth) // guards against a cycle
+    style_name<F> s = sn;
+    for(int depth = 0; !s.empty() && depth != 32; ++depth) // guards against a cycle
     {
         if(s == base)
             return true;
-        const style *def = styles.find(s.get_name());
+        const auto *def = styles.find(s);
         if(!def)
             return false;
-        s = def->m_parent_style;
+        s = def->parent;
     }
     return false;
 }
@@ -66,23 +68,18 @@ struct span_format
     bool code{false};
 };
 
-span_format format_of(const style_name &sn, const style_registry &styles)
+span_format format_of(const text_style_name &sn, const style_sheet &styles)
 {
     span_format f;
     f.code = based_on(sn, builtin::source_text, styles);
     std::optional<font_weight> weight;
     std::optional<font_style> slant;
-    const style *def = styles.find(sn.get_name());
-    for(int depth = 0; def && depth != 32; ++depth)
+    for(const text_style *def : detail::lineage(sn, styles))
     {
-        if(const auto &tp = def->m_text_props)
-        {
-            if(!weight)
-                weight = tp->m_font_weight;
-            if(!slant)
-                slant = tp->m_font_style;
-        }
-        def = styles.find(def->m_parent_style.get_name());
+        if(!weight)
+            weight = def->text.m_font_weight;
+        if(!slant)
+            slant = def->text.m_font_style;
     }
     // The names alone are enough, as for builtin styles.
     f.strong = weight ? *weight == font_weight::bold : based_on(sn, names::strong, styles);
@@ -101,18 +98,6 @@ void plain_text(const std::vector<inline_node> &kids, std::string &out)
                 [](const auto &) { },
             },
             k.v);
-}
-
-/// The list's numbering at a nesting level, or nullptr for a bulleted (or
-/// unstyled) level.
-const list_style_num *numbering(const list_style *ls, int level)
-{
-    if(!ls)
-        return nullptr;
-    for(const auto &s : ls->m_level_styles)
-        if(std::visit([](const auto &x) { return x.m_level; }, s) == level)
-            return std::get_if<list_style_num>(&s);
-    return nullptr;
 }
 
 size_t longest_run(std::string_view s, char c)
@@ -191,7 +176,7 @@ private:
         cell     // one line; '|' splits cells
     };
 
-    const style_registry &styles() const { return m_doc.styles(); }
+    const style_sheet &styles() const { return m_doc.styles(); }
 
     // ---- Blocks -------------------------------------------------------------
 
@@ -295,13 +280,13 @@ private:
     {
         // A nested list usually has no style of its own and continues the
         // enclosing list's style at the next level.
-        const list_style *ls = l.style.is_empty() ? (m_lists.empty() ? nullptr : m_lists.back())
-                                                  : m_doc.list_styles().find(l.style.get_name());
+        const list_style *ls = l.style.empty() ? (m_lists.empty() ? nullptr : m_lists.back())
+                                               : m_doc.styles().find(l.style);
         const int level = static_cast<int>(m_lists.size()) + 1;
-        const auto *num = numbering(ls, level);
+        const auto *num = detail::numbering(ls, level);
         const auto numbers = num ? m_counter.numbers(l, ls, *num, level)
                                  : std::vector<std::optional<int>>(l.items().size());
-        const char delim = num ? (num->m_num_suffix == ")" ? ')' : '.') : '-';
+        const char delim = num ? (num->suffix == ")" ? ')' : '.') : '-';
         // Markdown has no unnumbered item: one at the start is written before
         // the list, a later one as more of the item before it.
         const auto &items = l.items();
@@ -358,16 +343,15 @@ private:
         auto starts_at_1 = [&](const block_node &b)
         {
             const auto &l = std::get<list>(b.v);
-            const list_style *nested =
-                l.style.is_empty() ? ls : m_doc.list_styles().find(l.style.get_name());
-            const auto *num = numbering(nested, static_cast<int>(m_lists.size()) + 2);
+            const list_style *nested = l.style.empty() ? ls : m_doc.styles().find(l.style);
+            const auto *num = detail::numbering(nested, static_cast<int>(m_lists.size()) + 2);
             if(!num)
                 return true;
             const auto &items = l.items();
             if(l.continue_numbering || (!items.empty() && !items.front().numbered))
                 return false;
             const auto start = items.empty() ? std::nullopt : items.front().start_value;
-            return start.value_or(num->m_start_from) == 1;
+            return start.value_or(num->start_from) == 1;
         };
         if(bs.size() > 2)
             return false;
@@ -517,7 +501,7 @@ private:
 
     void emit(const span &s, context ctx, std::string &out)
     {
-        const span_format f = s.style.is_empty() ? span_format{} : format_of(s.style, styles());
+        const span_format f = s.style.empty() ? span_format{} : format_of(s.style, styles());
         if(f.code)
         {
             std::string t;

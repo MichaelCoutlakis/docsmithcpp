@@ -227,12 +227,12 @@ int main() {
                   hyperlink("https://example.com", "link"), "."),
         paragraph().set_style("Quote").add("built incrementally"),
     };
-    // A node with no style has its kind's default (builtin::default_paragraph,
-    // heading(n), link, ...); set one up to style them all, in every format. A
-    // loaded template's is the one you get, to edit.
-    hello.builtin_style(builtin::default_paragraph)
-        .set(text_props(font_name("Liberation Serif"), font_size(11)))
-        .set(paragraph_props(space_after{pt(6)}));
+    // A node with no style has its kind's default (builtin::para, heading(n),
+    // link, ...); set one up to style them all, in every format. A loaded
+    // template's is the one you get, to edit.
+    auto &body = hello.styles()[builtin::para];
+    body.text.set(font_name("Liberation Serif")).set(font_size(11));
+    body.para.set(space_after{pt(6)});
     odt::file(hello).save("hello_world.odt");
     docx::file(hello).save("hello_world.docx");
     html::file(hello).save("hello_world.html");
@@ -249,7 +249,7 @@ int main() {
             std::cout << u->url << "\n";
 
     auto body_paras = find_all<paragraph>(doc,
-        [](const paragraph& p) { return p.style.get_name() == "Text_body"; });
+        [](const paragraph& p) { return p.style == "Text_body"; });
 
     // Visit a node directly with the overloaded idiom.
     for (const block_node& b : doc.body)

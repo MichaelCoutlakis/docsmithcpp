@@ -32,7 +32,8 @@
 namespace docsmith
 {
 
-class table_cell : public styled<table_cell>, public has_children<block_node, table_cell, true>
+class table_cell : public styled<table_cell, style_family::cell>,
+                   public has_children<block_node, table_cell, true>
 {
 public:
     int rowspan{1};
@@ -92,7 +93,7 @@ public:
         return *this;
     }
 
-    cell_view &set_style(const style_name &sn)
+    cell_view &set_style(const cell_style_name &sn)
     {
         for(auto *c : m_cells)
             c->set_style(sn);
@@ -137,7 +138,7 @@ enum class lines
 /// A grid of cells, always rectangular: every row has num_cols() cells. A slot
 /// spanned over by an earlier cell still holds a (placeholder) cell; writers
 /// skip it (is_cell_covered()).
-class table : public styled<table>
+class table : public styled<table, style_family::table>
 {
 public:
     /// The table's name in formats that name tables (ODT); empty lets the
@@ -177,7 +178,7 @@ public:
     /// Appends a row. The first row of a table with no columns sets
     /// num_cols(); after that, throws std::invalid_argument unless cells has
     /// num_cols() cells.
-    table &add_row(std::vector<table_cell> cells, style_name row_style = {});
+    table &add_row(std::vector<table_cell> cells, row_style_name row_style = {});
     void remove_row(size_t r);
 
     /// The first header_rows() rows are header rows: they repeat on each page
@@ -189,8 +190,8 @@ public:
         return *this;
     }
 
-    const style_name &row_style(size_t r) const { return m_rows.at(r).style; }
-    table &set_row_style(size_t r, style_name sn);
+    const row_style_name &row_style(size_t r) const { return m_rows.at(r).style; }
+    table &set_row_style(size_t r, row_style_name sn);
 
     /// A column's width relative to the others' (e.g. 1 and 3 for a quarter
     /// and three quarters), or nullopt for an equal share.
@@ -199,11 +200,11 @@ public:
     /// unless widths has num_cols() values.
     table &set_column_widths(const std::vector<double> &widths);
     table &set_column_width(size_t c, std::optional<double> width);
-    /// A cell style (style_family::table_cell) for the column's cells, under
+    /// A cell style for the column's cells, under
     /// the header rows' formatting and each cell's own style. It applies by
     /// position when the document is written, so rows added later get it too.
-    const style_name &column_style(size_t c) const { return m_columns.at(c).style; }
-    table &set_column_style(size_t c, style_name cell_style);
+    const cell_style_name &column_style(size_t c) const { return m_columns.at(c).style; }
+    table &set_column_style(size_t c, cell_style_name cell_style);
 
     // Borders as the cells' direct formatting (table_cell::props). They act on
     // the cells there are now; a line between two cells is set on both.
@@ -231,13 +232,13 @@ public:
 private:
     struct row_format
     {
-        style_name style;
+        row_style_name style;
         bool operator==(const row_format &) const = default;
     };
     struct column_format
     {
         std::optional<double> width;
-        style_name style;
+        cell_style_name style;
         bool operator==(const column_format &) const = default;
     };
 
@@ -260,7 +261,7 @@ private:
 /// style's outer and inside lines and padding are left out, for formats that
 /// write those in the table style itself (DOCX).
 cell_props effective_cell_props(
-    const table &t, const style_registry &styles, size_t row, size_t col, bool table_lines = true);
+    const table &t, const style_sheet &styles, size_t row, size_t col, bool table_lines = true);
 
 /// Each column's share of the table's width, summing to 1: column_width()
 /// over their total, a column without one taking the others' average.
@@ -268,12 +269,24 @@ std::vector<double> column_shares(const table &t);
 
 /// The table's style's table_props, with its parents' filled in: those of
 /// builtin::default_table for a table with no style.
-table_props effective_table_props(const table &t, const style_registry &styles);
+table_props effective_table_props(const table &t, const style_sheet &styles);
 
 /// A style's table_props, with its parents' filled in.
-table_props effective_table_style(const style_name &sn, const style_registry &styles);
+table_props effective_table_style(const table_style_name &sn, const style_sheet &styles);
 
 /// A style's cell_props, with its parents' filled in.
-cell_props effective_cell_style(const style_name &sn, const style_registry &styles);
+cell_props effective_cell_style(const cell_style_name &sn, const style_sheet &styles);
+
+/// The paragraph and text properties for the unstyled paragraphs of the cell
+/// at (row, col): its column's cell style's, then its own cell style's, each
+/// with its parents' filled in.
+struct cell_text
+{
+    paragraph_props para;
+    text_props text;
+    bool empty() const { return para.empty() && text.empty(); }
+    bool operator==(const cell_text &) const = default;
+};
+cell_text effective_cell_text(const table &t, const style_sheet &styles, size_t row, size_t col);
 
 } // namespace docsmith

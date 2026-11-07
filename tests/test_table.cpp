@@ -38,7 +38,7 @@ TEST(Table, AddRowChecksWidth)
     EXPECT_THROW(t.add_row({paragraph("c")}), std::invalid_argument);
     EXPECT_EQ(t.num_rows(), 2U);
     EXPECT_EQ(t.num_cols(), 2U);
-    EXPECT_EQ(t.row_style(1), style_name("Row style"));
+    EXPECT_EQ(t.row_style(1), row_style_name("Row style"));
     EXPECT_EQ(t.cells().size(), 4U);
     EXPECT_THROW(table::from_cells({{"a", "b"}, {"c"}}), std::invalid_argument);
 }
@@ -116,19 +116,18 @@ TEST(Table, SetBordersDrawsAGrid)
 TEST(Table, EffectivePropsLayers)
 {
     text_doc doc;
-    doc.add_style(style("Grid",
-        style_family::table,
+    doc.styles().insert(table_style("Grid",
         table_props(outer_border{thick},
             inside_h{thin},
             inside_v{thin},
             cell_padding{pt(2)},
             header_cells{cell_props(colour::rgb(0xdd, 0xdd, 0xdd),
                 cell_borders{.m_bottom = thick},
-                paragraph_style{"Table Heading"})})));
-    doc.add_style(style("Base cell", style_family::table_cell, cell_props(cell_valign::middle)));
-    style highlight("Highlight", style_family::table_cell, cell_props(colour::rgb(0xff, 0xff, 0)));
-    highlight.m_parent_style = "Base cell";
-    doc.add_style(highlight);
+                para_style_name("Table Heading"))})));
+    doc.styles().insert(cell_style("Base cell", cell_props(cell_valign::middle)));
+    cell_style highlight("Highlight", cell_props(colour::rgb(0xff, 0xff, 0)));
+    highlight.parent = "Base cell";
+    doc.styles().insert(highlight);
 
     table t = table::from_cells({{"h", "h"}, {"a", "b"}, {"c", "d"}});
     t.set_header_rows(1).set_style("Grid");
@@ -155,21 +154,20 @@ TEST(Table, EffectivePropsLayers)
     EXPECT_FALSE(no_lines.m_padding);
 
     // Live: a change to the style shows on the next look.
-    doc.styles().find("Grid")->m_table_props->m_inside_v = thick;
+    doc.styles().table.find("Grid")->table.m_inside_v = thick;
     EXPECT_EQ(effective_cell_props(t, doc.styles(), 1, 0).m_borders.m_end, thick);
 }
 
 TEST(Table, ColumnStyleIsLive)
 {
     text_doc doc;
-    doc.add_style(style("Grid",
-        style_family::table,
+    doc.styles().insert(table_style("Grid",
         table_props(header_cells{
-            cell_props(colour::rgb(0xdd, 0xdd, 0xdd), paragraph_style{"Table Heading"})})));
-    doc.add_style(style("Key",
-        style_family::table_cell,
-        cell_props(colour::rgb(0xee, 0xee, 0xee), cell_valign::middle, paragraph_style{"Key text"})));
-    doc.add_style(style("Highlight", style_family::table_cell, cell_props(colour::rgb(0xff, 0xff, 0))));
+            cell_props(colour::rgb(0xdd, 0xdd, 0xdd), para_style_name("Table Heading"))})));
+    doc.styles().insert(cell_style("Key",
+        cell_props(
+            colour::rgb(0xee, 0xee, 0xee), cell_valign::middle, para_style_name("Key text"))));
+    doc.styles().insert(cell_style("Highlight", cell_props(colour::rgb(0xff, 0xff, 0))));
 
     table t = table::from_cells({{"h", "h"}, {"a", "b"}});
     t.set_header_rows(1).set_style("Grid").set_column_style(0, "Key");
@@ -178,18 +176,39 @@ TEST(Table, ColumnStyleIsLive)
 
     const auto added = effective_cell_props(t, doc.styles(), 2, 0);
     EXPECT_EQ(added.m_background, colour::rgb(0xee, 0xee, 0xee)) << "a row added later";
-    EXPECT_EQ(added.m_paragraph_style, style_name("Key text"));
+    EXPECT_EQ(added.m_paragraph_style, para_style_name("Key text"));
 
     const auto header = effective_cell_props(t, doc.styles(), 0, 0);
     EXPECT_EQ(header.m_background, colour::rgb(0xdd, 0xdd, 0xdd)) << "the header beats the column";
-    EXPECT_EQ(header.m_paragraph_style, style_name("Table Heading"));
+    EXPECT_EQ(header.m_paragraph_style, para_style_name("Table Heading"));
     EXPECT_EQ(header.m_valign, cell_valign::middle) << "the column's, where the header has none";
 
     const auto own = effective_cell_props(t, doc.styles(), 1, 0);
     EXPECT_EQ(own.m_background, colour::rgb(0xff, 0xff, 0)) << "the cell's own style beats both";
-    EXPECT_EQ(own.m_paragraph_style, style_name("Key text"));
+    EXPECT_EQ(own.m_paragraph_style, para_style_name("Key text"));
 
     EXPECT_EQ(effective_cell_props(t, doc.styles(), 1, 1), cell_props{});
+}
+
+TEST(Table, CellTextFromColumnAndCellStyles)
+{
+    text_doc doc;
+    cell_style key("Key", text_props(font_weight::bold), paragraph_props(text_align::centre));
+    doc.styles().insert(key);
+    cell_style small("Small", text_props(font_size(8)));
+    small.parent = "Key";
+    doc.styles().insert(small);
+
+    table t = table::from_cells({{"a", "b"}});
+    t.set_column_style(0, "Key");
+    t.cell(0, 1).set_style("Small");
+
+    EXPECT_EQ(effective_cell_text(t, doc.styles(), 0, 0),
+        (cell_text{paragraph_props(text_align::centre), text_props(font_weight::bold)}));
+    EXPECT_EQ(effective_cell_text(t, doc.styles(), 0, 1),
+        (cell_text{
+            paragraph_props(text_align::centre), text_props(font_weight::bold, font_size(8))}))
+        << "the parent's under its own";
 }
 
 TEST(Table, PropsCopy)
@@ -205,9 +224,8 @@ TEST(Table, PropsCopy)
 TEST(Table, DefaultTableStyle)
 {
     text_doc doc;
-    doc.add_style(style(builtin::default_table,
-        style_family::table,
-        table_props(outer_border{thin}, cell_padding{pt(2)})));
+    doc.styles().insert(
+        table_style(builtin::table, table_props(outer_border{thin}, cell_padding{pt(2)})));
     const table t = table::from_cells({{"a"}});
     EXPECT_EQ(effective_table_props(t, doc.styles()).m_padding, pt(2));
     EXPECT_EQ(effective_cell_props(t, doc.styles(), 0, 0).m_borders.m_top, thin)

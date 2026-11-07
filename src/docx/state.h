@@ -32,9 +32,10 @@ namespace docsmith::docx
 /// model holds as a style made up for it (T1, P1, ...), like ODF's automatic
 /// styles. While the definition is as read, the writer writes the original
 /// XML back in place of the style.
+template <typename Style>
 struct direct_format
 {
-    style def;       //!< As read: the run's or paragraph's style is its parent
+    Style def;       //!< As read: the run's or paragraph's style is its parent
     std::string xml; //!< The w:rPr or w:pPr, without what the writer sets itself
 };
 
@@ -50,7 +51,9 @@ struct state
 {
     opc::package pkg;      //!< Everything in the archive; empty for a new document
     std::string main_part; //!< The main document part; empty for a new document
-    std::map<std::string, direct_format> direct; //!< By style name
+    /// By style name: a paragraph's (P1, ...) and a run's (T1, ...).
+    std::map<std::string, direct_format<paragraph_style>> direct_para;
+    std::map<std::string, direct_format<text_style>> direct_text;
     std::map<std::string, drawing> drawings;     //!< By image uri
 };
 

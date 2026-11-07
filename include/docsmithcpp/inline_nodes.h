@@ -52,7 +52,7 @@ struct image
 };
 
 // A draw frame; in ODT it wraps a single drawing (here, an image).
-class frame : public styled<frame>
+class frame : public styled<frame, style_family::frame>
 {
 public:
     image img;
@@ -74,7 +74,7 @@ public:
     bool operator==(const frame &) const = default;
 };
 
-class span : public styled<span>, public has_children<inline_node, span, true>
+class span : public styled<span, style_family::text>, public has_children<inline_node, span, true>
 {
 public:
     span() = default;
@@ -105,10 +105,10 @@ struct bookmark_target
 
 using link_target = std::variant<url_target, bookmark_target>;
 
-/// A link. Its style is a text style (style_family::text) for how the link
-/// looks; unstyled, each writer uses its format's usual link look (DOCX
-/// Hyperlink; LibreOffice styles links itself).
-class hyperlink : public styled<hyperlink>, public has_children<inline_node, hyperlink, true>
+/// A link. Its style is a text style for how the link looks; unstyled, each writer uses its
+/// format's usual link look (DOCX Hyperlink; LibreOffice styles links itself).
+class hyperlink : public styled<hyperlink, style_family::text>,
+                  public has_children<inline_node, hyperlink, true>
 {
 public:
     link_target target;

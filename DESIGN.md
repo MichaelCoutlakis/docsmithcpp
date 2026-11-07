@@ -106,8 +106,8 @@ on.
   table. `header_rows` counts rows from the top.
 - **Heading levels** start at 1. A format with fewer levels clamps them (HTML
   and Markdown stop at 6).
-- **Styles are referred to by name.** A node's style names a definition in
-  `text_doc::styles()` or `list_styles()`, or a `builtin` style. Nothing checks
+- **Styles are referred to by name.** A node's style names a definition of its
+  family in `text_doc::styles()`, or a `builtin` style. Nothing checks
   that the name is defined (TODO.md, *Model gaps*). Writers write the name as
   given, so an undefined one gets whatever the output format gives it: an ODT
   application's own style of that name, or an HTML class with no rule.
@@ -175,9 +175,9 @@ filled in from code. `text_doc::replace()`, `insert_after()` and
     f.doc.insert_after(bookmark{"details"}, details);
 
 A `placeholder` is one of the node types it is made of, so there is nothing new
-to learn: a `bookmark` (a paragraph or heading holding it), a `style_name` (a
-paragraph or heading with that style) or a `text` (a paragraph or heading whose
-text is that, ignoring white space around it). The first match is used, looked
+to learn: a `bookmark` (a paragraph or heading holding it), a `para_style_name`
+(a paragraph or heading with that style) or a `text` (a paragraph or heading
+whose text is that, ignoring white space around it). A string is text. The first match is used, looked
 for depth first in the body, including lists and table cells, then in the page
 header and footer. A placeholder is a whole block, because what replaces it is
 usually several blocks (a heading and a table); text within a paragraph is
@@ -246,21 +246,51 @@ goes, most usefully in a header or footer:
 
 ## Styles
 
-A `style` is a named definition in `text_doc::styles()`; nodes refer to it by
-name. Its family (`style_family`) says what kind of node it applies to, as ODF
-and DOCX require: paragraph (`paragraph`, `heading`), text (`span`), graphic
-(`frame`), and the table families. ODF names are unique per family. A style
-built in code may leave the family empty: the ODT writer then works it out from
-the nodes that use it, and writes it once for each family it's used with, so
-the same style can be set on a span and on a paragraph. HTML has no families: a
-style is a CSS class either way, and its rule includes what it inherits from its
-parent styles.
+Each family of style (`style_family`) has a type of its own, holding the
+properties that family has, and a registry of its own in the document's
+`style_sheet` (`text_doc::styles()`):
 
-A style holds properties by kind: `text_props` (font, size, weight, slant,
-colour), `paragraph_props` (breaks, space above and below, indents, alignment,
-keep with next, keep together), `table_props` and `cell_props`. Each property
-is optional; an unset one comes from the parent style, or the format's
-default.
+| Family | Type | For | Properties |
+|---|---|---|---|
+| `para` | `paragraph_style` | `paragraph`, `heading` | `para`, `text` |
+| `text` | `text_style` | `span`, `hyperlink` | `text` |
+| `table` | `table_style` | `table` | `table` |
+| `cell` | `cell_style` | `table_cell`, a table's columns | `cell`, `para`, `text` |
+| `row` | `row_style` | a table's rows | none yet |
+| `frame` | `frame_style` | `frame` | none yet |
+| `list` | `list_style` | `list` | `levels` |
+
+A node's `style` is a `style_name` of its family (`style_name<style_family::para>`
+on a paragraph, and so on), so a text style's name can't be set on a paragraph.
+A string converts to any family's name. Names are unique within a family, as in
+ODF: a paragraph style and a text style may share one. HTML writes each as a CSS
+class; a name used in two families gets selectors limited to each family's
+elements. DOCX style ids are unique across types, so a text style named as a
+paragraph style is written as `<id>Char`.
+
+The registries are like `std::map`: `insert()` keeps an existing definition,
+`insert_or_assign()` replaces it, `operator[]` gives the definition of a name,
+adding an empty one if there is none, and `erase()` removes one. The style
+sheet's `operator[]` takes a typed name and picks the registry from it:
+
+    doc.styles()[builtin::para].text.set(font_size(11));
+    doc.styles().para["Note"].para.set(space_after{pt(6)});
+    auto [strong, added] = doc.styles().insert(text_style("Strong", text_props(font_weight::bold)));
+
+A style's name is fixed once it is made, since it's the key it is found by.
+Styles inherit from a `parent` of their own family, as ODF requires; list, row
+and frame styles have none (ODF list styles don't inherit, and the model holds
+no row or frame properties to inherit). Each property is optional; an unset one
+comes from the parent style, or the format's default.
+
+A cell style's `para` and `text` are for the cell's paragraphs that have no
+style of their own. No format applies them from a cell style: LibreOffice
+ignores them there, and DOCX has no cell styles. So writers give those
+paragraphs a paragraph style made from them, `<cell style>_20_Text`, based on
+the cell's paragraph style (`cell_props::m_paragraph_style`) or `builtin::para`
+(`detail::with_cell_text()`). A paragraph with a style of its own keeps it. ODT
+also keeps them in the cell style, so they read back; the made paragraph style
+reads back too, and is used again on the next save.
 
 - **ODT**: loading reads the definitions in `styles.xml` and `content.xml` into
   the registries, as far as the model holds their properties. On save, the writer
@@ -274,24 +304,24 @@ default.
 ### Default styles
 
 A node with no style has its kind's default, and the default is a style like
-any other: `builtin::default_paragraph`, `heading(level)`, `link`,
-`default_table`, and the list style `default_list`. Undefined, each format's own
+any other: `builtin::para`, `heading(level)`, `link`, `table`, and the list
+style `list`. Undefined, each format's own
 default applies; defined, in code or by a loaded template, it applies in every
 format. Reading maps each format's default back to the definition, with the
 nodes that use it unstyled, so content added to a template gets the template's
 defaults and a round trip doesn't turn "no style" into a named one.
-`text_doc::builtin_style(name)` gives the definition to edit, the template's if
-there is one, else a new empty one of the builtin's family.
+`doc.styles()[name]` gives the definition to edit, the template's if there is
+one, else a new empty one, of the builtin's family.
 
 | Default | ODT | DOCX | HTML |
 |---|---|---|---|
-| `default_paragraph` | `Standard` (an unstyled `text:p`) | the `w:default` paragraph style, `Normal` (no `w:pStyle`) | `p:not([class])` |
+| `para` | `Standard` (an unstyled `text:p`) | the `w:default` paragraph style, `Normal` (no `w:pStyle`) | `p:not([class])` |
 | `heading(n)` | `Heading_20_n`, named on `text:h` | `Heading<n>` | `hn:not([class])` |
 | `link` | `Internet_20_link`, named on `text:a` | `Hyperlink` | `a:not([class])` |
-| `default_table` | `Default_20_Table`, named on tables | the `w:default` table style, `TableNormal` (no `w:tblStyle`) | `table:not([class])`, and the cells' layers |
-| `default_list` | `Default_20_List`, named on lists | the list's numbering definition | the numbering of `<ol>` / `<ul>` |
+| `table` | `Default_20_Table`, named on tables | the `w:default` table style, `TableNormal` (no `w:tblStyle`) | `table:not([class])`, and the cells' layers |
+| `list` | `Default_20_List`, named on lists | the list's numbering definition | the numbering of `<ol>` / `<ul>` |
 
-Only a list that isn't nested has `default_list`: a nested unstyled list
+Only a list that isn't nested has `builtin::list`: a nested unstyled list
 continues the enclosing list's style, as ODF and DOCX have it.
 
 The default is the style of unstyled nodes, not the parent of every style: in
@@ -305,7 +335,7 @@ set on each paragraph: ODF can't say that new paragraphs get Text Body, so a
 
 ### Builtin styles and code blocks
 
-Names in `builtin` are styles writers know without a definition in
+The other names in `builtin` are styles writers know without a definition in
 `text_doc::styles()`: `title`, `preformatted` (a monospace paragraph for code
 and logs) and `source_text` (monospace text within a line). They are
 LibreOffice's own Title, Preformatted Text and Source Text, so ODT defines each
@@ -332,7 +362,7 @@ cell style per column. Content comes first and formatting after:
     table t = table::from_cells({{"Test", "Result"}, {"open", "pass"}});
     t.add_row({"save", "fail"});
     t.set_header_rows(1).set_style("Results").set_column_widths({3, 1});
-    t.set_column_style(0, "Key"); // a table_cell style
+    t.set_column_style(0, "Key"); // a cell_style
     t.set_row_borders({0}, edge::bottom, border::solid(pt(1)));
 
 Borders, shading, vertical alignment, padding and the paragraph style for the
@@ -353,7 +383,7 @@ property:
 2. The column's style (`set_column_style()`), a cell style.
 3. In a header row, the table style's `header_cells`. Its bottom line is also
    the top of the row below the header.
-4. The cell's own style (`cell_props` in a `table_cell` style).
+4. The cell's own style (the `cell_props` of a `cell_style`).
 5. The cell's direct formatting, `table_cell::props`.
 
 Layers 1 to 3 apply by position, so they are live: a row added later, or a
@@ -652,9 +682,9 @@ are kept, renamed only if they clash, and `mc:Ignorable` follows them.
 - **Styles**: a style's name is its `w:styleId` as is, so names round-trip
   exactly; `w:name` is the name with ODF's escapes decoded (`_20_` is a space).
   Paragraph styles are `w:type="paragraph"`, text styles `character`, table
-  styles `table`; graphic and table column, row and cell styles have no DOCX
-  form. A style with no family is written for each family it's used with; if
-  that is both, the character one is `<name>Char`, linked with `w:link`. Font,
+  styles `table`; frame, row and cell styles have no DOCX form (a cell style's
+  `para` and `text` go on its paragraphs, see *Styles*). Ids are unique across
+  types, so a text style with a paragraph style's name is `<name>Char`. Font,
   size (half-points), weight, italic, colour and `break_before` page map to
   `w:rFonts`, `w:sz`, `w:b`, `w:i`, `w:color` and `w:pageBreakBefore`. As with
   ODT, an unchanged loaded style keeps its XML and an edited one replaces it.

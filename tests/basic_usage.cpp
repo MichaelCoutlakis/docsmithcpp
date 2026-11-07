@@ -123,66 +123,76 @@ TEST(BASIC_USAGE, FindTitleAnywhere)
     EXPECT_EQ(doc.body.back(), to_block(paragraph("Renamed").set_style(builtin::title)));
 }
 
-TEST(BASIC_USAGE, AddStyle)
+TEST(BASIC_USAGE, InsertStyle)
 {
     text_doc doc;
-    const style bold("Bold", text_props(font_weight::bold));
-    EXPECT_EQ(doc.add_style(bold), style_name("Bold"));
-    EXPECT_EQ(*doc.styles().find("Bold"), bold);
+    const text_style bold("Bold", text_props(font_weight::bold));
+    EXPECT_EQ(doc.styles().insert(bold), std::pair(text_style_name("Bold"), true));
+    EXPECT_EQ(*doc.styles().text.find("Bold"), bold);
 
-    const style italic("Bold", text_props(font_style::italic));
-    EXPECT_EQ(doc.add_style(italic), style_name("Bold"));
-    EXPECT_EQ(*doc.styles().find("Bold"), bold) << "an existing definition stays";
+    const text_style italic("Bold", text_props(font_style::italic));
+    EXPECT_EQ(doc.styles().insert(italic), std::pair(text_style_name("Bold"), false));
+    EXPECT_EQ(*doc.styles().text.find("Bold"), bold) << "an existing definition stays";
 
-    EXPECT_EQ(doc.add_or_overwrite_style(italic), style_name("Bold"));
-    EXPECT_EQ(*doc.styles().find("Bold"), italic);
+    EXPECT_EQ(doc.styles().insert_or_assign(italic), text_style_name("Bold"));
+    EXPECT_EQ(*doc.styles().text.find("Bold"), italic);
+
+    EXPECT_EQ(doc.styles().text.erase("Bold"), 1U);
+    EXPECT_TRUE(doc.styles().empty());
+}
+
+TEST(BASIC_USAGE, SameNameInEachFamily)
+{
+    text_doc doc;
+    doc.styles().insert(paragraph_style("Note", paragraph_props(space_after{pt(6)})));
+    doc.styles().insert(text_style("Note", text_props(font_style::italic)));
+    EXPECT_EQ(doc.styles().para.size(), 1U);
+    EXPECT_EQ(doc.styles().text.size(), 1U);
+    EXPECT_EQ(
+        doc.styles().find(para_style_name("Note"))->para, paragraph_props(space_after{pt(6)}));
+    EXPECT_EQ(doc.styles().find(text_style_name("Note"))->text, text_props(font_style::italic));
 }
 
 TEST(BASIC_USAGE, BuiltinStyle)
 {
     text_doc doc;
-    style &body = doc.builtin_style(builtin::default_paragraph);
-    EXPECT_EQ(body.m_family, style_family::paragraph) << "added, of the builtin's family";
-    body.set(text_props(font_size(11)));
-    EXPECT_EQ(doc.styles().find(builtin::default_paragraph.get_name())->m_text_props,
-        text_props(font_size(11)));
-    EXPECT_EQ(&doc.builtin_style(builtin::default_paragraph), &body) << "found the second time";
-    EXPECT_EQ(doc.builtin_style(builtin::link).m_family, style_family::text);
-    EXPECT_EQ(doc.builtin_style(builtin::default_table).m_family, style_family::table);
-    EXPECT_FALSE(doc.builtin_style(style_name("Mine")).m_family);
-    EXPECT_THROW(doc.builtin_style(builtin::default_list), std::invalid_argument);
+    paragraph_style &body = doc.styles()[builtin::para];
+    EXPECT_EQ(body.name(), builtin::para) << "added, empty";
+    body.text = text_props(font_size(11));
+    EXPECT_EQ(doc.styles().para.find(builtin::para)->text, text_props(font_size(11)));
+    EXPECT_EQ(&doc.styles()[builtin::para], &body) << "found the second time";
+    static_assert(std::is_same_v<decltype(doc.styles()[builtin::link]), text_style &>);
+    static_assert(std::is_same_v<decltype(doc.styles()[builtin::table]), table_style &>);
+    static_assert(std::is_same_v<decltype(doc.styles()[builtin::list]), list_style &>);
+    doc.styles()[builtin::list].levels = {number_level{.level = 1}};
+    EXPECT_EQ(doc.styles().list.size(), 1U);
 }
 
 TEST(BASIC_USAGE, StylePropsInPlace)
 {
-    style s("Body", text_props(font_name("Liberation Serif"), font_size(11)));
-    s.text().set(font_size(12)).set(font_weight::bold);
-    EXPECT_EQ(
-        s.m_text_props, text_props(font_name("Liberation Serif"), font_size(12), font_weight::bold))
+    paragraph_style s("Body", text_props(font_name("Liberation Serif"), font_size(11)));
+    s.text.set(font_size(12)).set(font_weight::bold);
+    EXPECT_EQ(s.text, text_props(font_name("Liberation Serif"), font_size(12), font_weight::bold))
         << "the rest kept";
-    s.paragraph().set(space_after{pt(6)});
-    EXPECT_EQ(s.m_paragraph_props, paragraph_props(space_after{pt(6)})) << "added";
-    s.table().set(table_align::centre);
-    s.cell().set(cell_valign::middle);
-    EXPECT_EQ(s.m_table_props->m_align, table_align::centre);
-    EXPECT_EQ(s.m_cell_props->m_valign, cell_valign::middle);
+    s.para.set(space_after{pt(6)});
+    EXPECT_EQ(s.para, paragraph_props(space_after{pt(6)})) << "added";
 }
 
 TEST(BASIC_USAGE, AppendCombinesBodiesAndRegistries)
 {
     text_doc doc{paragraph("first")};
-    doc.add_style(style("Shared", text_props(font_weight::bold)));
+    doc.styles().insert(text_style("Shared", text_props(font_weight::bold)));
 
     text_doc part{paragraph("second")};
     part.meta.title = "not copied";
-    part.add_style(style("Shared", text_props(font_weight::bold)));
-    part.add_style(style("Own", text_props(font_style::italic)));
+    part.styles().insert(text_style("Shared", text_props(font_weight::bold)));
+    part.styles().insert(text_style("Own", text_props(font_style::italic)));
     part.add(paragraph(frame(part.add_image("Pictures/a.png", "bytes", "image/png"))));
 
     doc.append(part);
     EXPECT_EQ(doc.body.size(), 3U);
     EXPECT_EQ(doc.body[1], to_block(paragraph("second")));
-    EXPECT_EQ(doc.styles().size(), 2U);
+    EXPECT_EQ(doc.styles().text.size(), 2U);
     EXPECT_NE(doc.resources().find("Pictures/a.png"), nullptr);
     EXPECT_TRUE(doc.meta.title.empty());
 
@@ -193,12 +203,12 @@ TEST(BASIC_USAGE, AppendCombinesBodiesAndRegistries)
 TEST(BASIC_USAGE, AppendClashLeavesDocumentUnchanged)
 {
     text_doc doc{paragraph("first")};
-    doc.add_style(style("S", text_props(font_weight::bold)));
+    doc.styles().insert(text_style("S", text_props(font_weight::bold)));
     const text_doc before = doc;
 
     text_doc part{paragraph("second")};
-    part.add_style(style("Other", text_props(font_style::italic)));
-    part.add_style(style("S", text_props(font_style::italic)));
+    part.styles().insert(text_style("Other", text_props(font_style::italic)));
+    part.styles().insert(text_style("S", text_props(font_style::italic)));
 
     EXPECT_THROW(doc.append(part), std::invalid_argument);
     EXPECT_EQ(doc, before);
@@ -213,7 +223,7 @@ TEST(BASIC_USAGE, ReplacePlaceholders)
 
     EXPECT_TRUE(doc.replace(text{"{{summary}}"}, {heading(2, "Summary"), table(1, 1)}));
     EXPECT_TRUE(doc.replace(bookmark{"details"}, paragraph("details")));
-    EXPECT_TRUE(doc.replace(style_name("Placeholder"), text_doc{}));
+    EXPECT_TRUE(doc.replace(para_style_name("Placeholder"), text_doc{}));
     EXPECT_FALSE(doc.replace(text{"{{summary}}"}, paragraph("again"))) << "already replaced";
 
     const text_doc expected{
@@ -261,16 +271,16 @@ TEST(BASIC_USAGE, PlaceholderInCellsAndHeader)
 TEST(BASIC_USAGE, FillMergesRegistries)
 {
     text_doc doc{paragraph("{{x}}")};
-    style bold("Bold", text_props(font_weight::bold));
+    paragraph_style bold("Bold", text_props(font_weight::bold));
 
     text_doc part;
-    part.add(paragraph("bold").set_style(part.add_style(bold)));
+    part.add(paragraph("bold").set_style(part.styles().insert(bold).first));
     EXPECT_TRUE(doc.replace(text{"{{x}}"}, part));
-    EXPECT_NE(doc.styles().find("Bold"), nullptr);
+    EXPECT_NE(doc.styles().para.find("Bold"), nullptr);
 
     // A clash throws and leaves the document as it was.
     text_doc clash{paragraph("y")};
-    clash.add_style(style("Bold", text_props(font_style::italic)));
+    clash.styles().insert(paragraph_style("Bold", text_props(font_style::italic)));
     const text_doc before = doc;
     EXPECT_THROW(doc.insert_after(text{"bold"}, clash), std::invalid_argument);
     EXPECT_EQ(doc, before);

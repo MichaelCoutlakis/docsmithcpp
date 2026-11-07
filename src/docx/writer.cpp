@@ -17,6 +17,8 @@
  *****************************************************************************/
 #include "docx/writer.h"
 
+#include "cell_text.h"
+
 #include <algorithm>
 #include <cctype>
 #include <cmath>
@@ -113,17 +115,17 @@ std::string size(int half_points)
 std::string builtin_style(const std::string &id)
 {
     constexpr const char *keep = R"~~(<w:keepNext/><w:spacing w:before="240" w:after="120"/>)~~";
-    if(id == builtin::title.get_name())
+    if(id == builtin::title.str())
         return paragraph_style(id,
             "Title",
             std::string(keep) + R"~~(<w:jc w:val="center"/>)~~",
             std::string(sans) + "<w:b/><w:bCs/>" + size(56));
-    if(id == builtin::preformatted.get_name())
+    if(id == builtin::preformatted.str())
         return paragraph_style(id,
             "Preformatted Text",
             R"~~(<w:spacing w:before="0" w:after="0" w:line="240" w:lineRule="auto"/>)~~",
             std::string(mono) + size(20));
-    if(id == builtin::source_text.get_name())
+    if(id == builtin::source_text.str())
         return R"~~(<w:style w:type="character" w:styleId=")~~" + id +
             R"~~("><w:name w:val="Source Text"/><w:qFormat/><w:rPr>)~~" + mono +
             "</w:rPr></w:style>";
@@ -201,66 +203,17 @@ void set_val(pugi::xml_node n, const std::string &v)
     n.attribute("w:val").set_value(v.c_str());
 }
 
-/// The families each style name is used with: paragraph for paragraphs and
-/// headings, text for spans.
-std::map<std::string, std::set<style_family>> used_families(const text_doc &doc)
-{
-    std::map<std::string, std::set<style_family>> out;
-    walk(doc,
-        [&out, &doc](const auto &n)
-        {
-            using T = std::decay_t<decltype(n)>;
-            if constexpr(std::is_same_v<T, paragraph>)
-                out[(n.style.is_empty() ? builtin::default_paragraph : n.style).get_name()].insert(
-                    style_family::paragraph);
-            else if constexpr(std::is_same_v<T, heading>)
-                out[(n.style.is_empty() ? builtin::heading(n.level) : n.style).get_name()].insert(
-                    style_family::paragraph);
-            else if constexpr(std::is_same_v<T, span>)
-            {
-                if(!n.style.is_empty())
-                    out[n.style.get_name()].insert(style_family::text);
-            }
-            else if constexpr(std::is_same_v<T, hyperlink>)
-                out[(n.style.is_empty() ? builtin::link : n.style).get_name()].insert(
-                    style_family::text);
-            else if constexpr(std::is_same_v<T, table>)
-            {
-                out[(n.style.is_empty() ? builtin::default_table : n.style).get_name()].insert(
-                    style_family::table);
-                for(size_t r = 0; r != n.num_rows(); ++r)
-                    for(size_t c = 0; c != n.num_cols(); ++c)
-                        if(const auto ps =
-                                effective_cell_props(n, doc.styles(), r, c).m_paragraph_style;
-                            !n.is_cell_covered(r, c) && !ps.is_empty())
-                            out[ps.get_name()].insert(style_family::paragraph);
-            }
-        });
-    return out;
-}
-
-template <typename Registry>
-auto sorted(const Registry &r)
-{
-    std::vector<const typename Registry::mapped_type *> out;
-    for(const auto &[name, def] : r)
-        out.push_back(&def);
-    std::sort(out.begin(),
-        out.end(),
-        [](const auto *a, const auto *b) { return a->m_name.get_name() < b->m_name.get_name(); });
-    return out;
-}
-
 class writer
 {
 public:
     writer(const text_doc &doc, state &st) :
-        m_doc(doc), m_st(st), m_pkg(st.pkg), m_used(used_families(doc))
+        m_doc(doc), m_st(st), m_pkg(st.pkg)
     {
-        for(const auto &[name, families] : m_used)
-            if(const style *s = doc.styles().find(name); s && !s->m_family && !is_direct(name) &&
-                families.contains(style_family::paragraph) && families.contains(style_family::text))
-                m_dual.insert(name);
+        // DOCX style ids are unique across types, so a text style named as a
+        // paragraph style is written as <id>Char.
+        for(const auto &[name, s] : doc.styles().text)
+            if(doc.styles().para.contains(name.str()) && !is_direct_text(name.str()))
+                m_dual.insert(name.str());
     }
 
     void write()
@@ -485,13 +438,22 @@ private:
 
     // ---- styles ----
 
-    /// Whether name is direct formatting as read, to be written as such.
-    bool is_direct(const std::string &name) const
+    /// Whether name is a paragraph's or run's direct formatting as read, to
+    /// be written as such.
+    bool is_direct_para(const std::string &name) const
     {
-        auto it = m_st.direct.find(name);
-        if(it == m_st.direct.end())
+        auto it = m_st.direct_para.find(name);
+        if(it == m_st.direct_para.end())
             return false;
-        const style *s = m_doc.styles().find(name);
+        const auto *s = m_doc.styles().para.find(name);
+        return !s || *s == it->second.def;
+    }
+    bool is_direct_text(const std::string &name) const
+    {
+        auto it = m_st.direct_text.find(name);
+        if(it == m_st.direct_text.end())
+            return false;
+        const auto *s = m_doc.styles().text.find(name);
         return !s || *s == it->second.def;
     }
 
@@ -509,14 +471,14 @@ private:
     /// The style id for a style name: the builtin defaults have Word's.
     std::string id_of(const std::string &name) const
     {
-        if(name == builtin::default_paragraph.get_name())
+        if(name == builtin::para.str())
             return m_default_paragraph_id;
-        if(name == builtin::default_table.get_name())
+        if(name == builtin::table.str())
             return m_default_table_id;
-        if(name == builtin::link.get_name())
+        if(name == builtin::link.str())
             return "Hyperlink";
         for(int level = 1; level <= 9; ++level)
-            if(name == builtin::heading(level).get_name())
+            if(name == builtin::heading(level).str())
                 return "Heading" + std::to_string(level);
         return name;
     }
@@ -525,13 +487,13 @@ private:
     std::string style_name_of(const std::string &id) const
     {
         if(id == m_default_paragraph_id)
-            return builtin::default_paragraph.get_name();
+            return builtin::para.str();
         if(id == m_default_table_id)
-            return builtin::default_table.get_name();
+            return builtin::table.str();
         if(id == "Hyperlink")
-            return builtin::link.get_name();
+            return builtin::link.str();
         if(const int level = heading_level(id, {}))
-            return builtin::heading(level).get_name();
+            return builtin::heading(level).str();
         return id;
     }
 
@@ -548,55 +510,53 @@ private:
         return {};
     }
 
+    /// Writes the styles of one family (paragraph, text or table).
+    template <typename Registry>
+    void write_family(const Registry &registry)
+    {
+        auto root = m_styles.document_element();
+        for(const auto &[name_key, s] : registry)
+        {
+            using S = std::decay_t<decltype(s)>;
+            constexpr style_family f = S::family;
+            const std::string &name = name_key.str();
+            if constexpr(f == style_family::para)
+            {
+                if(is_direct_para(name))
+                    continue;
+            }
+            else if constexpr(f == style_family::text)
+            {
+                if(is_direct_text(name))
+                    continue;
+            }
+            const char *type = style_type(f);
+            const std::string id = f == style_family::text ? char_id(name) : id_of(name);
+            const std::string based_on =
+                f == style_family::text ? char_id(s.parent.str()) : id_of(s.parent.str());
+
+            auto existing = find_style(id, type);
+            if(existing)
+                if(auto old = read_style(existing, name, style_name_of(val(existing, "w:basedOn"))))
+                    if(*old == docx_style(s))
+                        continue;
+            pugi::xml_node n = existing ? root.insert_child_before("w:style", existing)
+                                        : root.append_child("w:style");
+            write_style(n, s, id, based_on);
+            if(id == (f == style_family::table ? m_default_table_id : m_default_paragraph_id) &&
+                f != style_family::text)
+                n.insert_attribute_after("w:default", n.attribute("w:type")) = "1";
+            if(existing)
+                root.remove_child(existing);
+        }
+    }
+
     void write_styles()
     {
         auto root = m_styles.document_element();
-        for(const style *s : sorted(m_doc.styles()))
-        {
-            const std::string &name = s->m_name.get_name();
-            if(is_direct(name))
-                continue;
-            std::set<style_family> families;
-            if(s->m_family)
-                families = {*s->m_family};
-            else if(auto it = m_used.find(name); it != m_used.end())
-                families = it->second;
-            else
-                families = {style_family::paragraph};
-
-            const bool dual = m_dual.contains(name);
-            for(style_family f : families)
-            {
-                const char *type = style_type(f);
-                if(!type)
-                    continue;
-                const bool as_char = dual && f == style_family::text;
-                const std::string id = as_char ? char_id(name) : id_of(name);
-                const std::string link =
-                    dual ? (as_char ? id_of(name) : char_id(name)) : std::string();
-                std::string based_on = s->m_parent_style.get_name();
-                based_on = f == style_family::text ? char_id(based_on) : id_of(based_on);
-
-                style def = *s;
-                def.m_family = f;
-                auto existing = find_style(id, type);
-                if(existing)
-                    if(auto old = read_style(existing))
-                    {
-                        old->m_name = def.m_name;
-                        old->m_parent_style = style_name_of(old->m_parent_style.get_name());
-                        if(*old == def)
-                            continue;
-                    }
-                pugi::xml_node n = existing ? root.insert_child_before("w:style", existing)
-                                            : root.append_child("w:style");
-                write_style(n, def, type, id, based_on, link);
-                if(id == (f == style_family::table ? m_default_table_id : m_default_paragraph_id))
-                    n.insert_attribute_after("w:default", n.attribute("w:type")) = "1";
-                if(existing)
-                    root.remove_child(existing);
-            }
-        }
+        write_family(m_doc.styles().para);
+        write_family(m_doc.styles().text);
+        write_family(m_doc.styles().table);
 
         for(const auto &[id, type] : m_used_ids)
             if(!find_style(id, type))
@@ -614,8 +574,8 @@ private:
     /// defined, for none.
     std::string resolved_list_style(const std::string &name) const
     {
-        if(name.empty() && m_doc.list_styles().find(builtin::default_list.get_name()))
-            return builtin::default_list.get_name();
+        if(name.empty() && m_doc.styles().list.contains(builtin::list))
+            return builtin::list.str();
         return name;
     }
 
@@ -638,9 +598,9 @@ private:
                 existing = a;
         }
 
-        const list_style *ls = name.empty() ? nullptr : m_doc.list_styles().find(name);
+        const list_style *ls = name.empty() ? nullptr : m_doc.styles().list.find(name);
         int id = existing ? existing.attribute("w:abstractNumId").as_int() : m_next_abstract++;
-        if(existing && (!ls || read_abstract_num(existing, style_name(name)) == *ls))
+        if(existing && (!ls || read_abstract_num(existing, name) == *ls))
             return m_abstract_ids[name] = id;
 
         pugi::xml_node before = existing ? existing : root.child("w:num");
@@ -653,10 +613,10 @@ private:
         else
         {
             static const char *const bullets[] = {"•", "◦", "▪"};
-            list_style def(style_name(wanted), {});
+            list_style def(wanted);
             for(int level = 1; level <= 9; ++level)
-                def.m_level_styles.emplace_back(
-                    list_style_bullet(style{}, level, bullets[(level - 1) % 3]));
+                def.levels.emplace_back(
+                    bullet_level{.level = level, .bullet = bullets[(level - 1) % 3]});
             write_abstract_num(n, id, def);
         }
         if(existing)
@@ -675,13 +635,13 @@ private:
         n.append_attribute("w:numId") = id;
         set_val(n.append_child("w:abstractNumId"), std::to_string(abstract));
         m_num_abstract[id] = abstract;
-        if(const list_style *ls = m_doc.list_styles().find(resolved_list_style(list_style_name)))
-            for(const auto &lvl : ls->m_level_styles)
-                if(const auto *num = std::get_if<list_style_num>(&lvl))
+        if(const list_style *ls = m_doc.styles().list.find(resolved_list_style(list_style_name)))
+            for(const auto &lvl : ls->levels)
+                if(const auto *num = std::get_if<number_level>(&lvl))
                 {
                     auto o = n.append_child("w:lvlOverride");
-                    o.append_attribute("w:ilvl") = std::max(num->m_level - 1, 0);
-                    set_val(o.append_child("w:startOverride"), std::to_string(num->m_start_from));
+                    o.append_attribute("w:ilvl") = std::max(num->level - 1, 0);
+                    set_val(o.append_child("w:startOverride"), std::to_string(num->start_from));
                 }
         return id;
     }
@@ -869,18 +829,18 @@ private:
     }
 
     /// The w:pPr for a paragraph with that style, and the list it is in.
-    pugi::xml_node paragraph_props(pugi::xml_node p, const style_name &sn)
+    pugi::xml_node paragraph_props(pugi::xml_node p, const para_style_name &sn)
     {
         pugi::xml_node ppr;
-        std::string style_id = sn.get_name();
-        if(is_direct(style_id))
+        std::string style_id = sn.str();
+        if(is_direct_para(style_id))
         {
-            const auto &d = m_st.direct.at(style_id);
+            const auto &d = m_st.direct_para.at(style_id);
             pugi::xml_document frag;
             if(frag.load_buffer(
                    d.xml.data(), d.xml.size(), pugi::parse_default | pugi::parse_ws_pcdata))
                 ppr = p.append_copy(frag.document_element());
-            style_id = d.def.m_parent_style.get_name();
+            style_id = d.def.parent.str();
         }
         if(!ppr)
             ppr = p.append_child("w:pPr");
@@ -915,7 +875,7 @@ private:
     void emit(pugi::xml_node parent, const paragraph &p)
     {
         auto n = parent.append_child("w:p");
-        auto ppr = paragraph_props(n, p.style.is_empty() ? m_cell_paragraph_style : p.style);
+        auto ppr = paragraph_props(n, p.style.empty() ? m_cell_paragraph_style : p.style);
         drop_if_empty(n, ppr);
         write_inlines(n, p.children(), {});
     }
@@ -924,7 +884,7 @@ private:
     {
         auto n = parent.append_child("w:p");
         const style_name sn =
-            h.style.is_empty() ? builtin::heading(std::clamp(h.level, 1, 9)) : h.style;
+            h.style.empty() ? builtin::heading(std::clamp(h.level, 1, 9)) : h.style;
         auto ppr = paragraph_props(n, sn);
         set_val(ordered_child(ppr, "w:outlineLvl", ppr_order),
             std::to_string(std::clamp(h.level, 1, 9) - 1));
@@ -944,14 +904,14 @@ private:
         // Continuing the numbering is using the same w:num as the last list
         // of the style at this depth.
         const bool nested = m_list_depth > 0;
-        const auto key = std::pair{l.style.get_name(), m_list_depth};
+        const auto key = std::pair{l.style.str(), m_list_depth};
         int num_id = 0;
-        if(nested && l.style.is_empty())
+        if(nested && l.style.empty())
             num_id = m_list_num;
         else if(auto it = m_last_num.find(key); l.continue_numbering && it != m_last_num.end())
             num_id = it->second;
         else
-            num_id = new_num(l.style.get_name());
+            num_id = new_num(l.style.str());
         const int saved_num = m_list_num;
         ++m_list_depth;
         // Word has no unnumbered item: one is more of the item before it, or
@@ -984,7 +944,7 @@ private:
             numbered_before = numbered_before || item.numbered;
         }
         --m_list_depth;
-        if(!nested || !l.style.is_empty())
+        if(!nested || !l.style.empty())
             m_last_num[key] = num_id;
         m_list_num = saved_num;
     }
@@ -997,10 +957,10 @@ private:
         const table_props tp = effective_table_props(t, m_doc.styles());
         auto tbl = parent.append_child("w:tbl");
         auto tbl_pr = tbl.append_child("w:tblPr");
-        if(!t.style.is_empty())
+        if(!t.style.empty())
         {
-            set_val(tbl_pr.append_child("w:tblStyle"), id_of(t.style.get_name()));
-            m_used_ids.emplace(id_of(t.style.get_name()), "table");
+            set_val(tbl_pr.append_child("w:tblStyle"), id_of(t.style.str()));
+            m_used_ids.emplace(id_of(t.style.str()), "table");
         }
         auto w = tbl_pr.append_child("w:tblW");
         int table_width = text_width_twips;
@@ -1217,15 +1177,15 @@ private:
         auto r = parent.append_child("w:r");
         std::string style_id = rf.style;
         if(style_id.empty() && rf.in_link)
-            style_id = rf.link_style.empty() ? builtin::link.get_name() : rf.link_style;
-        if(is_direct(style_id))
+            style_id = rf.link_style.empty() ? builtin::link.str() : rf.link_style;
+        if(is_direct_text(style_id))
         {
-            const auto &d = m_st.direct.at(style_id);
+            const auto &d = m_st.direct_text.at(style_id);
             pugi::xml_document frag;
             if(frag.load_buffer(
                    d.xml.data(), d.xml.size(), pugi::parse_default | pugi::parse_ws_pcdata))
                 r.append_copy(frag.document_element());
-            if(const std::string parent_id = d.def.m_parent_style.get_name(); !parent_id.empty())
+            if(const std::string parent_id = d.def.parent.str(); !parent_id.empty())
                 m_used_ids.emplace(char_id(parent_id), "character");
         }
         else if(!style_id.empty())
@@ -1277,8 +1237,8 @@ private:
     void emit_inline(pugi::xml_node parent, const span &s, const run_format &rf)
     {
         run_format inner = rf;
-        if(!s.style.is_empty())
-            inner.style = s.style.get_name(); // runs don't nest: the innermost style wins
+        if(!s.style.empty())
+            inner.style = s.style.str(); // runs don't nest: the innermost style wins
         write_inlines(parent, s.children(), inner);
     }
 
@@ -1298,7 +1258,7 @@ private:
         n.append_attribute("w:history") = "1";
         run_format inner = rf;
         inner.in_link = true;
-        inner.link_style = h.style.get_name();
+        inner.link_style = h.style.str();
         write_inlines(n, h.children(), inner);
     }
 
@@ -1502,10 +1462,9 @@ private:
     const text_doc &m_doc;
     state &m_st;
     opc::package &m_pkg;
-    std::map<std::string, std::set<style_family>> m_used;
     /// For paragraphs with no style in the cells being written (header rows).
-    style_name m_cell_paragraph_style;
-    std::set<std::string> m_dual; //!< Styles written as a paragraph and a character style
+    para_style_name m_cell_paragraph_style;
+    std::set<std::string> m_dual; //!< Text styles named as a paragraph style, written as <id>Char
     std::string m_default_paragraph_id, m_default_table_id;   //!< Normal, TableNormal
     std::set<std::pair<std::string, std::string>> m_used_ids; //!< styleId, w:type
 
@@ -1532,6 +1491,10 @@ private:
 };
 } // namespace
 
-void write_document(const text_doc &doc, state &st) { writer(doc, st).write(); }
+void write_document(const text_doc &doc, state &st)
+{
+    const auto with_cell_text = detail::with_cell_text(doc);
+    writer(with_cell_text ? *with_cell_text : doc, st).write();
+}
 
 } // namespace docsmith::docx

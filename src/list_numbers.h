@@ -30,6 +30,18 @@
 namespace docsmith::detail
 {
 
+/// The list style's numbering at a nesting level (1 at the top), or nullptr
+/// for a bulleted (or unstyled) level.
+inline const number_level *numbering(const list_style *ls, int level)
+{
+    if(!ls)
+        return nullptr;
+    for(const auto &s : ls->levels)
+        if(std::visit([](const auto &x) { return x.level; }, s) == level)
+            return std::get_if<number_level>(&s);
+    return nullptr;
+}
+
 /// Numbers lists in document order, so that a list can continue the count of
 /// the last one before it with the same list style at the same level.
 class list_counter
@@ -38,9 +50,9 @@ public:
     /// The number each item of l shows, none for an unnumbered item. num is
     /// the numbering of ls at level (1 at the top).
     std::vector<std::optional<int>> numbers(
-        const list &l, const list_style *ls, const list_style_num &num, int level)
+        const list &l, const list_style *ls, const number_level &num, int level)
     {
-        int n = num.m_start_from;
+        int n = num.start_from;
         if(auto it = m_next.find({ls, level}); l.continue_numbering && it != m_next.end())
             n = it->second;
         std::vector<std::optional<int>> out;

@@ -17,6 +17,8 @@
  *****************************************************************************/
 #include "odt/writer.h"
 
+#include "cell_text.h"
+
 #include <algorithm>
 #include <cctype>
 #include <cstring>
@@ -165,8 +167,8 @@ std::string heading_style(int level)
 /// if the file defines it, even one of its own such as Heading 1.
 struct builtin_def
 {
-    style_name name;
-    style_family family;
+    std::string name;
+    style_family family; //!< para or text
     std::string xml;
 };
 const std::vector<builtin_def> &builtin_defs()
@@ -174,72 +176,43 @@ const std::vector<builtin_def> &builtin_defs()
     static const std::vector<builtin_def> defs = []
     {
         std::vector<builtin_def> out{
-            {builtin::title, style_family::paragraph, title_style},
-            {builtin::preformatted, style_family::paragraph, preformatted_style},
-            {builtin::source_text, style_family::text, source_text_style},
-            {builtin::link, style_family::text, link_style},
+            {builtin::title.str(), style_family::para, title_style},
+            {builtin::preformatted.str(), style_family::para, preformatted_style},
+            {builtin::source_text.str(), style_family::text, source_text_style},
+            {builtin::link.str(), style_family::text, link_style},
         };
         for(int level = 1; level <= 10; ++level)
-            out.push_back({builtin::heading(level), style_family::paragraph, heading_style(level)});
+            out.push_back(
+                {builtin::heading(level).str(), style_family::para, heading_style(level)});
         return out;
     }();
     return defs;
 }
 
-/// The families each style name is used with in the body.
-std::map<std::string, std::set<style_family>> used_families(const text_doc &doc)
+/// The paragraph and text style names the body's nodes use, the defaults of
+/// unstyled ones included.
+struct used_names
 {
-    std::map<std::string, std::set<style_family>> out;
+    std::set<std::string> para;
+    std::set<std::string> text;
+};
+used_names names_used(const text_doc &doc)
+{
+    used_names out;
     walk(doc,
-        [&out, &doc](const auto &n)
+        [&out](const auto &n)
         {
             using T = std::decay_t<decltype(n)>;
-            auto use = [&](const style_name &sn, style_family f)
-            {
-                if(!sn.is_empty())
-                    out[sn.get_name()].insert(f);
-            };
             if constexpr(std::is_same_v<T, paragraph>)
-                use(n.style.is_empty() ? builtin::default_paragraph : n.style,
-                    style_family::paragraph);
+                out.para.insert((n.style.empty() ? builtin::para : n.style).str());
             else if constexpr(std::is_same_v<T, heading>)
-                use(n.style.is_empty() ? builtin::heading(n.level) : n.style,
-                    style_family::paragraph);
+                out.para.insert((n.style.empty() ? builtin::heading(n.level) : n.style).str());
             else if constexpr(std::is_same_v<T, span>)
-                use(n.style, style_family::text);
+                out.text.insert(n.style.str());
             else if constexpr(std::is_same_v<T, hyperlink>)
-                use(n.style.is_empty() ? builtin::link : n.style, style_family::text);
-            else if constexpr(std::is_same_v<T, frame>)
-                use(n.style, style_family::graphic);
-            else if constexpr(std::is_same_v<T, table_cell>)
-                use(n.style, style_family::table_cell);
-            else if constexpr(std::is_same_v<T, table>)
-            {
-                use(n.style.is_empty() ? builtin::default_table : n.style, style_family::table);
-                for(size_t r = 0; r != n.num_rows(); ++r)
-                    use(n.row_style(r), style_family::table_row);
-                for(size_t c = 0; c != n.num_cols(); ++c)
-                    use(n.column_style(c), style_family::table_cell);
-                for(size_t r = 0; r != n.num_rows(); ++r)
-                    for(size_t c = 0; c != n.num_cols(); ++c)
-                        if(!n.is_cell_covered(r, c))
-                            use(effective_cell_props(n, doc.styles(), r, c).m_paragraph_style,
-                                style_family::paragraph);
-            }
+                out.text.insert((n.style.empty() ? builtin::link : n.style).str());
         });
     return out;
-}
-
-/// The families to write s in: its own, else those it's used with, else
-/// paragraph.
-std::set<style_family> families_of(
-    const style &s, const std::map<std::string, std::set<style_family>> &used)
-{
-    if(s.m_family)
-        return {*s.m_family};
-    if(auto it = used.find(s.m_name.get_name()); it != used.end())
-        return it->second;
-    return {style_family::paragraph};
 }
 
 /// Declares on dst the namespaces src declares and dst doesn't.
@@ -250,15 +223,18 @@ void add_namespaces(pugi::xml_node dst, const pugi::xml_node &src)
             dst.append_attribute(a.name()) = a.value();
 }
 
-/// The style:style in container with that name and family.
-pugi::xml_node find_style(const pugi::xml_node &container, const std::string &name, style_family f)
+/// The style:style in container with that name and ODF family (style:family).
+pugi::xml_node find_style(
+    const pugi::xml_node &container, const std::string &name, std::string_view family)
 {
     for(auto c : container.children("style:style"))
-        if(name == c.attribute("style:name").as_string())
-            if(auto s = read_style(c); s && s->m_family == f)
-                return c;
+        if(name == c.attribute("style:name").as_string() &&
+            family == c.attribute("style:family").as_string())
+            return c;
     return {};
 }
+pugi::xml_node find_style(const pugi::xml_node &container, const std::string &name, style_family f)
+{ return find_style(container, name, family_name(f)); }
 
 pugi::xml_node find_list_style(const pugi::xml_node &container, const std::string &name)
 { return container.find_child_by_attribute("text:list-style", "style:name", name.c_str()); }
@@ -291,21 +267,13 @@ void add_font_face(pugi::xml_node decls, const std::string &name)
     f.append_attribute("svg:font-family") = ("'" + name + "'").c_str();
 }
 
-/// A registry's definitions in name order, so the output is stable.
-template <typename Registry>
-auto sorted(const Registry &r)
-{
-    std::vector<const typename Registry::mapped_type *> out;
-    for(const auto &[name, def] : r)
-        out.push_back(&def);
-    std::sort(out.begin(),
-        out.end(),
-        [](const auto *a, const auto *b) { return a->m_name.get_name() < b->m_name.get_name(); });
-    return out;
-}
 } // namespace
 
-void write_document(const text_doc &doc, odf::package &pkg) { writer(pkg).write(doc); }
+void write_document(const text_doc &doc, odf::package &pkg)
+{
+    const auto with_cell_text = detail::with_cell_text(doc);
+    writer(pkg).write(with_cell_text ? *with_cell_text : doc);
+}
 
 writer::writer(odf::package &pkg) :
     m_pkg(pkg)
@@ -393,41 +361,65 @@ void writer::load_styles_xml()
 // automatic styles. One that is unchanged since loading keeps its original XML.
 void writer::write_styles(const text_doc &doc)
 {
-    const auto used = used_families(doc);
-    for(const style *s : sorted(doc.styles()))
-        for(style_family f : families_of(*s, used))
-        {
-            style def = *s;
-            def.m_family = f;
-            auto existing = find_style(m_automatic_styles, def.m_name.get_name(), f);
-            if(!existing)
-                existing = find_style(m_styles, def.m_name.get_name(), f);
-            replace_or_add(existing, m_styles, def, existing && read_style(existing) == def);
-        }
-
-    for(const list_style *ls : sorted(doc.list_styles()))
+    // Registries iterate in name order, so the output is stable.
+    auto write_family = [&](const auto &registry)
     {
-        auto existing = find_list_style(m_automatic_styles, ls->m_name.get_name());
-        if(!existing)
-            existing = find_list_style(m_styles, ls->m_name.get_name());
-        replace_or_add(
-            existing, m_automatic_styles, *ls, existing && read_list_style(existing) == *ls);
-    }
+        for(const auto &[name, def] : registry)
+        {
+            using S = std::decay_t<decltype(def)>;
+            if constexpr(S::family == style_family::list)
+            {
+                auto existing = find_list_style(m_automatic_styles, name.str());
+                if(!existing)
+                    existing = find_list_style(m_styles, name.str());
+                replace_or_add(existing,
+                    m_automatic_styles,
+                    def,
+                    existing && read_list_style(existing) == def);
+            }
+            else
+            {
+                auto existing = find_style(m_automatic_styles, name.str(), S::family);
+                if(!existing)
+                    existing = find_style(m_styles, name.str(), S::family);
+                bool unchanged = false;
+                if(existing)
+                    if(auto old = read_style(existing))
+                        unchanged = *old == odf_style(def);
+                replace_or_add(existing, m_styles, def, unchanged);
+            }
+        }
+    };
+    doc.styles().for_each(write_family);
 
     // Both parts, as their styles may each use the font.
     auto root = m_styles_xml.child("office:document-styles");
     auto fonts = root.child("office:font-face-decls");
     if(!fonts)
         fonts = root.prepend_child("office:font-face-decls");
-    for(const style *s : sorted(doc.styles()))
-        if(s->m_text_props && s->m_text_props->m_font_name)
+    auto declare = [&](const text_props &tp)
+    {
+        if(tp.m_font_name)
             for(auto decls : {fonts, m_font_faces})
-                add_font_face(decls, s->m_text_props->m_font_name->get_name());
+                add_font_face(decls, tp.m_font_name->get_name());
+    };
+    for(const auto &[name, s] : doc.styles().para)
+        declare(s.text);
+    for(const auto &[name, s] : doc.styles().text)
+        declare(s.text);
+    for(const auto &[name, s] : doc.styles().cell)
+        declare(s.text);
 
+    const auto used = names_used(doc);
     for(const auto &b : builtin_defs())
-        if(auto it = used.find(b.name.get_name()); it != used.end() &&
-            it->second.contains(b.family) && !find_style(m_styles, b.name.get_name(), b.family))
+    {
+        const bool is_para = b.family == style_family::para;
+        const bool defined =
+            is_para ? doc.styles().para.contains(b.name) : doc.styles().text.contains(b.name);
+        if((is_para ? used.para : used.text).contains(b.name) && !defined &&
+            !find_style(m_styles, b.name, b.family))
             m_styles.append_buffer(b.xml.data(), b.xml.size());
+    }
 }
 
 // Archive path for an image. A document resource is embedded under its name; an
@@ -565,19 +557,18 @@ void writer::write_blocks(pugi::xml_node parent, const std::vector<block_node> &
 // page. So a page_break is folded into the next paragraph or heading, whose
 // style is swapped for a copy (an automatic style) or a child (a common one) of
 // it with the break added.
-std::string writer::page_break_style(const std::string &name, const style_name &base)
+std::string writer::page_break_style(const std::string &name, const para_style_name &base)
 {
     if(!m_page_break_styles.insert(name).second)
         return name;
 
     // A loaded file may have it already, made from base as it was then.
-    if(auto old = find_style(m_automatic_styles, name, style_family::paragraph))
+    if(auto old = find_style(m_automatic_styles, name, style_family::para))
         m_automatic_styles.remove_child(old);
 
     pugi::xml_node s;
-    auto automatic = base.is_empty()
-        ? pugi::xml_node{}
-        : find_style(m_automatic_styles, base.get_name(), style_family::paragraph);
+    auto automatic = base.empty() ? pugi::xml_node{}
+                                  : find_style(m_automatic_styles, base.str(), style_family::para);
     if(automatic)
     {
         s = m_automatic_styles.append_copy(automatic);
@@ -588,8 +579,8 @@ std::string writer::page_break_style(const std::string &name, const style_name &
         s = m_automatic_styles.append_child("style:style");
         s.append_attribute("style:name") = name.c_str();
         s.append_attribute("style:family") = "paragraph";
-        if(!base.is_empty())
-            s.append_attribute("style:parent-style-name") = base.get_name().c_str();
+        if(!base.empty())
+            s.append_attribute("style:parent-style-name") = base.str().c_str();
     }
     auto props = s.child("style:paragraph-properties");
     if(!props)
@@ -611,7 +602,7 @@ void writer::flush_page_break(pugi::xml_node parent)
 
 /// The style name to write on a paragraph or heading, taking a pending page
 /// break; null for none.
-const char *writer::block_style(const style_name &sn)
+const char *writer::block_style(const para_style_name &sn)
 {
     if(m_page_break_pending)
     {
@@ -619,7 +610,7 @@ const char *writer::block_style(const style_name &sn)
         m_block_style = page_break_style(page_break_style_name(sn), sn);
     }
     else
-        m_block_style = sn.get_name();
+        m_block_style = sn.str();
     return m_block_style.empty() ? nullptr : m_block_style.c_str();
 }
 
@@ -636,12 +627,12 @@ void writer::write_inline(pugi::xml_node parent, const inline_node &i)
 void writer::emit(pugi::xml_node parent, const paragraph &p)
 {
     auto n = parent.append_child("text:p");
-    style_name sn = p.style.is_empty() ? m_cell_paragraph_style : p.style;
+    para_style_name sn = p.style.empty() ? m_cell_paragraph_style : p.style;
     // An unstyled paragraph holding only a frame names the default style, as
     // without a style it would read back as a block frame.
-    if(sn.is_empty() && p.children().size() == 1 &&
+    if(sn.empty() && p.children().size() == 1 &&
         std::holds_alternative<frame>(p.children().front().v))
-        sn = builtin::default_paragraph;
+        sn = builtin::para;
     if(const char *style = block_style(sn))
         n.append_attribute("text:style-name").set_value(style);
     for(const auto &c : p.children())
@@ -653,7 +644,7 @@ void writer::emit(pugi::xml_node parent, const heading &h)
     auto n = parent.append_child("text:h");
     n.append_attribute("text:outline-level").set_value(h.level);
     // LibreOffice gives an unstyled heading no heading style.
-    if(const char *style = block_style(h.style.is_empty() ? builtin::heading(h.level) : h.style))
+    if(const char *style = block_style(h.style.empty() ? builtin::heading(h.level) : h.style))
         n.append_attribute("text:style-name").set_value(style);
     for(const auto &c : h.children())
         write_inline(n, c);
@@ -662,8 +653,8 @@ void writer::emit(pugi::xml_node parent, const heading &h)
 void writer::emit(pugi::xml_node parent, const span &s)
 {
     auto n = parent.append_child("text:span");
-    if(!s.style.is_empty())
-        n.append_attribute("text:style-name").set_value(s.style.get_name().c_str());
+    if(!s.style.empty())
+        n.append_attribute("text:style-name").set_value(s.style.str().c_str());
     for(const auto &c : s.children())
         write_inline(n, c);
 }
@@ -674,7 +665,7 @@ void writer::emit(pugi::xml_node parent, const hyperlink &h)
     n.append_attribute("xlink:type").set_value("simple");
     // Named on every link, as LibreOffice writes it.
     n.append_attribute("text:style-name")
-        .set_value((h.style.is_empty() ? builtin::link : h.style).get_name().c_str());
+        .set_value((h.style.empty() ? builtin::link : h.style).str().c_str());
     const std::string href = std::visit(overloaded{[](const url_target &u) { return u.url; },
                                             [](const bookmark_target &b) { return "#" + b.name; }},
         h.target);
@@ -750,8 +741,8 @@ void writer::emit(pugi::xml_node parent, const frame &f)
     }
     auto n = parent.append_child("draw:frame");
     n.append_attribute("text:anchor-type") = "as-char";
-    if(!f.style.is_empty())
-        n.append_attribute("draw:style-name").set_value(f.style.get_name().c_str());
+    if(!f.style.empty())
+        n.append_attribute("draw:style-name").set_value(f.style.str().c_str());
     if(f.width)
         n.append_attribute("svg:width") = (detail::to_string(f.width->m_points) + "pt").c_str();
     if(f.height)
@@ -883,7 +874,7 @@ void writer::emit(pugi::xml_node parent, const table_of_contents &toc)
 /// name is defined there already.
 void writer::define_style(const std::string &name, const std::string &xml)
 {
-    if(!find_style(m_styles, name, style_family::paragraph))
+    if(!find_style(m_styles, name, style_family::para))
         m_styles.append_buffer(xml.data(), xml.size());
 }
 
@@ -908,10 +899,10 @@ void writer::emit(pugi::xml_node parent, const unknown &u)
 void writer::emit(pugi::xml_node parent, const list &l)
 {
     auto n = parent.append_child("text:list");
-    if(!l.style.is_empty())
-        n.append_attribute("text:style-name").set_value(l.style.get_name().c_str());
-    else if(m_list_depth == 0 && m_doc->list_styles().find(builtin::default_list.get_name()))
-        n.append_attribute("text:style-name").set_value(builtin::default_list.get_name().c_str());
+    if(!l.style.empty())
+        n.append_attribute("text:style-name").set_value(l.style.str().c_str());
+    else if(m_list_depth == 0 && m_doc->styles().list.contains(builtin::list))
+        n.append_attribute("text:style-name").set_value(builtin::list.str().c_str());
     if(l.continue_numbering)
         n.append_attribute("text:continue-numbering") = "true";
     // Only the first item can be unnumbered (text:list-header); a later one is
@@ -933,11 +924,11 @@ void writer::emit(pugi::xml_node parent, const list_item &it)
     write_blocks(n, it.children());
 }
 
-std::string writer::automatic_name(const std::string &prefix, style_family f)
+std::string writer::automatic_name(const std::string &prefix, const char *family)
 {
     for(;;)
         if(std::string name = prefix + std::to_string(++m_automatic_names);
-            !find_style(m_automatic_styles, name, f) && !m_doc->styles().find(name))
+            !find_style(m_automatic_styles, name, family) && !m_doc->styles().cell.contains(name))
             return name;
 }
 
@@ -948,7 +939,7 @@ std::string writer::cell_style(const table &t, size_t r, size_t c)
 {
     const table_cell &cell = t.cell(r, c);
     // A cell without a style of its own is based on its column's.
-    const style_name &base = cell.style.is_empty() ? t.column_style(c) : cell.style;
+    const cell_style_name &base = cell.style.empty() ? t.column_style(c) : cell.style;
     cell_props props = effective_cell_props(t, m_doc->styles(), r, c);
     props.m_paragraph_style = {}; // on the cell's paragraphs instead
     // LibreOffice draws both cells' edges where two meet, so a line between
@@ -967,17 +958,16 @@ std::string writer::cell_style(const table &t, size_t r, size_t c)
     cell_props base_props = effective_cell_style(base, m_doc->styles());
     base_props.m_paragraph_style = {};
     if(props == base_props)
-        return base.get_name();
+        return base.str();
     for(const auto &[parent, p, name] : m_cell_styles)
         if(parent == base && p == props)
             return name;
 
-    style s(style_name(automatic_name("Cell", style_family::table_cell)), style_family::table_cell);
-    s.m_parent_style = base;
-    s.set(props);
+    docsmith::cell_style s(automatic_name("Cell", "table-cell"), props);
+    s.parent = base;
     write_xml(m_automatic_styles, s);
-    m_cell_styles.emplace_back(base, props, s.m_name.get_name());
-    return s.m_name.get_name();
+    m_cell_styles.emplace_back(base, props, s.name().str());
+    return s.name().str();
 }
 
 void writer::emit(pugi::xml_node parent, const table &t)
@@ -986,10 +976,10 @@ void writer::emit(pugi::xml_node parent, const table &t)
     auto n = parent.append_child("table:table");
     if(!t.name.empty()) // LibreOffice names the others when it loads them
         n.append_attribute("table:name") = t.name.c_str();
-    if(!t.style.is_empty())
-        n.append_attribute("table:style-name") = t.style.get_name().c_str();
-    else if(m_doc->styles().find(builtin::default_table.get_name()))
-        n.append_attribute("table:style-name") = builtin::default_table.get_name().c_str();
+    if(!t.style.empty())
+        n.append_attribute("table:style-name") = t.style.str().c_str();
+    else if(m_doc->styles().table.contains(builtin::table))
+        n.append_attribute("table:style-name") = builtin::table.str().c_str();
     if(!t.accessibility_title.empty())
         n.append_child("table:title").text() = t.accessibility_title.c_str();
     if(!t.accessibility_description.empty())
@@ -1027,7 +1017,7 @@ void writer::emit(pugi::xml_node parent, const table &t)
         auto col = n.append_child("table:table-column");
         if(widths)
         {
-            const std::string name = automatic_name("Column", style_family::table_column);
+            const std::string name = automatic_name("Column", "table-column");
             auto s = m_automatic_styles.append_child("style:style");
             s.append_attribute("style:name") = name.c_str();
             s.append_attribute("style:family") = "table-column";
@@ -1039,9 +1029,8 @@ void writer::emit(pugi::xml_node parent, const table &t)
             props.append_attribute("style:rel-column-width") = (std::to_string(rel) + "*").c_str();
             col.append_attribute("table:style-name") = name.c_str();
         }
-        if(!t.column_style(c).is_empty())
-            col.append_attribute("table:default-cell-style-name") =
-                t.column_style(c).get_name().c_str();
+        if(!t.column_style(c).empty())
+            col.append_attribute("table:default-cell-style-name") = t.column_style(c).str().c_str();
         if(same != 1)
             col.append_attribute("table:number-columns-repeated")
                 .set_value(static_cast<unsigned>(same));
@@ -1049,13 +1038,13 @@ void writer::emit(pugi::xml_node parent, const table &t)
     }
 
     // Unstyled paragraphs in a cell get its paragraph style (cell_props).
-    const style_name saved = m_cell_paragraph_style;
+    const para_style_name saved = m_cell_paragraph_style;
     auto header = t.header_rows() ? n.append_child("table:table-header-rows") : pugi::xml_node{};
     for(size_t r = 0; r != t.num_rows(); ++r)
     {
         auto xml_row = (r < t.header_rows() ? header : n).append_child("table:table-row");
-        if(!t.row_style(r).is_empty())
-            xml_row.append_attribute("table:style-name") = t.row_style(r).get_name().c_str();
+        if(!t.row_style(r).empty())
+            xml_row.append_attribute("table:style-name") = t.row_style(r).str().c_str();
         for(size_t c = 0; c != t.num_cols(); ++c)
         {
             if(t.is_cell_covered(r, c))

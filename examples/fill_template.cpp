@@ -28,7 +28,7 @@ int main()
     f.doc.insert_before(bookmark{"details"}, paragraph("Inserted before the details."));
     f.doc.insert_after(bookmark{"details"}, paragraph("Inserted after the details."));
     // By a style, here the template's footer paragraph (in the page footer).
-    f.doc.insert_after(style_name("Footer"), paragraph("Confidential").set_style("Footer"));
+    f.doc.insert_after(para_style_name("Footer"), paragraph("Confidential").set_style("Footer"));
 
     f.save("Example Filled-in Template.odt");
     html::file(f.doc).save("Example Filled-in Template.html");

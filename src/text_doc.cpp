@@ -31,28 +31,28 @@ namespace fs = std::filesystem;
 
 namespace
 {
-template <typename Registry, typename T>
-void check_no_clash(const Registry &to, const std::string &name, const T &value, const char *what)
-{
-    if(const auto *existing = to.find(name); existing && !(*existing == value))
-        throw std::invalid_argument(
-            std::string(what) + " \"" + name + "\" is already defined differently");
-}
-
 /// Throws if from defines a name that to defines differently.
 template <typename Registry>
 void check_no_clash(const Registry &to, const Registry &from, const char *what)
 {
     for(const auto &[name, value] : from)
-        check_no_clash(to, name, value, what);
+        if(const auto *existing = to.find(name); existing && !(*existing == value))
+        {
+            std::string shown;
+            if constexpr(requires { name.str(); })
+                shown = name.str();
+            else
+                shown = name;
+            throw std::invalid_argument(
+                std::string(what) + " \"" + shown + "\" is already defined differently");
+        }
 }
 
 template <typename Registry>
 void add_all(Registry &to, const Registry &from)
 {
     for(const auto &[name, value] : from)
-        if(!to.find(name))
-            to.add(value);
+        to.insert(value);
 }
 
 bool has_bookmark(const std::vector<inline_node> &kids, const bookmark &b)
@@ -70,12 +70,13 @@ bool has_bookmark(const std::vector<inline_node> &kids, const bookmark &b)
     return false;
 }
 
-bool matches(const placeholder &p, const std::vector<inline_node> &kids, const style_name &style)
+bool matches(
+    const placeholder &p, const std::vector<inline_node> &kids, const para_style_name &style)
 {
     return std::visit(
         overloaded{
             [&](const bookmark &b) { return has_bookmark(kids, b); },
-            [&](const style_name &sn) { return style == sn; },
+            [&](const para_style_name &sn) { return style == sn; },
             [&](const text &t)
             {
                 const std::string s = detail::plain_text(kids);
@@ -135,29 +136,6 @@ found_block find_placeholder(std::vector<block_node> &blocks, const placeholder 
     return {};
 }
 
-template <typename Registry, typename T>
-style_name add_if_new(Registry &to, const T &value)
-{
-    if(!to.find(value.m_name.get_name()))
-        to.add(value);
-    return value.m_name;
-}
-
-/// The family of a builtin style, if it is one.
-std::optional<style_family> builtin_family(const style_name &name)
-{
-    if(name == builtin::source_text || name == builtin::link)
-        return style_family::text;
-    if(name == builtin::default_table)
-        return style_family::table;
-    if(name == builtin::default_paragraph || name == builtin::title ||
-        name == builtin::preformatted)
-        return style_family::paragraph;
-    for(int level = 1; level <= 10; ++level)
-        if(name == builtin::heading(level))
-            return style_family::paragraph;
-    return std::nullopt;
-}
 } // namespace
 
 text_doc &text_doc::append(const text_doc &other)
@@ -172,12 +150,23 @@ text_doc &text_doc::append(const text_doc &other)
 
 void text_doc::merge_registries(const text_doc &other)
 {
-    check_no_clash(m_styles, other.m_styles, "Style");
-    check_no_clash(m_list_styles, other.m_list_styles, "List style");
+    // Each family's registry of this document and other's.
+    auto each_family = [&](auto &&f)
+    {
+        f(m_styles.para, other.m_styles.para);
+        f(m_styles.text, other.m_styles.text);
+        f(m_styles.table, other.m_styles.table);
+        f(m_styles.cell, other.m_styles.cell);
+        f(m_styles.row, other.m_styles.row);
+        f(m_styles.frame, other.m_styles.frame);
+        f(m_styles.list, other.m_styles.list);
+    };
+    // All checks first, so a clash changes nothing.
+    each_family(
+        [](const auto &mine, const auto &theirs) { check_no_clash(mine, theirs, "Style"); });
     check_no_clash(m_resources, other.m_resources, "Resource");
 
-    add_all(m_styles, other.m_styles);
-    add_all(m_list_styles, other.m_list_styles);
+    each_family([](auto &mine, const auto &theirs) { add_all(mine, theirs); });
     add_all(m_resources, other.m_resources);
 }
 
@@ -212,31 +201,10 @@ bool text_doc::fill(const placeholder &p, const text_doc &content, fill_mode mod
     return true;
 }
 
-style_name text_doc::add_style(const style &s) { return add_if_new(m_styles, s); }
-
-style_name text_doc::add_style(const list_style &ls) { return add_if_new(m_list_styles, ls); }
-
-style_name text_doc::add_or_overwrite_style(const style &s) { return m_styles.add(s).m_name; }
-
-style_name text_doc::add_or_overwrite_style(const list_style &ls)
-{ return m_list_styles.add(ls).m_name; }
-
-style &text_doc::builtin_style(const style_name &name)
-{
-    if(name == builtin::default_list)
-        throw std::invalid_argument("builtin::default_list is a list style");
-    if(style *s = m_styles.find(name.get_name()))
-        return *s;
-    style s(name);
-    if(auto f = builtin_family(name))
-        s.set(*f);
-    return m_styles.add(s);
-}
-
 image text_doc::add_image(std::string name, std::string data, std::string media_type)
 {
     image img{name};
-    m_resources.add(resource(std::move(name), std::move(data), std::move(media_type)));
+    m_resources.insert_or_assign(resource(std::move(name), std::move(data), std::move(media_type)));
     return img;
 }
 

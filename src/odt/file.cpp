@@ -50,17 +50,17 @@ std::string serialize(const pugi::xml_node &node)
     return ss.str();
 }
 
-style_name style_of(const pugi::xml_node &node, const char *attr)
-{
-    return style_name(node.attribute(attr).as_string());
-}
+std::string style_of(const pugi::xml_node &node, const char *attr)
+{ return node.attribute(attr).as_string(); }
 
 /// A node's style, unstyled if it's the default the node has without one
-/// (builtin::default_paragraph, ...).
-style_name style_of(const pugi::xml_node &node, const char *attr, const style_name &default_style)
+/// (builtin::para, ...).
+template <style_family F>
+style_name<F> style_of(
+    const pugi::xml_node &node, const char *attr, const style_name<F> &default_style)
 {
-    style_name sn = style_of(node, attr);
-    return sn == default_style ? style_name{} : sn;
+    style_name<F> sn = style_of(node, attr);
+    return sn == default_style ? style_name<F>{} : sn;
 }
 
 thread_local int t_list_depth = 0; //!< Lists the reader is in
@@ -227,7 +227,7 @@ thread_local const std::map<std::string, double> *t_column_widths = nullptr;
 struct column
 {
     std::optional<double> width;
-    style_name cell_style; //!< table:default-cell-style-name
+    cell_style_name cell_style; //!< table:default-cell-style-name
 };
 
 /// Each column, in order, from table:table-column elements (also in column
@@ -257,7 +257,7 @@ table parse_table(const pugi::xml_node &node)
     struct row
     {
         std::vector<table_cell> cells;
-        style_name style;
+        row_style_name style;
     };
     std::vector<row> rows;
     size_t header_rows = 0;
@@ -296,7 +296,7 @@ table parse_table(const pugi::xml_node &node)
         t.add_row(std::move(r.cells), std::move(r.style));
     }
     t.set_header_rows(header_rows);
-    t.style = style_of(node, "table:style-name", builtin::default_table);
+    t.style = style_of(node, "table:style-name", builtin::table);
     t.name = node.attribute("table:name").as_string();
     t.accessibility_title = node.child("table:title").text().as_string();
     t.accessibility_description = node.child("table:desc").text().as_string();
@@ -318,8 +318,8 @@ table parse_table(const pugi::xml_node &node)
 list parse_list(const pugi::xml_node &node)
 {
     list l;
-    l.style = t_list_depth == 0 ? style_of(node, "text:style-name", builtin::default_list)
-                                : style_of(node, "text:style-name");
+    l.style = t_list_depth == 0 ? style_of(node, "text:style-name", builtin::list)
+                                : list_style_name(style_of(node, "text:style-name"));
     struct depth_guard
     {
         depth_guard() { ++t_list_depth; }
@@ -355,7 +355,7 @@ std::optional<block_node> parse_block(const pugi::xml_node &node)
     if(tag == "text:p")
     {
         paragraph p;
-        p.style = style_of(node, "text:style-name", builtin::default_paragraph);
+        p.style = style_of(node, "text:style-name", builtin::para);
         p.children() = parse_inline_children(node);
         // The writer puts a block frame in an unstyled paragraph of its own.
         if(!node.attribute("text:style-name") && p.children().size() == 1 &&
@@ -402,7 +402,7 @@ std::vector<block_node> parse_block_children(const pugi::xml_node &node)
 /// heading (see writer::page_break_style()). styles: the page break styles in
 /// content.xml, and the style each was made from.
 void expand_page_breaks(
-    std::vector<block_node> &blocks, const std::map<std::string, style_name> &styles)
+    std::vector<block_node> &blocks, const std::map<std::string, para_style_name> &styles)
 {
     std::vector<block_node> out;
     for(auto &b : blocks)
@@ -434,7 +434,7 @@ void expand_page_breaks(
                     using T = std::decay_t<decltype(n)>;
                     if constexpr(std::is_same_v<T, paragraph> || std::is_same_v<T, heading>)
                     {
-                        auto it = styles.find(n.style.get_name());
+                        auto it = styles.find(n.style.str());
                         if(it == styles.end())
                             return;
                         out.push_back(block_node{page_break{}});
@@ -442,7 +442,7 @@ void expand_page_breaks(
                         n.style = it->second;
                         if constexpr(std::is_same_v<T, paragraph>)
                         {
-                            if(n.style == builtin::default_paragraph)
+                            if(n.style == builtin::para)
                                 n.style = {};
                         }
                         else if(n.style == builtin::heading(n.level))
@@ -536,7 +536,7 @@ file file::load(const std::filesystem::path &p)
         f.doc.body = parse_block_children(root.child("office:body").child("office:text"));
     }
 
-    std::map<std::string, style_name> page_breaks;
+    std::map<std::string, para_style_name> page_breaks;
     for(auto s : root.child("office:automatic-styles").children("style:style"))
         if(auto base = page_break_base(s))
             page_breaks[s.attribute("style:name").as_string()] = *base;
@@ -552,7 +552,7 @@ file file::load(const std::filesystem::path &p)
     // stay in the package and are carried over.
     for(const frame *fr : collect<frame>(f.doc))
         if(auto e = f.m_impl->pkg.take(fr->img.uri))
-            f.doc.resources().add(
+            f.doc.resources().insert_or_assign(
                 resource(fr->img.uri, std::move(e->data), std::move(e->media_type)));
     return f;
 }

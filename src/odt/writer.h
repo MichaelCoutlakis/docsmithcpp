@@ -62,9 +62,9 @@ private:
     void write_page(const page_style &page);
     void write_blocks(pugi::xml_node parent, const std::vector<block_node> &blocks);
     void write_block(pugi::xml_node parent, const block_node &b);
-    std::string page_break_style(const std::string &name, const style_name &base);
+    std::string page_break_style(const std::string &name, const para_style_name &base);
     void flush_page_break(pugi::xml_node parent);
-    const char *block_style(const style_name &sn);
+    const char *block_style(const para_style_name &sn);
     void write_inline(pugi::xml_node parent, const inline_node &i);
     std::string resolve_image(const std::string &uri);
 
@@ -86,8 +86,9 @@ private:
     void emit(pugi::xml_node parent, const table &t);
     void emit(pugi::xml_node parent, const table_cell &c, const std::string &style);
     std::string cell_style(const table &t, size_t r, size_t c);
-    /// prefix plus a number, not yet a style name in the document or file.
-    std::string automatic_name(const std::string &prefix, style_family f);
+    /// prefix plus a number, not yet the name of a style of that ODF family
+    /// (style:family) in the file, or a cell style in the document.
+    std::string automatic_name(const std::string &prefix, const char *family);
 
     odf::package &m_pkg;
     const text_doc *m_doc{nullptr}; //!< The document being written
@@ -104,9 +105,9 @@ private:
     int m_tocs{0};                             //!< Tables of contents written
     int m_automatic_names{0};                  //!< Last number automatic_name() used
     /// The cell styles made in this write: parent, properties, name.
-    std::vector<std::tuple<style_name, cell_props, std::string>> m_cell_styles;
+    std::vector<std::tuple<cell_style_name, cell_props, std::string>> m_cell_styles;
     /// For paragraphs with no style in the cells being written (header rows).
-    style_name m_cell_paragraph_style;
+    para_style_name m_cell_paragraph_style;
     int m_list_depth{0}; //!< Lists the writer is in
 };
 

@@ -91,8 +91,8 @@ TEST(DOCX_Write, Package)
 TEST(DOCX_Write, ParagraphsAndHeadings)
 {
     text_doc doc;
-    auto note = doc.add_style(
-        style("Note_20_Text", style_family::paragraph, text_props(font_style::italic)));
+    auto note =
+        doc.styles().insert(paragraph_style("Note_20_Text", text_props(font_style::italic))).first;
     doc.add(heading(2, "Results")).add(paragraph("text").set_style(note));
     saved s(doc, "headings");
     auto body = s.body();
@@ -120,10 +120,14 @@ TEST(DOCX_Write, WhiteSpaceTabsAndBreaks)
 TEST(DOCX_Write, SpansAndStyles)
 {
     text_doc doc;
-    auto red = doc.add_style(style("Red", text_props(colour::rgb(255, 0, 0), font_size(11))));
-    auto both = doc.add_style(style("Both", text_props(font_weight::bold)));
-    doc.add(
-        paragraph("a ", span("red").set_style(red), span("both").set_style(both)).set_style(both));
+    auto red = doc.styles()
+                   .insert(text_style("Red", text_props(colour::rgb(255, 0, 0), font_size(11))))
+                   .first;
+    auto both = doc.styles().insert(text_style("Both", text_props(font_weight::bold))).first;
+    auto both_para =
+        doc.styles().insert(paragraph_style("Both", text_props(font_weight::bold))).first;
+    doc.add(paragraph("a ", span("red").set_style(red), span("both").set_style(both))
+            .set_style(both_para));
     saved s(doc, "spans");
     auto p = s.body().child("w:p");
     EXPECT_EQ(docx::val(p.child("w:pPr"), "w:pStyle"), "Both");
@@ -132,7 +136,7 @@ TEST(DOCX_Write, SpansAndStyles)
     EXPECT_FALSE(it->child("w:rPr"));
     EXPECT_EQ(docx::val((++it)->child("w:rPr"), "w:rStyle"), "Red");
     EXPECT_EQ(docx::val((++it)->child("w:rPr"), "w:rStyle"), "BothChar")
-        << "a style used on paragraphs and spans is written twice, linked";
+        << "a text style named as a paragraph style gets its own id";
 
     const auto styles = s.xml("word/styles.xml");
     auto r = style_def(styles, "Red");
@@ -140,7 +144,7 @@ TEST(DOCX_Write, SpansAndStyles)
     EXPECT_EQ(docx::val(r.child("w:rPr"), "w:color"), "FF0000");
     EXPECT_EQ(docx::val(r.child("w:rPr"), "w:sz"), "22");
     EXPECT_STREQ(style_def(styles, "Both").attribute("w:type").as_string(), "paragraph");
-    EXPECT_EQ(docx::val(style_def(styles, "BothChar"), "w:link"), "Both");
+    EXPECT_STREQ(style_def(styles, "BothChar").attribute("w:type").as_string(), "character");
 }
 
 // A styled link's text gets the link's style instead of Hyperlink, and reads
@@ -156,7 +160,7 @@ TEST(DOCX_Write, ParagraphProps)
         text_align::centre,
         keep_with_next{},
         keep_together{false});
-    doc.add_style(style("Spaced", style_family::paragraph, pp));
+    doc.styles().insert(paragraph_style("Spaced", pp));
     doc.add(paragraph("x").set_style("Spaced"));
     saved s(doc, "paragraph_props");
 
@@ -177,14 +181,14 @@ TEST(DOCX_Write, ParagraphProps)
     EXPECT_EQ(order, "w:keepNext w:keepLines w:spacing w:ind w:jc ");
 
     const auto back = docx::file::load(s.path).doc;
-    ASSERT_NE(back.styles().find("Spaced"), nullptr);
-    EXPECT_EQ(back.styles().find("Spaced")->m_paragraph_props, pp);
+    ASSERT_NE(back.styles().para.find("Spaced"), nullptr);
+    EXPECT_EQ(back.styles().para.find("Spaced")->para, pp);
 }
 
 TEST(DOCX_Write, StyledLink)
 {
     text_doc doc;
-    doc.add_style(style("Quiet link", style_family::text, text_props(colour::rgb(80, 80, 80))));
+    doc.styles().insert(text_style("Quiet link", text_props(colour::rgb(80, 80, 80))));
     doc.add(paragraph(hyperlink("https://example.com", "site").set_style("Quiet link")));
     saved s(doc, "styled_link");
     auto run = s.body().child("w:p").child("w:hyperlink").child("w:r");
@@ -222,10 +226,13 @@ TEST(DOCX_Write, LinksAndBookmarks)
 TEST(DOCX_Write, Lists)
 {
     text_doc doc;
-    const style plain("Plain");
-    auto numbered = doc.add_style(list_style("Numbered",
-        {list_style_num(plain, 1, list_enum::arabic, ".", 3),
-            list_style_num(plain, 2, list_enum::lower_alpha, ")")}));
+    auto numbered =
+        doc.styles()
+            .insert(list_style("Numbered",
+                {number_level{
+                     .level = 1, .format = list_enum::arabic, .suffix = ".", .start_from = 3},
+                    number_level{.level = 2, .format = list_enum::lower_alpha, .suffix = ")"}}))
+            .first;
     doc.add(list(list_item(paragraph("one"), list(list_item("one.a"))), list_item("two", "more"))
             .set_style(numbered));
     doc.add(list(list_item("bullet")));
@@ -332,11 +339,11 @@ TEST(DOCX_Write, CodeBlocks)
                 paragraph("call ", span("f()").set_style(builtin::source_text))},
         "code");
     const auto styles = s.xml("word/styles.xml");
-    auto pre = style_def(styles, builtin::preformatted.get_name());
+    auto pre = style_def(styles, builtin::preformatted.str());
     EXPECT_EQ(docx::val(pre, "w:name"), "Preformatted Text");
     EXPECT_STREQ(
         pre.child("w:rPr").child("w:rFonts").attribute("w:ascii").as_string(), "Courier New");
-    auto src = style_def(styles, builtin::source_text.get_name());
+    auto src = style_def(styles, builtin::source_text.str());
     EXPECT_STREQ(src.attribute("w:type").as_string(), "character");
 }
 
@@ -449,10 +456,9 @@ TEST(DOCX_Write, UnknownFromAnotherFormatIsDropped)
 TEST(DOCX_Write, ColumnStyle)
 {
     text_doc doc;
-    doc.add_style(style("Key text", style_family::paragraph, text_props(font_weight::bold)));
-    doc.add_style(style("Key",
-        style_family::table_cell,
-        cell_props(colour::rgb(0xee, 0xee, 0xee), paragraph_style{"Key text"})));
+    doc.styles().insert(paragraph_style("Key text", text_props(font_weight::bold)));
+    doc.styles().insert(
+        cell_style("Key", cell_props(colour::rgb(0xee, 0xee, 0xee), para_style_name("Key text"))));
     table t = table::from_cells({{"a", "1"}, {"b", "2"}});
     t.set_column_style(0, "Key");
     doc.add(t);
@@ -475,14 +481,14 @@ TEST(DOCX_Write, TableFormatting)
     text_doc doc;
     const border thick = border::solid(pt(1.5), colour::rgb(0x20, 0x40, 0x60));
     const border thin = border::solid(pt(0.5));
-    doc.add_style(style("Grid",
-        style_family::table,
+    doc.styles().insert(table_style("Grid",
         table_props(percent{80},
             table_align::centre,
             outer_border{thick},
             inside_h{thin},
             cell_padding{pt(3)},
-            header_cells{cell_props(colour::rgb(0xdd, 0xdd, 0xdd), cell_borders{.m_bottom = thick})})));
+            header_cells{
+                cell_props(colour::rgb(0xdd, 0xdd, 0xdd), cell_borders{.m_bottom = thick})})));
     table t = table::from_cells({{"Test", "Result"}, {"open", "pass"}});
     t.set_header_rows(1).set_style("Grid").set_column_widths({3, 1});
     t.cell(1, 1).props.set(colour::rgb(0xff, 0xcc, 0xcc));
@@ -531,17 +537,14 @@ namespace
 text_doc defaults_doc()
 {
     text_doc doc;
-    doc.add_style(style(builtin::default_paragraph,
-        style_family::paragraph,
+    doc.styles().insert(paragraph_style(builtin::para,
         text_props(font_name("Liberation Serif"), font_size(11)),
         paragraph_props(space_after{pt(6)})));
-    doc.add_style(
-        style(builtin::heading(1), style_family::paragraph, text_props(font_weight::bold)));
-    doc.add_style(style(builtin::link, style_family::text, text_props(colour::rgb(0, 0, 200))));
-    doc.add_style(
-        style(builtin::default_table, style_family::table, table_props(cell_padding{pt(2)})));
-    doc.add_style(
-        list_style(builtin::default_list, {list_style_num(style{}, 1, list_enum::arabic, ".", 1)}));
+    doc.styles().insert(paragraph_style(builtin::heading(1), text_props(font_weight::bold)));
+    doc.styles().insert(text_style(builtin::link, text_props(colour::rgb(0, 0, 200))));
+    doc.styles().insert(table_style(builtin::table, table_props(cell_padding{pt(2)})));
+    doc.styles().insert(list_style(builtin::list,
+        {number_level{.level = 1, .format = list_enum::arabic, .suffix = ".", .start_from = 1}}));
     list_item nested("one");
     nested.add(list(list_item("one.one")));
     doc.add(heading(1, "Introduction"))
@@ -582,10 +585,10 @@ TEST(DOCX_Write, DefaultStyles)
 
     const auto back = docx::file::load(s.path).doc;
     EXPECT_EQ(back.body, doc.body) << "the defaults read back as no style";
-    for(const auto &sn :
-        {builtin::default_paragraph, builtin::heading(1), builtin::link, builtin::default_table})
-        ASSERT_NE(back.styles().find(sn.get_name()), nullptr) << sn.get_name();
-    EXPECT_EQ(back.styles().find(builtin::default_paragraph.get_name())->m_text_props,
-        doc.styles().find(builtin::default_paragraph.get_name())->m_text_props);
-    EXPECT_NE(back.list_styles().find(builtin::default_list.get_name()), nullptr);
+    ASSERT_NE(back.styles().find(builtin::para), nullptr);
+    ASSERT_NE(back.styles().find(builtin::heading(1)), nullptr);
+    ASSERT_NE(back.styles().find(builtin::link), nullptr);
+    ASSERT_NE(back.styles().find(builtin::table), nullptr);
+    EXPECT_EQ(back.styles().find(builtin::para)->text, doc.styles().find(builtin::para)->text);
+    EXPECT_NE(back.styles().find(builtin::list), nullptr);
 }

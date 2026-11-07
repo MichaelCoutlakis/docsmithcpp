@@ -31,7 +31,9 @@
 #include <variant>
 #include <vector>
 
+#include "cell_text.h"
 #include "format.h"
+#include "lineage.h"
 #include "list_numbers.h"
 #include "outline.h"
 
@@ -207,129 +209,160 @@ void fill(std::optional<T> &into, const std::optional<T> &from)
 
 /// s with the properties it inherits from its parent styles filled in, since
 /// a CSS class doesn't inherit from another.
-style resolved(const style &s, const style_registry &styles)
+template <typename S>
+S resolved(const S &s, const style_sheet &styles)
 {
-    style out = s;
-    const style *parent = styles.find(s.m_parent_style.get_name());
-    for(int depth = 0; parent && depth != 32; ++depth) // guards against a cycle
+    S out = s;
+    for(const S *parent : detail::lineage(s.parent, styles)) // nearest first
     {
-        if(parent->m_text_props)
+        text_props tp = parent->text;
+        out.text = tp.overlay(out.text);
+        if constexpr(requires { out.para; })
         {
-            auto &tp = out.m_text_props ? *out.m_text_props : out.m_text_props.emplace();
-            const auto &from = *parent->m_text_props;
-            fill(tp.m_font_size, from.m_font_size);
-            fill(tp.m_font_style, from.m_font_style);
-            fill(tp.m_font_name, from.m_font_name);
-            fill(tp.m_font_weight, from.m_font_weight);
-            fill(tp.m_colour, from.m_colour);
+            paragraph_props pp = parent->para;
+            out.para = pp.overlay(out.para);
         }
-        if(parent->m_paragraph_props)
-        {
-            auto &pp =
-                out.m_paragraph_props ? *out.m_paragraph_props : out.m_paragraph_props.emplace();
-            // The parent's properties under this style's own.
-            paragraph_props merged = *parent->m_paragraph_props;
-            pp = merged.overlay(pp);
-        }
-        parent = styles.find(parent->m_parent_style.get_name());
     }
     return out;
 }
 
 /// Whether sn is base, or a style defined (through its parents) from base.
-bool based_on(const style_name &sn, const style_name &base, const style_registry &styles)
+template <style_family F>
+bool based_on(const style_name<F> &sn, const style_name<F> &base, const style_sheet &styles)
 {
-    style_name s = sn;
-    for(int depth = 0; !s.is_empty() && depth != 32; ++depth) // guards against a cycle
+    style_name<F> s = sn;
+    for(int depth = 0; !s.empty() && depth != 32; ++depth) // guards against a cycle
     {
         if(s == base)
             return true;
-        const style *def = styles.find(s.get_name());
+        const auto *def = styles.find(s);
         if(!def)
             return false;
-        s = def->m_parent_style;
+        s = def->parent;
     }
     return false;
 }
 
-/// The selector for a style's rule: its class, and for a default style the
-/// elements with no class it applies to.
-std::string selector(const style_name &sn)
+std::string css_decls(const text_props &tp)
 {
-    std::string out = "." + css_class(sn.get_name());
+    std::string decls;
+    if(tp.m_font_size)
+        decls += " font-size: " + detail::to_string(tp.m_font_size->m_points) + "pt;";
+    if(tp.m_font_style)
+        decls += std::string(" font-style: ") + css_value(*tp.m_font_style) + ";";
+    if(tp.m_font_name)
+        decls += " font-family: \"" + tp.m_font_name->get_name() + "\";";
+    if(tp.m_font_weight)
+        decls += std::string(" font-weight: ") + css_value(*tp.m_font_weight) + ";";
+    if(const auto &c = tp.m_colour)
+        decls += " color: " + detail::to_hex(*c) + ";";
+    return decls;
+}
+
+std::string css_decls(const paragraph_props &pp)
+{
+    std::string decls;
+    if(pp.m_break_before)
+        decls += std::string(" break-before: ") + css_value(pp.m_break_before->m_break_type) + ";";
+    if(pp.m_break_after)
+        decls += std::string(" break-after: ") + css_value(pp.m_break_after->m_break_type) + ";";
+    auto len = [&](const char *prop, const std::optional<length> &l)
+    {
+        if(l)
+            decls += std::string(" ") + prop + ": " + detail::to_string(l->m_points) + "pt;";
+    };
+    len("margin-top", pp.m_space_before);
+    len("margin-bottom", pp.m_space_after);
+    len("margin-left", pp.m_indent_start);
+    len("margin-right", pp.m_indent_end);
+    len("text-indent", pp.m_first_line_indent);
+    if(pp.m_align)
+        decls += std::string(" text-align: ") + css_value(*pp.m_align) + ";";
+    if(pp.m_keep_with_next.value_or(false) && !pp.m_break_after)
+        decls += " break-after: avoid;";
+    if(pp.m_keep_together.value_or(false))
+        decls += " break-inside: avoid;";
+    return decls;
+}
+
+/// The elements a family's styles are written on.
+const char *elements_of(style_family f)
+{
+    switch(f)
+    {
+    case style_family::para: return "p, pre, h1, h2, h3, h4, h5, h6";
+    case style_family::text: return "span, code, a";
+    case style_family::table: return "table";
+    case style_family::cell: return "td, th";
+    default: return "*";
+    }
+}
+
+/// The selector for a style's rule: its class, and for a default style the
+/// elements with no class it applies to. qualified: the name is used in
+/// another family too, so the class is limited to this family's elements.
+template <style_family F>
+std::string selector(const style_name<F> &sn, bool qualified)
+{
+    std::string out = "." + css_class(sn.str());
+    if(qualified)
+        out = std::string(":is(") + elements_of(F) + ")" + out;
     auto also = [&](const std::string &element) { out += ", " + element + ":not([class])"; };
-    if(sn == builtin::default_paragraph)
-        also("p");
-    else if(sn == builtin::link)
-        also("a");
-    else if(sn == builtin::default_table)
-        also("table");
-    else
-        for(int level = 1; level <= 6; ++level)
-            if(sn == builtin::heading(level))
-                also("h" + std::to_string(level));
+    if constexpr(F == style_family::para)
+    {
+        if(sn == builtin::para)
+            also("p");
+        else
+            for(int level = 1; level <= 6; ++level)
+                if(sn == builtin::heading(level))
+                    also("h" + std::to_string(level));
+    }
+    else if constexpr(F == style_family::text)
+    {
+        if(sn == builtin::link)
+            also("a");
+    }
+    else if constexpr(F == style_family::table)
+    {
+        if(sn == builtin::table)
+            also("table");
+    }
     return out;
 }
 
-/// CSS rules for the style definitions in the document, sorted by name so the
-/// output is stable.
+/// CSS rules for the style definitions in the document, by family and then
+/// name, so the output is stable.
 std::string generated_css(const text_doc &doc)
 {
-    std::vector<const style *> styles;
-    for(const auto &[name, s] : doc.styles())
-        styles.push_back(&s);
-    std::sort(styles.begin(), styles.end(),
-        [](const style *a, const style *b) { return a->m_name.get_name() < b->m_name.get_name(); });
+    const style_sheet &styles = doc.styles();
+    // Names defined in more than one of the families written as classes.
+    std::map<std::string, int> uses;
+    for(const auto &[name, s] : styles.para)
+        ++uses[name.str()];
+    for(const auto &[name, s] : styles.text)
+        ++uses[name.str()];
+    for(const auto &[name, s] : styles.table)
+        ++uses[name.str()];
+    for(const auto &[name, s] : styles.cell)
+        ++uses[name.str()];
+    auto rule = [&](const auto &name, const std::string &decls)
+    {
+        return decls.empty() ? std::string()
+                             : selector(name, uses[name.str()] > 1) + " {" + decls + " }\n";
+    };
 
     std::string css;
-    for(const style *unresolved : styles)
+    for(const auto &[name, s] : styles.para)
     {
-        const style r = resolved(*unresolved, doc.styles());
-        const style *s = &r;
-        std::string decls;
-        if(const auto &tp = s->m_text_props)
-        {
-            if(tp->m_font_size)
-                decls += " font-size: " + detail::to_string(tp->m_font_size->m_points) + "pt;";
-            if(tp->m_font_style)
-                decls += std::string(" font-style: ") + css_value(*tp->m_font_style) + ";";
-            if(tp->m_font_name)
-                decls += " font-family: \"" + tp->m_font_name->get_name() + "\";";
-            if(tp->m_font_weight)
-                decls += std::string(" font-weight: ") + css_value(*tp->m_font_weight) + ";";
-            if(const auto &c = tp->m_colour)
-                decls += " color: " + detail::to_hex(*c) + ";";
-        }
-        if(const auto &pp = s->m_paragraph_props)
-        {
-            if(pp->m_break_before)
-                decls += std::string(" break-before: ") + css_value(pp->m_break_before->m_break_type) + ";";
-            if(pp->m_break_after)
-                decls += std::string(" break-after: ") + css_value(pp->m_break_after->m_break_type) + ";";
-            auto len = [&](const char *prop, const std::optional<length> &l)
-            {
-                if(l)
-                    decls += std::string(" ") + prop + ": " + detail::to_string(l->m_points) + "pt;";
-            };
-            len("margin-top", pp->m_space_before);
-            len("margin-bottom", pp->m_space_after);
-            len("margin-left", pp->m_indent_start);
-            len("margin-right", pp->m_indent_end);
-            len("text-indent", pp->m_first_line_indent);
-            if(pp->m_align)
-                decls += std::string(" text-align: ") + css_value(*pp->m_align) + ";";
-            if(pp->m_keep_with_next.value_or(false) && !pp->m_break_after)
-                decls += " break-after: avoid;";
-            if(pp->m_keep_together.value_or(false))
-                decls += " break-inside: avoid;";
-        }
-        if(s->m_table_props)
-            decls += css_decls(effective_table_style(s->m_name, doc.styles()));
-        if(s->m_cell_props)
-            decls += css_decls(effective_cell_style(s->m_name, doc.styles()));
-        if(!decls.empty())
-            css += selector(s->m_name) + " {" + decls + " }\n";
+        const paragraph_style r = resolved(s, styles);
+        css += rule(name, css_decls(r.text) + css_decls(r.para));
     }
+    for(const auto &[name, s] : styles.text)
+        css += rule(name, css_decls(resolved(s, styles).text));
+    for(const auto &[name, s] : styles.table)
+        css += rule(name, css_decls(effective_table_style(name, styles)));
+    for(const auto &[name, s] : styles.cell)
+        css += rule(name, css_decls(effective_cell_style(name, styles)));
     return css;
 }
 
@@ -357,18 +390,6 @@ std::string default_title(const text_doc &doc)
     return "Untitled";
 }
 
-/// The list's numbering at a nesting level, or nullptr for a bulleted (or
-/// unstyled) level.
-const list_style_num *numbering(const list_style *ls, int level)
-{
-    if(!ls)
-        return nullptr;
-    for(const auto &s : ls->m_level_styles)
-        if(std::visit([](const auto &x) { return x.m_level; }, s) == level)
-            return std::get_if<list_style_num>(&s);
-    return nullptr;
-}
-
 /// A container holding just one unstyled paragraph is written "tight", e.g.
 /// <li>text</li> rather than <li><p>text</p></li>.
 const paragraph *sole_plain_paragraph(const std::vector<block_node> &blocks)
@@ -376,7 +397,7 @@ const paragraph *sole_plain_paragraph(const std::vector<block_node> &blocks)
     if(blocks.size() != 1)
         return nullptr;
     const auto *p = std::get_if<paragraph>(&blocks.front().v);
-    return p && p->style.is_empty() ? p : nullptr;
+    return p && p->style.empty() ? p : nullptr;
 }
 
 /// Where each image goes and what its src is. Document resources go to
@@ -552,12 +573,11 @@ private:
     {
         // A nested list usually has no style of its own and continues the
         // enclosing list's style at the next level.
-        const list_style *ls = l.style.is_empty()
-            ? (m_lists.empty() ? m_doc.list_styles().find(builtin::default_list.get_name())
-                               : m_lists.back())
-            : m_doc.list_styles().find(l.style.get_name());
+        const list_style *ls = l.style.empty()
+            ? (m_lists.empty() ? m_doc.styles().find(builtin::list) : m_lists.back())
+            : m_doc.styles().find(l.style);
         const int level = static_cast<int>(m_lists.size()) + 1;
-        const auto *num = numbering(ls, level);
+        const auto *num = detail::numbering(ls, level);
         const char *tag = num ? "ol" : "ul";
         const auto numbers = num ? m_counter.numbers(l, ls, *num, level)
                                  : std::vector<std::optional<int>>(l.items().size());
@@ -568,8 +588,8 @@ private:
         indent();
         m_os << '<' << tag;
         class_attr(l.style);
-        if(num && num->m_format != list_enum::arabic)
-            m_os << " type=\"" << static_cast<char>(num->m_format) << '"';
+        if(num && num->format != list_enum::arabic)
+            m_os << " type=\"" << static_cast<char>(num->format) << '"';
         if(next != 1)
             m_os << " start=\"" << next << '"';
         m_os << ">\n";
@@ -585,7 +605,7 @@ private:
             else if(numbers[i] && *numbers[i] != next)
                 attrs = " value=\"" + std::to_string(*numbers[i]) + '"';
             next = numbers[i].value_or(next) + 1;
-            container("li", style_name{}, it.children(), attrs);
+            container("li", {}, it.children(), attrs);
         }
         --m_depth;
         m_lists.pop_back();
@@ -616,7 +636,7 @@ private:
         // Each cell's formatting, with the table style's lines, in its style
         // attribute: CSS selectors for a table's edges break with spans.
         std::vector<std::string> cell_css(t.num_rows() * t.num_cols());
-        std::vector<style_name> cell_paragraph(t.num_rows() * t.num_cols());
+        std::vector<para_style_name> cell_paragraph(t.num_rows() * t.num_cols());
         bool lines = false;
         for(size_t r = 0; r != t.num_rows(); ++r)
             for(size_t c = 0; c != t.num_cols(); ++c)
@@ -639,7 +659,7 @@ private:
             escape(m_os, label, true);
             m_os << '"';
         }
-        if(lines && t.style.is_empty())
+        if(lines && t.style.empty())
             m_os << " style=\"border-collapse: collapse;\"";
         m_os << ">\n";
         ++m_depth;
@@ -673,10 +693,10 @@ private:
                 if(const auto &css = cell_css[r * t.num_cols() + c]; !css.empty())
                     attrs += " style=\"" + css.substr(1) + "\"";
                 container(r < header_rows ? "th" : "td",
-                    cell.style,
+                    cell.style.str(),
                     cell.children(),
                     attrs,
-                    cell_paragraph[r * t.num_cols() + c]);
+                    cell_paragraph[r * t.num_cols() + c].str());
             }
             --m_depth;
             indent();
@@ -792,7 +812,7 @@ private:
     }
     void emit_inline(const span &s)
     {
-        if(s.style.is_empty())
+        if(s.style.empty())
             return flow(s.children()); // an unstyled span adds nothing
         const char *tag = based_on(s.style, builtin::source_text, m_doc.styles()) ? "code" : "span";
         open(tag, s.style);
@@ -832,9 +852,9 @@ private:
 
     /// <li> or <td>: tight when it holds one plain paragraph, else block layout.
     /// extra: a second class, e.g. the paragraph style of a header row's text.
-    void container(std::string_view tag, const style_name &style,
+    void container(std::string_view tag, const std::string &style,
         const std::vector<block_node> &blocks, const std::string &attrs = {},
-        const style_name &extra = {})
+        const std::string &extra = {})
     {
         indent();
         m_os << '<' << tag;
@@ -885,23 +905,27 @@ private:
         return it != m_plan.src.end() ? it->second : uri;
     }
 
-    void open(std::string_view tag, const style_name &style)
+    template <style_family F>
+    void open(std::string_view tag, const style_name<F> &style)
     {
         m_os << '<' << tag;
         class_attr(style);
         m_os << '>';
     }
-    void class_attr(const style_name &style, const style_name &extra = {})
+    template <style_family F>
+    void class_attr(const style_name<F> &style)
+    { class_attr(style.str()); }
+    void class_attr(const std::string &style, const std::string &extra = {})
     {
-        if(style.is_empty() && extra.is_empty())
+        if(style.empty() && extra.empty())
             return;
         m_os << " class=\"";
-        if(!style.is_empty())
-            escape(m_os, css_class(style.get_name()), true);
-        if(!style.is_empty() && !extra.is_empty())
+        if(!style.empty())
+            escape(m_os, css_class(style), true);
+        if(!style.empty() && !extra.empty())
             m_os << ' ';
-        if(!extra.is_empty())
-            escape(m_os, css_class(extra.get_name()), true);
+        if(!extra.empty())
+            escape(m_os, css_class(extra), true);
         m_os << '"';
     }
     void indent() { m_os << std::string(m_depth * 2, ' '); }
@@ -920,9 +944,11 @@ private:
 
 std::string file::to_string() const
 {
+    const auto with_cell_text = detail::with_cell_text(doc);
+    const text_doc &d = with_cell_text ? *with_cell_text : doc;
     std::ostringstream ss;
-    const resource_plan plan(doc, resource_dir, nullptr);
-    writer(ss, doc, plan).page(title.empty() ? default_title(doc) : title, css);
+    const resource_plan plan(d, resource_dir, nullptr);
+    writer(ss, d, plan).page(title.empty() ? default_title(d) : title, css);
     return ss.str();
 }
 
@@ -942,7 +968,9 @@ void file::save(const fs::path &p) const
     std::ofstream out(p, std::ios::binary);
     if(!out)
         throw std::runtime_error("Could not write " + p.string());
-    writer(out, doc, plan).page(title.empty() ? default_title(doc) : title, css);
+    const auto with_cell_text = detail::with_cell_text(doc);
+    writer(out, with_cell_text ? *with_cell_text : doc, plan)
+        .page(title.empty() ? default_title(doc) : title, css);
 }
 
 } // namespace docsmith::html

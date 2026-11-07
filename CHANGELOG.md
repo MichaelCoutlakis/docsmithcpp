@@ -83,9 +83,9 @@ held in `std::variant`. This is a breaking change to almost every public API.
   `page_style::set_header()` / `set_footer()`. Content of the wrong level, such as
   a paragraph in a span, fails at the call with "no matching constructor" rather
   than deep inside `std::variant`. They replace `content_ctor_t`.
-- **Default styles**: `builtin::default_paragraph`, `builtin::heading(level)`,
-  `builtin::link`, `builtin::default_table` and the list style
-  `builtin::default_list` are the styles of nodes with none of their own. Define
+- **Default styles**: `builtin::para`, `builtin::heading(level)`,
+  `builtin::link`, `builtin::table` and the list style `builtin::list` are the
+  styles of nodes with none of their own. Define
   one to style every unstyled paragraph, heading, link, table or list in every
   format; a loaded template's defaults (LibreOffice's Default Paragraph Style,
   Heading 1, Internet Link; Word's Normal, Heading 1, Hyperlink, Normal Table)
@@ -226,28 +226,40 @@ held in `std::variant`. This is a breaking change to almost every public API.
   other rows in `<tbody>`. The example test report's summary table has one.
 - `DESIGN.md` lists the nodes and what each may contain.
 - **Loading style definitions**: `odt::file::load()` reads the styles and list styles
-  of `styles.xml` and `content.xml` (common and automatic) into `text_doc::styles()` /
-  `list_styles()`, as far as the model holds their properties. HTML from a parsed
+  of `styles.xml` and `content.xml` (common and automatic) into `text_doc::styles()`,
+  as far as the model holds their properties. HTML from a parsed
   `.odt` now gets numbered lists and CSS for its classes.
 - The HTML CSS rule for a style includes the properties it inherits from its parent
   styles.
-- **Style families**: `style::m_family` (`style_family`: paragraph, text, graphic,
-  table, table column, row and cell), set like the other parts:
-  `style("Code", style_family::text, ...)`. When it's empty, the ODT writer works it
-  out from the nodes that use the style (a `span` → text, a `paragraph` → paragraph,
-  ...), and writes a style used on both spans and paragraphs once per family. Styled
-  spans now work in ODT; the writer used to write every style as a paragraph style.
+- **A style type per family**: `paragraph_style` (`para` and `text` properties),
+  `text_style`, `table_style`, `cell_style` (`cell`, and `para` and `text` for its
+  unstyled paragraphs), `row_style`, `frame_style` and `list_style` (`levels` of
+  `number_level` / `bullet_level`, aggregates for designated initializers). Each
+  family has its own names (`style_family`: `para`, `text`, `table`, `cell`, `row`,
+  `frame`, `list`), so a paragraph style and a text style may share one, as in ODF;
+  DOCX writes the text one as `<id>Char`, and HTML limits each rule to its family's
+  elements. A node's `style` is a `style_name<F>` of its family
+  (`para_style_name`, `text_style_name`, ...), so a text style's name can't be set
+  on a paragraph; a string converts to any. A style's name is read-only
+  (`name()`), and `parent` is of its family. Styled spans now work in ODT; the
+  writer used to write every style as a paragraph style.
+- **Cell styles' paragraph and text properties** are written on the cell's
+  unstyled paragraphs, as a paragraph style made from them
+  (`<cell style>_20_Text`, based on the cell's paragraph style): LibreOffice
+  ignores them in a cell style and DOCX has none. `effective_cell_text()` gives
+  a cell's, from its column's and its own cell style.
 - `hyperlink::target` is a `link_target` variant: `url_target` (used as is) or
   `bookmark_target` (a bookmark in the same document). `hyperlink(bookmark{"x"}, ...)`
   links to a bookmark; writers add the `#`, and the ODT parser turns `#x` back into a
   bookmark target. This replaces `hyperlink::url`.
-- `text_doc::add_style()` registers a style (or list style) and returns its name in one
-  step, keeping an existing definition of that name (like `std::map::insert`);
-  `add_or_overwrite_style()` replaces it, and `builtin_style(name)` gives the
-  definition to edit, adding an empty one of the builtin's family if there is none:
-  `doc.builtin_style(builtin::default_paragraph).set(text_props(...))`. A style's
-  `text()`, `paragraph()`, `table()` and `cell()` give its properties of that kind to
-  change some and keep the rest: `style.text().set(font_size(20))`.
+- **`text_doc::styles()` is a `style_sheet`**, a registry per family (`para`,
+  `text`, `table`, `cell`, `row`, `frame`, `list`), each like a `std::map`:
+  `insert()` keeps an existing definition and gives its name and whether it was
+  added, `insert_or_assign()` replaces it, `operator[]` gives a definition to edit,
+  adding an empty one, and `erase()` removes one. The sheet's `insert()` and
+  `operator[]` pick the registry from the style or the typed name:
+  `doc.styles()[builtin::para].text.set(font_size(11))`,
+  `auto [name, added] = doc.styles().insert(text_style("Strong", ...))`.
   `text_doc::append()` appends another document's body, styles and resources and
   throws on a name defined differently in both.
 - Text properties `font_weight` and `colour` (`fo:font-weight` / `fo:color` in ODT,
@@ -307,7 +319,9 @@ held in `std::variant`. This is a breaking change to almost every public API.
   Title (centred, 28pt bold) unless the document or the loaded file already does.
   HTML gives it `class="Title"` and no CSS, and uses its text for `<title>` when
   `meta.title` is empty.
-- `named_registry::find` has a `const` overload, and registries compare with `==`.
+- `named_registry` is in `namespace docsmith`, ordered by name, and takes its key from
+  the value's `name()`: `insert()`, `insert_or_assign()`, `operator[]`, `find()`,
+  `contains()` and `erase()`, as `std::map`. Registries compare with `==`.
 - `docsmith::docsmithcpp` alias target, so in-tree and installed builds use the same
   target name. The package now installs a version file.
 - A `consumer` ctest that installs the library into the build directory and builds

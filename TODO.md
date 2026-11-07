@@ -83,7 +83,7 @@ Roughly by how much a report or a loaded file would miss it:
 
 ### Model gaps
 
-- `set_style(style)` keeps only the name. `text_doc::add_style()` registers a
+- A node names its style, of its family. `styles().insert()` registers a
   definition and returns its name, but nothing yet checks that every style a
   node names is defined.
 - Bookmark names aren't checked for repeats. Copying a paragraph that holds a

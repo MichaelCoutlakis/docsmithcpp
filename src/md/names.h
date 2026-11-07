@@ -30,10 +30,10 @@
 namespace docsmith::md::names
 {
 
-inline const style_name emphasis{"Emphasis"};
-inline const style_name strong{"Strong_20_Emphasis"};
+inline const text_style_name emphasis{"Emphasis"};
+inline const text_style_name strong{"Strong_20_Emphasis"};
 /// A paragraph in a block quote.
-inline const style_name quotations{"Quotations"};
+inline const para_style_name quotations{"Quotations"};
 inline const std::string numbered_list{"Numbering_20_123"};
 inline const std::string bullet_list{"List_20_1"};
 

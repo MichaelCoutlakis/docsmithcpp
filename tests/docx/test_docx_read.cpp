@@ -60,15 +60,25 @@ pugi::xml_document part_xml(const std::string &path, const std::string &part)
 text_doc every_node()
 {
     text_doc doc;
-    auto note = doc.add_style(
-        style("Note", style_family::paragraph, text_props(font_style::italic, font_size(10))));
-    auto red = doc.add_style(style("Red", style_family::text, text_props(colour::rgb(200, 0, 0))));
-    auto bold = doc.add_style(style("Bold", style_family::text, text_props(font_weight::bold)));
-    doc.styles().find("Bold")->m_parent_style = red;
-    auto steps = doc.add_style(list_style("Steps",
-        {list_style_num(style{}, 1, list_enum::arabic, ".", 1),
-            list_style_num(style{}, 2, list_enum::lower_roman, ")", 1, "(")}));
-    auto dots = doc.add_style(list_style("Dots", {list_style_bullet(style{}, 1, "•")}));
+    auto note = doc.styles()
+                    .insert(paragraph_style("Note", text_props(font_style::italic, font_size(10))))
+                    .first;
+    auto red = doc.styles().insert(text_style("Red", text_props(colour::rgb(200, 0, 0)))).first;
+    auto bold = doc.styles().insert(text_style("Bold", text_props(font_weight::bold))).first;
+    doc.styles().text.find("Bold")->parent = red;
+    auto steps =
+        doc.styles()
+            .insert(list_style("Steps",
+                {number_level{
+                     .level = 1, .format = list_enum::arabic, .suffix = ".", .start_from = 1},
+                    number_level{.level = 2,
+                        .format = list_enum::lower_roman,
+                        .prefix = "(",
+                        .suffix = ")",
+                        .start_from = 1}}))
+            .first;
+    auto dots =
+        doc.styles().insert(list_style("Dots", {bullet_level{.level = 1, .bullet = "•"}})).first;
     auto img =
         doc.add_image("word/media/smiley.png", detail::read_bytes("odt/smiley.png"), "image/png");
 
@@ -162,8 +172,7 @@ TEST(DOCX_Read, RoundTripThroughTheModel)
         {
             if constexpr(std::is_same_v<std::decay_t<decltype(n)>, hyperlink>)
                 if(n.children().size() == 1)
-                    if(auto *s = std::get_if<span>(&n.children().front().v);
-                        s && !s->style.is_empty())
+                    if(auto *s = std::get_if<span>(&n.children().front().v); s && !s->style.empty())
                     {
                         n.style = s->style;
                         auto inner = s->children();
@@ -179,17 +188,19 @@ TEST(DOCX_Read, RoundTripThroughTheModel)
     EXPECT_EQ(back.page, expected.page);
     EXPECT_EQ(back.meta, expected.meta);
 
-    for(const auto &[name, s] : expected.styles())
+    auto same = [&](const auto &expected_styles)
     {
-        ASSERT_NE(back.styles().find(name), nullptr) << name;
-        EXPECT_EQ(*back.styles().find(name), s) << name;
-    }
-    for(const auto &[name, ls] : expected.list_styles())
-    {
-        ASSERT_NE(back.list_styles().find(name), nullptr) << name;
-        EXPECT_EQ(*back.list_styles().find(name), ls) << name;
-    }
-    EXPECT_EQ(back.list_styles().find(docx::default_list_name), nullptr);
+        for(const auto &[name, s] : expected_styles)
+        {
+            ASSERT_NE(back.styles().find(name), nullptr) << name.str();
+            EXPECT_EQ(*back.styles().find(name), s) << name.str();
+        }
+    };
+    same(expected.styles().para);
+    same(expected.styles().text);
+    same(expected.styles().table);
+    same(expected.styles().list);
+    EXPECT_EQ(back.styles().list.find(docx::default_list_name), nullptr);
     EXPECT_EQ(back.resources(), expected.resources());
 }
 
@@ -249,16 +260,14 @@ TEST(DOCX_Read, KeepsWhatTheModelDoesntHold)
     auto f = docx::file::load("docx/out/foreign.docx");
     ASSERT_EQ(f.doc.body.size(), 1U);
     const auto &p = std::get<paragraph>(f.doc.body[0].v);
-    ASSERT_FALSE(p.style.is_empty()) << "the paragraph's alignment is its own";
-    const style *ps = f.doc.styles().find(p.style.get_name());
-    ASSERT_NE(ps, nullptr);
-    EXPECT_EQ(ps->m_family, style_family::paragraph);
+    ASSERT_FALSE(p.style.empty()) << "the paragraph's alignment is its own";
+    ASSERT_NE(f.doc.styles().find(p.style), nullptr);
 
     ASSERT_EQ(p.children().size(), 3U);
     const auto &bold = std::get<span>(p.children()[0].v);
-    const style *bs = f.doc.styles().find(bold.style.get_name());
+    const text_style *bs = f.doc.styles().find(bold.style);
     ASSERT_NE(bs, nullptr);
-    EXPECT_EQ(bs->m_text_props->m_font_weight, font_weight::bold)
+    EXPECT_EQ(bs->text.m_font_weight, font_weight::bold)
         << "direct formatting is a style the model reads";
     EXPECT_EQ(std::get<text>(p.children()[1].v).content, " plain");
     EXPECT_NE(
@@ -286,7 +295,7 @@ TEST(DOCX_Read, KeepsWhatTheModelDoesntHold)
     // Direct formatting stays direct: it isn't added to styles.xml.
     const auto styles = part_xml("docx/out/foreign_resaved.docx", "word/styles.xml");
     EXPECT_FALSE(styles.child("w:styles")
-            .find_child_by_attribute("w:style", "w:styleId", bold.style.get_name().c_str()));
+            .find_child_by_attribute("w:style", "w:styleId", bold.style.str().c_str()));
 }
 
 TEST(DOCX_Read, LibreOfficeListsLinksAndStyles)
@@ -296,16 +305,16 @@ TEST(DOCX_Read, LibreOfficeListsLinksAndStyles)
     ASSERT_GE(body.size(), 5U);
     const auto &h1 = std::get<heading>(body[0].v);
     EXPECT_EQ(h1.level, 1);
-    EXPECT_TRUE(h1.style.is_empty()) << "Heading1 is a level 1 heading's default";
-    EXPECT_EQ(std::get<paragraph>(body[1].v).style.get_name(), "TextBody")
+    EXPECT_TRUE(h1.style.empty()) << "Heading1 is a level 1 heading's default";
+    EXPECT_EQ(std::get<paragraph>(body[1].v).style.str(), "TextBody")
         << "LibreOffice's direct formatting that only repeats the style is not the paragraph's own";
 
     const auto lists = collect<list>(f.doc);
     ASSERT_GE(lists.size(), 3U);
-    const list_style *numbered = f.doc.list_styles().find(lists[0]->style.get_name());
+    const list_style *numbered = f.doc.styles().list.find(lists[0]->style.str());
     ASSERT_NE(numbered, nullptr);
-    const auto &level1 = std::get<list_style_num>(numbered->m_level_styles.front());
-    EXPECT_EQ(level1.m_start_from, 7);
+    const auto &level1 = std::get<number_level>(numbered->levels.front());
+    EXPECT_EQ(level1.start_from, 7);
     EXPECT_EQ(lists[0]->items().size(), 2U);
 
     const auto links = collect<hyperlink>(f.doc);
@@ -396,8 +405,7 @@ TEST(DOCX_Read, TableFormattingRoundTrip)
     text_doc doc;
     const border thick = border::solid(pt(1.5), colour::rgb(0x20, 0x40, 0x60));
     const border thin = border::solid(pt(0.5));
-    doc.add_style(style("Grid",
-        style_family::table,
+    doc.styles().insert(table_style("Grid",
         table_props(outer_border{thick}, inside_h{thin}, inside_v{thin}, cell_padding{pt(3)})));
     table t = table::from_cells({{"Test", "Result"}, {"open", "pass"}, {"save", "fail"}});
     t.set_style("Grid").set_column_widths({3, 1});
@@ -408,13 +416,12 @@ TEST(DOCX_Read, TableFormattingRoundTrip)
 
     const auto f = docx::file::load("docx/out/table_formatting_read.docx");
     const table &back = *collect<table>(f.doc).front();
-    EXPECT_EQ(back.style, style_name("Grid"));
-    const style *grid = f.doc.styles().find("Grid");
+    EXPECT_EQ(back.style, table_style_name("Grid"));
+    const table_style *grid = f.doc.styles().table.find("Grid");
     ASSERT_NE(grid, nullptr);
-    ASSERT_TRUE(grid->m_table_props);
-    EXPECT_EQ(grid->m_table_props->m_outer, (cell_borders{thick, thick, thick, thick}));
-    EXPECT_EQ(grid->m_table_props->m_inside_h, thin);
-    EXPECT_EQ(grid->m_table_props->m_padding, pt(3));
+    EXPECT_EQ(grid->table.m_outer, (cell_borders{thick, thick, thick, thick}));
+    EXPECT_EQ(grid->table.m_inside_h, thin);
+    EXPECT_EQ(grid->table.m_padding, pt(3));
     EXPECT_NEAR(column_shares(back).at(0), 0.75, 1e-3) << "widths are whole twips";
     for(size_t r = 0; r != t.num_rows(); ++r)
         for(size_t c = 0; c != t.num_cols(); ++c)
@@ -429,12 +436,27 @@ TEST(DOCX_Read, TableFormattingRoundTrip)
 TEST(DOCX_Read, NestedAndAdjacentLists)
 {
     text_doc doc;
-    auto steps = doc.add_style(list_style("Steps",
-        {list_style_num(style{}, 1, list_enum::arabic, ".", 1),
-            list_style_num(style{}, 2, list_enum::lower_roman, ")", 1, "(")}));
-    auto sub = doc.add_style(list_style("Sub",
-        {list_style_num(style{}, 1, list_enum::upper_alpha, ".", 1),
-            list_style_num(style{}, 2, list_enum::lower_alpha, ".", 1)}));
+    auto steps =
+        doc.styles()
+            .insert(list_style("Steps",
+                {number_level{
+                     .level = 1, .format = list_enum::arabic, .suffix = ".", .start_from = 1},
+                    number_level{.level = 2,
+                        .format = list_enum::lower_roman,
+                        .prefix = "(",
+                        .suffix = ")",
+                        .start_from = 1}}))
+            .first;
+    auto sub =
+        doc.styles()
+            .insert(list_style("Sub",
+                {number_level{
+                     .level = 1, .format = list_enum::upper_alpha, .suffix = ".", .start_from = 1},
+                    number_level{.level = 2,
+                        .format = list_enum::lower_alpha,
+                        .suffix = ".",
+                        .start_from = 1}}))
+            .first;
     list nested1(list_item("x"), list_item("y"));
     nested1.set_style(sub);
     list nested2(list_item("z"));

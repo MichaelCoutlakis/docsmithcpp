@@ -30,6 +30,7 @@
 
 #include "bytes.h"
 #include "docsmithcpp/md/file.h"
+#include "list_numbers.h"
 #include "md/names.h"
 
 // md4c reports the document as nested enter / leave calls, so the tree is built
@@ -209,16 +210,6 @@ bool starts_with_tag(std::string_view html, std::string_view tag)
             return false;
     const char after = html.size() > tag.size() + 1 ? html[tag.size() + 1] : '>';
     return after == '>' || after == '/' || std::isspace(static_cast<unsigned char>(after));
-}
-
-const list_style_num *numbering(const list_style *ls, int level)
-{
-    if(!ls)
-        return nullptr;
-    for(const auto &s : ls->m_level_styles)
-        if(std::visit([](const auto &x) { return x.m_level; }, s) == level)
-            return std::get_if<list_style_num>(&s);
-    return nullptr;
 }
 
 constexpr int list_levels = 10; // as many as ODF has
@@ -431,7 +422,7 @@ private:
         paragraph p;
         if(m_quote)
         {
-            doc.styles().add(style(names::quotations, style_family::paragraph));
+            doc.styles().insert(paragraph_style(names::quotations));
             p.set_style(names::quotations);
         }
         blocks().push_back(block_node{std::move(p)});
@@ -443,7 +434,7 @@ private:
     {
         m_inlines.pop_back();
         auto &p = std::get<paragraph>(blocks().back().v);
-        if(p.children().size() == 1 && p.style.is_empty())
+        if(p.children().size() == 1 && p.style.empty())
             if(const auto *f = std::get_if<frame>(&p.children().front().v))
                 blocks().back() = block_node{frame(*f)};
     }
@@ -456,9 +447,9 @@ private:
         close_paragraph();
     }
 
-    void open_span(const style_name &name, const text_props &props)
+    void open_span(const text_style_name &name, const text_props &props)
     {
-        doc.styles().add(style(name, style_family::text, props));
+        doc.styles().insert(text_style(name, props));
         inlines().push_back(inline_node{span().set_style(name)});
         m_inlines.push_back(&std::get<span>(inlines().back().v).children());
     }
@@ -498,25 +489,23 @@ private:
         const int level = static_cast<int>(m_lists.size()) + 1;
         if(!m_list_styles.empty())
         {
-            const list_style *outer = doc.list_styles().find(m_list_styles.back());
-            const auto *num = numbering(outer, level);
-            if(outer && (ordered ? num && num->m_start_from == start : !num))
+            const list_style *outer = doc.styles().list.find(m_list_styles.back());
+            const auto *num = detail::numbering(outer, level);
+            if(outer && (ordered ? num && num->start_from == start : !num))
                 return {};
         }
         std::string name = ordered ? names::numbered_list : names::bullet_list;
         if(ordered && start != 1)
             name += "_start_" + std::to_string(start);
-        if(!doc.list_styles().find(name))
+        if(!doc.styles().list.contains(name))
         {
-            list_style ls(name, {});
+            list_style ls(name);
             for(int lvl = 1; lvl <= list_levels; ++lvl)
                 if(ordered)
-                    ls.m_level_styles.emplace_back(
-                        list_style_num(style{}, lvl, list_enum::arabic, ".", start));
+                    ls.levels.emplace_back(number_level{.level = lvl, .start_from = start});
                 else
-                    ls.m_level_styles.emplace_back(
-                        list_style_bullet(style{}, lvl, bullet_type::bullet()));
-            doc.list_styles().add(ls);
+                    ls.levels.emplace_back(bullet_level{.level = lvl});
+            doc.styles().insert(ls);
         }
         return name;
     }
@@ -618,7 +607,8 @@ file file::load(const fs::path &p)
         if(uri.empty() || uri.find(':') != std::string::npos || rel.is_absolute() ||
             f.doc.resources().find(uri) || !fs::is_regular_file(base / rel, ec))
             continue;
-        f.doc.resources().add(resource(uri, detail::read_bytes(base / rel), media_type(rel)));
+        f.doc.resources().insert_or_assign(
+            resource(uri, detail::read_bytes(base / rel), media_type(rel)));
     }
     return f;
 }

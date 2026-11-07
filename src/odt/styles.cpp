@@ -53,13 +53,12 @@ constexpr spelling<text_align> align_names[] = {{text_align::start, "start"},
     {text_align::right, "right"},
     {text_align::centre, "center"},
     {text_align::justify, "justify"}};
-constexpr spelling<style_family> family_names[] = {{style_family::paragraph, "paragraph"},
+constexpr spelling<style_family> family_names[] = {{style_family::para, "paragraph"},
     {style_family::text, "text"},
-    {style_family::graphic, "graphic"},
+    {style_family::frame, "graphic"},
     {style_family::table, "table"},
-    {style_family::table_column, "table-column"},
-    {style_family::table_row, "table-row"},
-    {style_family::table_cell, "table-cell"}};
+    {style_family::row, "table-row"},
+    {style_family::cell, "table-cell"}};
 
 template <typename E, std::size_t N>
 const char *to_odf(const spelling<E> (&names)[N], E v)
@@ -332,13 +331,12 @@ void read_into(const pugi::xml_node &container, text_doc &doc)
             // onto the table's columns instead (see odt::file::load()).
             if(std::string_view(c.attribute("style:family").as_string()) == "table-column")
                 continue;
-            if(auto s = read_style(c); s && !doc.styles().find(s->m_name.get_name()))
-                doc.styles().add(*s);
+            if(auto s = read_style(c))
+                std::visit([&](const auto &def) { doc.styles().insert(def); }, *s);
         }
         else if(tag == "text:list-style")
         {
-            if(!doc.list_styles().find(c.attribute("style:name").as_string()))
-                doc.list_styles().add(read_list_style(c));
+            doc.styles().insert(read_list_style(c));
         }
     }
 }
@@ -368,71 +366,103 @@ std::string display_name(const std::string &name)
 }
 } // namespace
 
-void write_xml(pugi::xml_node &n, const style_name &sn)
+void write_name(pugi::xml_node &n, const std::string &name)
 {
-    n.append_attribute("style:name").set_value(sn.get_name().c_str());
-    if(const std::string shown = display_name(sn.get_name()); shown != sn.get_name())
+    n.append_attribute("style:name").set_value(name.c_str());
+    if(const std::string shown = display_name(name); shown != name)
         n.append_attribute("style:display-name").set_value(shown.c_str());
 }
 
-void write_xml(pugi::xml_node &n, const style &s)
-{ write_xml(n, s, s.m_family.value_or(style_family::paragraph)); }
+const char *family_name(style_family f) { return to_odf(family_names, f); }
 
-void write_xml(pugi::xml_node &n, const style &s, style_family family)
+namespace
 {
-    auto style_node = n.append_child("style:style");
-    write_xml(style_node, s.m_name);
-    style_node.append_attribute("style:family") = to_odf(family_names, family);
-
-    if(!s.m_parent_style.is_empty())
-        style_node.append_attribute("style:parent-style-name") =
-            s.m_parent_style.get_name().c_str();
-
-    // A table style's lines and header go on its cells (see the writer).
-    if(family == style_family::table)
-        write_xml(style_node, s.m_table_props.value_or(table_props{}));
-    if(family == style_family::table_cell && s.m_cell_props)
-        write_xml(style_node, *s.m_cell_props);
-
-    if(s.m_paragraph_props)
-        write_xml(style_node, s.m_paragraph_props.value());
-
-    if(s.m_text_props)
-        write_xml(style_node, s.m_text_props.value());
+/// A style:style for s, with its name, family and parent.
+template <typename S>
+pugi::xml_node style_node(pugi::xml_node &n, const S &s)
+{
+    auto node = n.append_child("style:style");
+    write_name(node, s.name().str());
+    node.append_attribute("style:family") = family_name(S::family);
+    if constexpr(requires { s.parent; })
+        if(!s.parent.empty())
+            node.append_attribute("style:parent-style-name") = s.parent.str().c_str();
+    return node;
 }
+} // namespace
+
+void write_xml(pugi::xml_node &n, const paragraph_style &s)
+{
+    auto node = style_node(n, s);
+    if(!s.para.empty())
+        write_xml(node, s.para);
+    if(!s.text.empty())
+        write_xml(node, s.text);
+}
+
+void write_xml(pugi::xml_node &n, const text_style &s)
+{
+    auto node = style_node(n, s);
+    if(!s.text.empty())
+        write_xml(node, s.text);
+}
+
+void write_xml(pugi::xml_node &n, const table_style &s)
+{
+    auto node = style_node(n, s);
+    // A table style's lines and header go on its cells (see the writer).
+    write_xml(node, s.table);
+}
+
+void write_xml(pugi::xml_node &n, const cell_style &s)
+{
+    auto node = style_node(n, s);
+    if(!s.cell.empty())
+        write_xml(node, s.cell);
+    // Kept for other readers: LibreOffice ignores them in a cell style, so the
+    // writer also puts them on the cell's paragraphs (detail::with_cell_text).
+    if(!s.para.empty())
+        write_xml(node, s.para);
+    if(!s.text.empty())
+        write_xml(node, s.text);
+}
+
+void write_xml(pugi::xml_node &n, const row_style &s) { style_node(n, s); }
+
+void write_xml(pugi::xml_node &n, const frame_style &s) { style_node(n, s); }
 
 void write_xml(pugi::xml_node &n, const list_style &ls)
 {
     auto ls_node = n.append_child("text:list-style");
-    write_xml(ls_node, ls.m_name);
+    write_name(ls_node, ls.name().str());
 
-    for(const auto &level_style : ls.m_level_styles)
-        std::visit([&](const auto &s) { write_xml(ls_node, s); }, level_style);
+    for(const auto &level : ls.levels)
+        std::visit([&](const auto &l) { write_xml(ls_node, l); }, level);
 }
 
-void write_xml(pugi::xml_node &n, const list_style_bullet &lsb)
+void write_xml(pugi::xml_node &n, const bullet_level &b)
 {
     auto bullet_node = n.append_child("text:list-level-style-bullet");
-    bullet_node.append_attribute("text:level") = lsb.m_level;
-    if(!lsb.m_style_name.is_empty())
-        bullet_node.append_attribute("text:style-name") = lsb.m_style_name.get_name().c_str();
-    bullet_node.append_attribute("text:bullet-char") = lsb.m_bullet_char.c_str();
+    bullet_node.append_attribute("text:level") = b.level;
+    if(!b.style.empty())
+        bullet_node.append_attribute("text:style-name") = b.style.str().c_str();
+    bullet_node.append_attribute("text:bullet-char") = b.bullet.c_str();
 }
 
-void write_xml(pugi::xml_node &n, const list_style_num &s)
+void write_xml(pugi::xml_node &n, const number_level &s)
 {
     auto num_node = n.append_child("text:list-level-style-number");
-    num_node.append_attribute("text:level") = s.m_level;
-    if(!s.m_style_name.is_empty())
-        num_node.append_attribute("text:style-name") = s.m_style_name.get_name().c_str();
+    num_node.append_attribute("text:level") = s.level;
+    if(!s.style.empty())
+        num_node.append_attribute("text:style-name") = s.style.str().c_str();
 
     num_node.append_attribute("loext:num-list-format") =
-        (s.m_num_prefix + "%" + std::to_string(s.m_level) + "%" + s.m_num_suffix).c_str();
+        (s.prefix + "%" + std::to_string(s.level) + "%" + s.suffix).c_str();
     num_node.append_attribute("style:num-format") =
-        std::string(1, static_cast<char>(s.m_format)).c_str();
-    num_node.append_attribute("text:start-value") = s.m_start_from;
-    num_node.append_attribute("style:num-suffix") = s.m_num_suffix.c_str();
-    num_node.append_attribute("style:num-prefix") = s.m_num_prefix.c_str();
+        std::string(1, static_cast<char>(s.format)).c_str();
+    num_node.append_attribute("text:start-value") = s.start_from;
+    num_node.append_attribute("style:num-suffix") = s.suffix.c_str();
+    num_node.append_attribute("style:num-prefix") = s.prefix.c_str();
 }
 
 void write_xml(pugi::xml_node &n, const text_props &tp)
@@ -541,75 +571,106 @@ std::optional<double> read_column_width(const pugi::xml_node &n)
 
 constexpr std::string_view page_break_suffix = ".PageBreak";
 
-std::string page_break_style_name(const style_name &base)
+std::string page_break_style_name(const para_style_name &base)
 {
-    return base.is_empty() ? std::string(page_break_suffix.substr(1))
-                           : base.get_name() + std::string(page_break_suffix);
+    return base.empty() ? std::string(page_break_suffix.substr(1))
+                        : base.str() + std::string(page_break_suffix);
 }
 
-std::optional<style_name> page_break_base(const pugi::xml_node &n)
+std::optional<para_style_name> page_break_base(const pugi::xml_node &n)
 {
     const std::string_view name = n.attribute("style:name").as_string();
-    std::optional<style_name> base;
+    std::optional<para_style_name> base;
     if(name == page_break_only || name == page_break_suffix.substr(1))
-        base = style_name{};
+        base = para_style_name{};
     else if(name.size() > page_break_suffix.size() && name.ends_with(page_break_suffix))
-        base = style_name(std::string(name.substr(0, name.size() - page_break_suffix.size())));
+        base = para_style_name(std::string(name.substr(0, name.size() - page_break_suffix.size())));
     if(!base || std::string_view(n.name()) != "style:style")
         return std::nullopt;
 
     const auto s = read_style(n);
-    if(!s || s->m_family != style_family::paragraph || !s->m_paragraph_props ||
-        s->m_paragraph_props->m_break_before != break_before{break_type::page})
+    const auto *ps = s ? std::get_if<paragraph_style>(&*s) : nullptr;
+    if(!ps || ps->para.m_break_before != break_before{break_type::page})
         return std::nullopt;
     return base;
 }
 
-std::optional<style> read_style(const pugi::xml_node &n)
+std::optional<odf_style> read_style(const pugi::xml_node &n)
 {
     const auto family = from_odf(family_names, n.attribute("style:family").as_string());
     if(!family)
         return std::nullopt;
 
-    style s(style_name(n.attribute("style:name").as_string()), *family);
-    s.m_parent_style = style_name(n.attribute("style:parent-style-name").as_string());
-    s.m_paragraph_props = read_paragraph_props(n.child("style:paragraph-properties"));
-    s.m_text_props = read_text_props(n.child("style:text-properties"));
-    if(*family == style_family::table)
-        s.m_table_props = read_table_props(n.child("style:table-properties"));
-    if(*family == style_family::table_cell)
-        s.m_cell_props = read_cell_props(n.child("style:table-cell-properties"));
-    return s;
+    const std::string name = n.attribute("style:name").as_string();
+    const std::string parent = n.attribute("style:parent-style-name").as_string();
+    auto para = [&]
+    {
+        return read_paragraph_props(n.child("style:paragraph-properties"))
+            .value_or(paragraph_props{});
+    };
+    auto text = [&]
+    { return read_text_props(n.child("style:text-properties")).value_or(text_props{}); };
+    switch(*family)
+    {
+    case style_family::para:
+    {
+        paragraph_style s(name, para(), text());
+        s.parent = parent;
+        return s;
+    }
+    case style_family::text:
+    {
+        text_style s(name, text());
+        s.parent = parent;
+        return s;
+    }
+    case style_family::table:
+    {
+        table_style s(
+            name, read_table_props(n.child("style:table-properties")).value_or(table_props{}));
+        s.parent = parent;
+        return s;
+    }
+    case style_family::cell:
+    {
+        cell_style s(name,
+            read_cell_props(n.child("style:table-cell-properties")).value_or(cell_props{}),
+            para(),
+            text());
+        s.parent = parent;
+        return s;
+    }
+    case style_family::row: return row_style(name);
+    case style_family::frame: return frame_style(name);
+    case style_family::list: break;
+    }
+    return std::nullopt;
 }
 
 list_style read_list_style(const pugi::xml_node &n)
 {
-    list_style ls(style_name(n.attribute("style:name").as_string()), {});
+    list_style ls(n.attribute("style:name").as_string());
     for(auto level : n.children())
     {
         const std::string_view tag = level.name();
         const int lvl = level.attribute("text:level").as_int(1);
-        const style_name sn(level.attribute("text:style-name").as_string());
+        const text_style_name sn(level.attribute("text:style-name").as_string());
         if(tag == "text:list-level-style-number")
         {
             const auto fmt = list_enum_from(level.attribute("style:num-format").as_string());
             if(!fmt)
                 continue;
-            list_style_num num(style{},
-                lvl,
-                *fmt,
-                level.attribute("style:num-suffix").as_string(),
-                level.attribute("text:start-value").as_int(1),
-                level.attribute("style:num-prefix").as_string());
-            num.m_style_name = sn;
-            ls.m_level_styles.push_back(num);
+            ls.levels.push_back(number_level{.level = lvl,
+                .format = *fmt,
+                .prefix = level.attribute("style:num-prefix").as_string(),
+                .suffix = level.attribute("style:num-suffix").as_string(),
+                .start_from = level.attribute("text:start-value").as_int(1),
+                .style = sn});
         }
         else if(tag == "text:list-level-style-bullet")
-        {
-            list_style_bullet bullet(style{}, lvl, level.attribute("text:bullet-char").as_string());
-            bullet.m_style_name = sn;
-            ls.m_level_styles.push_back(bullet);
-        }
+            ls.levels.push_back(bullet_level{.level = lvl,
+                .bullet = level.attribute("text:bullet-char").as_string(),
+                .style = sn});
     }
     return ls;
 }

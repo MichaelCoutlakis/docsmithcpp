@@ -215,10 +215,9 @@ TEST(ODT, AddedImageRoundTrips)
 TEST(ODT, ColumnStyleRoundTrips)
 {
     text_doc doc;
-    doc.add_style(style("Key text", style_family::paragraph, text_props(font_weight::bold)));
-    doc.add_style(style("Key",
-        style_family::table_cell,
-        cell_props(colour::rgb(0xee, 0xee, 0xee), paragraph_style{"Key text"})));
+    doc.styles().insert(paragraph_style("Key text", text_props(font_weight::bold)));
+    doc.styles().insert(
+        cell_style("Key", cell_props(colour::rgb(0xee, 0xee, 0xee), para_style_name("Key text"))));
     table t = table::from_cells({{"a", "1"}, {"b", "2"}});
     t.set_column_style(0, "Key");
     doc.add(t);
@@ -226,16 +225,49 @@ TEST(ODT, ColumnStyleRoundTrips)
 
     const auto again = odt::file::load("odt/out/column_style.odt").doc;
     const table &back = *collect<table>(again).front();
-    EXPECT_EQ(back.column_style(0), style_name("Key"));
-    EXPECT_TRUE(back.column_style(1).is_empty());
+    EXPECT_EQ(back.column_style(0), cell_style_name("Key"));
+    EXPECT_TRUE(back.column_style(1).empty());
     EXPECT_EQ(effective_cell_props(back, again.styles(), 1, 0).m_background,
         colour::rgb(0xee, 0xee, 0xee));
+}
+
+// LibreOffice ignores a cell style's paragraph and text properties, so they
+// go on the cell's unstyled paragraphs, as a paragraph style made from them.
+TEST(ODT, CellStyleTextGoesOnItsParagraphs)
+{
+    text_doc doc;
+    doc.styles().insert(
+        cell_style("Key", text_props(font_weight::bold), paragraph_props(text_align::centre)));
+    table t = table::from_cells({{"a", "1"}, {paragraph("b").set_style("Own"), {"2"}}});
+    t.set_column_style(0, "Key");
+    doc.add(t);
+    odt::file(doc).save("odt/out/cell_text.odt");
+
+    const auto again = odt::file::load("odt/out/cell_text.odt");
+    const table &back = *collect<table>(again.doc).front();
+    const auto &a = std::get<paragraph>(back.cell(0, 0).children().front().v);
+    EXPECT_EQ(a.style, para_style_name("Key_20_Text"));
+    const paragraph_style *made = again.doc.styles().find(a.style);
+    ASSERT_NE(made, nullptr);
+    EXPECT_EQ(made->text, text_props(font_weight::bold));
+    EXPECT_EQ(made->para, paragraph_props(text_align::centre));
+    EXPECT_EQ(made->parent, builtin::para);
+    EXPECT_EQ(
+        std::get<paragraph>(back.cell(1, 0).children().front().v).style, para_style_name("Own"))
+        << "a styled paragraph keeps its style";
+    EXPECT_TRUE(std::get<paragraph>(back.cell(0, 1).children().front().v).style.empty());
+    EXPECT_EQ(again.doc.styles().cell.find("Key")->text, text_props(font_weight::bold))
+        << "kept in the cell style too";
+
+    // Saved again, the made style is the same one.
+    again.save("odt/out/cell_text_resaved.odt");
+    EXPECT_EQ(odt::file::load("odt/out/cell_text_resaved.odt").doc.styles(), again.doc.styles());
 }
 
 TEST(ODT, StyledLinkRoundTrips)
 {
     text_doc doc;
-    doc.add_style(style("Quiet link", style_family::text, text_props(colour::rgb(80, 80, 80))));
+    doc.styles().insert(text_style("Quiet link", text_props(colour::rgb(80, 80, 80))));
     doc.add(paragraph("see ", hyperlink("https://example.com", "site").set_style("Quiet link")));
     odt::file(doc).save("odt/out/styled_link.odt");
     EXPECT_EQ(odt::file::load("odt/out/styled_link.odt").doc.body, doc.body);
@@ -252,12 +284,12 @@ TEST(ODT, ParagraphPropsRoundTrip)
         text_align::centre,
         keep_with_next{},
         keep_together{false});
-    doc.add_style(style("Spaced", style_family::paragraph, pp));
+    doc.styles().insert(paragraph_style("Spaced", pp));
     doc.add(paragraph("x").set_style("Spaced"));
     odt::file(doc).save("odt/out/paragraph_props.odt");
     const auto again = odt::file::load("odt/out/paragraph_props.odt").doc;
-    ASSERT_NE(again.styles().find("Spaced"), nullptr);
-    EXPECT_EQ(again.styles().find("Spaced")->m_paragraph_props, pp);
+    ASSERT_NE(again.styles().para.find("Spaced"), nullptr);
+    EXPECT_EQ(again.styles().para.find("Spaced")->para, pp);
 }
 
 TEST(ODT, BlockFrameRoundTrips)
@@ -293,26 +325,34 @@ TEST(ODT, MissingImageThrows)
 
 TEST(ODT, WriteLists)
 {
-    style big_text("BigStyle", text_props(font_size(48)));
+    text_style big_text("BigStyle", text_props(font_size(48)));
 
-    list_style arabic("L0", {list_style_num(style{}, 1, list_enum::arabic, ".")});
-    list_style arabic_from7("L1", {list_style_num(big_text, 1, list_enum::arabic, ")", 7)});
-    list_style bullets("L2", {list_style_bullet(style{}, 1, bullet_type::bullet())});
-    list_style alpha("L3", {list_style_num(style{}, 1, list_enum::lower_alpha, ")", 3)});
+    list_style arabic("L0", {number_level{.level = 1, .format = list_enum::arabic, .suffix = "."}});
+    list_style arabic_from7("L1",
+        {number_level{.level = 1,
+            .format = list_enum::arabic,
+            .suffix = ")",
+            .start_from = 7,
+            .style = big_text.name()}});
+    list_style bullets("L2", {bullet_level{.level = 1, .bullet = bullet_type::bullet()}});
+    list_style alpha("L3",
+        {number_level{
+            .level = 1, .format = list_enum::lower_alpha, .suffix = ")", .start_from = 3}});
 
     text_doc d{
-        list(list_item("First point"), list_item("Second point")).set_style(bullets),
-        list(list_item("Number 1"), list_item(paragraph("Number 2").set_style(big_text)))
-            .set_style(arabic),
-        list(list_item("Number 7"), list_item("Number 8")).set_style(arabic_from7),
-        list(list_item("Item a"), list_item("Item b")).set_style(alpha),
+        list(list_item("First point"), list_item("Second point")).set_style(bullets.name()),
+        list(list_item("Number 1"),
+            list_item(paragraph("Number 2", span("big").set_style(big_text.name()))))
+            .set_style(arabic.name()),
+        list(list_item("Number 7"), list_item("Number 8")).set_style(arabic_from7.name()),
+        list(list_item("Item a"), list_item("Item b")).set_style(alpha.name()),
     };
 
-    d.styles().add(big_text);
-    d.list_styles().add(arabic);
-    d.list_styles().add(arabic_from7);
-    d.list_styles().add(bullets);
-    d.list_styles().add(alpha);
+    d.styles().insert_or_assign(big_text);
+    d.styles().insert(arabic);
+    d.styles().insert(arabic_from7);
+    d.styles().insert(bullets);
+    d.styles().insert(alpha);
 
     odt::file(d).save("odt/out/write_lists.odt");
 
@@ -323,15 +363,15 @@ TEST(ODT, WriteLists)
 TEST(ODT, GenerateBookmark)
 {
     text_doc d;
-    style style_page_break("PageBreak", paragraph_props(break_before{break_type::page}));
+    paragraph_style style_page_break("PageBreak", paragraph_props(break_before{break_type::page}));
 
     d.add(paragraph("Some text"));
     d.add(paragraph("paragraph with bookmark", bookmark{"Bookmark 1"}));
     d.add(paragraph("Next paragraph with page break to ensure scrolling is necessary when bookmark "
                     "link is followed")
-              .set_style(style_page_break));
+            .set_style(style_page_break.name()));
 
-    d.styles().add(style_page_break);
+    d.styles().insert_or_assign(style_page_break);
 
     d.add(paragraph(hyperlink(bookmark{"Bookmark 1"}, "Link back to the bookmark")));
 
@@ -344,7 +384,7 @@ TEST(ODT, ReadTableFormatting)
     // on its cells.
     const text_doc doc = odt::file::load("odt/basic_table.odt").doc;
     const table &t = *collect<table>(doc).front();
-    EXPECT_EQ(t.style, style_name("Table1"));
+    EXPECT_EQ(t.style, table_style_name("Table1"));
     const table_props tp = effective_table_props(t, doc.styles());
     EXPECT_EQ(tp.m_width, (std::variant<length, percent>(percent{77})));
     EXPECT_EQ(tp.m_align, table_align::centre);
@@ -362,13 +402,13 @@ TEST(ODT, TableFormattingRoundTrip)
     text_doc doc;
     const border thick = border::solid(pt(1.5), colour::rgb(0x20, 0x40, 0x60));
     const border thin = border::solid(pt(0.5));
-    doc.add_style(style("Grid",
-        style_family::table,
+    doc.styles().insert(table_style("Grid",
         table_props(percent{80},
             table_align::centre,
             outer_border{thick},
             inside_h{thin},
-            header_cells{cell_props(colour::rgb(0xdd, 0xdd, 0xdd), cell_borders{.m_bottom = thick})})));
+            header_cells{
+                cell_props(colour::rgb(0xdd, 0xdd, 0xdd), cell_borders{.m_bottom = thick})})));
     table t = table::from_cells({{"Test", "Result"}, {"open", "pass"}, {"save", "fail"}});
     t.set_header_rows(1).set_style("Grid").set_column_widths({3, 1});
     t.cell(2, 1).props.set(colour::rgb(0xff, 0xcc, 0xcc));
@@ -520,18 +560,22 @@ TEST(ODT, LinkTargetsRoundTrip)
 TEST(ODT, StyleFamilies)
 {
     text_doc doc;
-    auto red = doc.add_style(style("Red", text_props(colour::rgb(255, 0, 0))));
-    auto note = doc.add_style(style("Note", style_family::paragraph, text_props(font_style::italic)));
-    // Used on a span and on a paragraph, so written once for each family.
-    auto both = doc.add_style(style("Both", text_props(font_weight::bold)));
+    auto red = doc.styles().insert(text_style("Red", text_props(colour::rgb(255, 0, 0)))).first;
+    auto note = doc.styles().insert(paragraph_style("Note", text_props(font_style::italic))).first;
+    // The same name in two families: two styles.
+    auto both = doc.styles().insert(text_style("Both", text_props(font_weight::bold))).first;
+    auto both_para =
+        doc.styles().insert(paragraph_style("Both", paragraph_props(text_align::centre))).first;
     doc.add(paragraph("Some ", span("red").set_style(red), " text.").set_style(note));
-    doc.add(paragraph("Bold ", span("span").set_style(both)).set_style(both));
+    doc.add(paragraph("Bold ", span("span").set_style(both)).set_style(both_para));
     odt::file(doc).save("odt/out/style_families.odt");
 
     const auto again = odt::file::load("odt/out/style_families.odt").doc;
     EXPECT_EQ(again.body, doc.body);
-    EXPECT_EQ(again.styles().find("Red")->m_family, style_family::text);
-    EXPECT_EQ(*again.styles().find("Note"), *doc.styles().find("Note"));
+    EXPECT_NE(again.styles().text.find("Red"), nullptr);
+    EXPECT_EQ(*again.styles().para.find("Note"), *doc.styles().para.find("Note"));
+    EXPECT_EQ(*again.styles().text.find("Both"), *doc.styles().text.find("Both"));
+    EXPECT_EQ(*again.styles().para.find("Both"), *doc.styles().para.find("Both"));
 }
 
 TEST(ODT, LoadStyleDefinitions)
@@ -539,60 +583,64 @@ TEST(ODT, LoadStyleDefinitions)
     const text_doc doc = odt::file::load("odt/moderate.odt").doc;
 
     // Common styles from styles.xml.
-    const style *h1 = doc.styles().find("Heading_20_1");
+    const paragraph_style *h1 = doc.styles().find(builtin::heading(1));
     ASSERT_NE(h1, nullptr);
-    EXPECT_EQ(h1->m_family, style_family::paragraph);
-    EXPECT_EQ(h1->m_parent_style, style_name("Heading"));
-    EXPECT_EQ(h1->m_text_props->m_font_size, font_size(18));
-    EXPECT_EQ(h1->m_text_props->m_font_weight, font_weight::bold);
-    EXPECT_EQ(doc.styles().find("Source_20_Text")->m_family, style_family::text);
-    EXPECT_EQ(
-        doc.styles().find("Internet_20_link")->m_text_props->m_colour, colour::rgb(0, 0, 0x80));
+    EXPECT_EQ(h1->parent, para_style_name("Heading"));
+    EXPECT_EQ(h1->text.m_font_size, font_size(18));
+    EXPECT_EQ(h1->text.m_font_weight, font_weight::bold);
+    EXPECT_NE(doc.styles().find(builtin::source_text), nullptr);
+    EXPECT_EQ(doc.styles().find(builtin::link)->text.m_colour, colour::rgb(0, 0, 0x80));
 
     // Automatic styles from content.xml.
-    EXPECT_EQ(doc.styles().find("P3")->m_parent_style, style_name("Heading_20_1"));
-    EXPECT_EQ(doc.styles().find("T1")->m_text_props->m_font_weight, font_weight::normal);
+    EXPECT_EQ(doc.styles().para.find("P3")->parent, builtin::heading(1));
+    EXPECT_EQ(doc.styles().text.find("T1")->text.m_font_weight, font_weight::normal);
 
-    const list_style *l1 = doc.list_styles().find("L1");
+    const list_style *l1 = doc.styles().list.find("L1");
     ASSERT_NE(l1, nullptr);
-    const auto &first = std::get<list_style_num>(l1->m_level_styles.front());
-    EXPECT_EQ(first.m_level, 1);
-    EXPECT_EQ(first.m_format, list_enum::arabic);
-    EXPECT_EQ(first.m_start_from, 7);
-    EXPECT_EQ(first.m_num_suffix, ".");
-    EXPECT_EQ(first.m_style_name, style_name("Numbering_20_Symbols"));
-    EXPECT_TRUE(std::holds_alternative<list_style_bullet>(
-        doc.list_styles().find("L2")->m_level_styles.front()));
-    EXPECT_EQ(
-        std::get<list_style_num>(doc.list_styles().find("L3")->m_level_styles.front()).m_format,
+    const auto &first = std::get<number_level>(l1->levels.front());
+    EXPECT_EQ(first.level, 1);
+    EXPECT_EQ(first.format, list_enum::arabic);
+    EXPECT_EQ(first.start_from, 7);
+    EXPECT_EQ(first.suffix, ".");
+    EXPECT_EQ(first.style, text_style_name("Numbering_20_Symbols"));
+    EXPECT_TRUE(std::holds_alternative<bullet_level>(doc.styles().list.find("L2")->levels.front()));
+    EXPECT_EQ(std::get<number_level>(doc.styles().list.find("L3")->levels.front()).format,
         list_enum::lower_alpha);
 }
 
 TEST(ODT, CodeBuiltStylesRoundTrip)
 {
     text_doc doc;
-    auto big = doc.add_style(style("Big",
-        text_props(font_size(20.5f),
-            font_name("Liberation Mono"),
-            font_style::italic,
-            colour::rgb(1, 2, 3)),
-        paragraph_props(break_before{break_type::page}, break_after{break_type::column})));
-    auto pic = doc.add_style(
-        style("Pic", style_family::graphic));
-    auto steps = doc.add_style(list_style("Steps",
-        {list_style_num(style{}, 1, list_enum::upper_roman, ")", 2, "("),
-            list_style_bullet(style("Bullet_20_Symbols"), 2, bullet_type::right_arrow())}));
+    auto big =
+        doc.styles()
+            .insert(paragraph_style("Big",
+                text_props(font_size(20.5f),
+                    font_name("Liberation Mono"),
+                    font_style::italic,
+                    colour::rgb(1, 2, 3)),
+                paragraph_props(break_before{break_type::page}, break_after{break_type::column})))
+            .first;
+    auto pic = doc.styles().insert(frame_style("Pic")).first;
+    auto steps = doc.styles()
+                     .insert(list_style("Steps",
+                         {number_level{.level = 1,
+                              .format = list_enum::upper_roman,
+                              .prefix = "(",
+                              .suffix = ")",
+                              .start_from = 2},
+                             bullet_level{.level = 2,
+                                 .bullet = bullet_type::right_arrow(),
+                                 .style = "Bullet_20_Symbols"}}))
+                     .first;
     doc.add(paragraph("Big").set_style(big));
     doc.add(list(list_item("one")).set_style(steps));
     (void)pic;
     odt::file(doc).save("odt/out/code_built_styles.odt");
 
     const auto again = odt::file::load("odt/out/code_built_styles.odt").doc;
-    style expected_big = *doc.styles().find("Big");
-    expected_big.m_family = style_family::paragraph; // worked out from its use
-    EXPECT_EQ(*again.styles().find("Big"), expected_big);
-    EXPECT_EQ(*again.styles().find("Pic"), *doc.styles().find("Pic"));
-    EXPECT_EQ(*again.list_styles().find("Steps"), *doc.list_styles().find("Steps"));
+    EXPECT_EQ(*again.styles().para.find("Big"), *doc.styles().para.find("Big"));
+    EXPECT_EQ(*again.styles().frame.find("Pic"), *doc.styles().frame.find("Pic"));
+    EXPECT_EQ(*again.styles().list.find("Steps"), *doc.styles().list.find("Steps"));
 }
 
 TEST(ODT, ParseHeaderRows)
@@ -631,7 +679,7 @@ TEST(ODT, WhiteSpaceRoundTrips)
 TEST(ODT, PageBreaksRoundTrip)
 {
     text_doc doc;
-    auto note = doc.add_style(style("Note", text_props(font_style::italic)));
+    auto note = doc.styles().insert(paragraph_style("Note", text_props(font_style::italic))).first;
     doc.add(paragraph("one"))
         .add(page_break{})
         .add(paragraph("two").set_style(note))
@@ -652,8 +700,8 @@ TEST(ODT, PageBreaksRoundTrip)
     EXPECT_EQ(again.doc.body, doc.body);
     // Note, and the Heading 1 the writer defined for the heading; the writer's
     // break styles aren't loaded.
-    EXPECT_EQ(again.doc.styles().size(), 2U);
-    EXPECT_NE(again.doc.styles().find(builtin::heading(1).get_name()), nullptr);
+    EXPECT_EQ(again.doc.styles().para.size(), 2U);
+    EXPECT_NE(again.doc.styles().find(builtin::heading(1)), nullptr);
 
     // Saved again, same again.
     again.save("odt/out/page_breaks_resaved.odt");
@@ -688,11 +736,10 @@ TEST(ODT, PreformattedRoundTrips)
 
     const auto again = odt::file::load("odt/out/preformatted.odt");
     EXPECT_EQ(again.doc.body, doc.body);
-    const style *pre = again.doc.styles().find(builtin::preformatted.get_name());
+    const paragraph_style *pre = again.doc.styles().find(builtin::preformatted);
     ASSERT_NE(pre, nullptr) << "the writer defines it";
-    EXPECT_EQ(pre->m_text_props->m_font_size, font_size(10));
-    EXPECT_EQ(
-        again.doc.styles().find(builtin::source_text.get_name())->m_family, style_family::text);
+    EXPECT_EQ(pre->text.m_font_size, font_size(10));
+    EXPECT_NE(again.doc.styles().find(builtin::source_text), nullptr);
 }
 
 TEST(ODT, FieldsRoundTrip)
@@ -755,7 +802,7 @@ TEST(ODT, LoadReportTemplate)
     EXPECT_FALSE(collect<field>(f.doc).empty());
     EXPECT_EQ(collect<table_of_contents>(f.doc).size(), 1U);
     EXPECT_EQ(collect<table_of_contents>(f.doc).front()->title, "Contents");
-    ASSERT_NE(f.doc.styles().find("Pass"), nullptr);
+    ASSERT_NE(f.doc.styles().text.find("Pass"), nullptr);
 
     EXPECT_TRUE(f.doc.replace(text{"{{summary}}"}, heading(2, "Filled in")));
     EXPECT_TRUE(f.doc.replace(bookmark{"details"}, paragraph("details")));

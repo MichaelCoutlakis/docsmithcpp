@@ -82,15 +82,22 @@ TEST(HTML, EmptyElementsAreNotSelfClosed)
 
 TEST(HTML, StylesBecomeClassesAndCss)
 {
-    style big("Big Text", text_props(font_size(18), font_style::italic));
-    text_doc doc{paragraph("x").set_style(big), paragraph(span("y").set_style(big))};
-    doc.styles().add(big);
+    const paragraph_style big("Big Text", text_props(font_size(18), font_style::italic));
+    const text_style big_span("Big Text", big.text);
+    text_doc doc{
+        paragraph("x").set_style(big.name()), paragraph(span("y").set_style(big_span.name()))};
+    doc.styles().insert(big);
+    doc.styles().insert(big_span);
 
     html::file page(doc);
     page.css = "body { margin: 0; }";
     const auto html = page.to_string();
 
-    EXPECT_TRUE(has(html, ".Big_Text { font-size: 18pt; font-style: italic; }"));
+    // The name is a paragraph and a text style, so each rule is for its own elements.
+    EXPECT_TRUE(has(html,
+        ":is(p, pre, h1, h2, h3, h4, h5, h6).Big_Text { font-size: 18pt; font-style: italic; }"))
+        << html;
+    EXPECT_TRUE(has(html, ":is(span, code, a).Big_Text { font-size: 18pt; font-style: italic; }"));
     EXPECT_TRUE(has(html, "body { margin: 0; }"));
     EXPECT_TRUE(has(html, R"(<p class="Big_Text">x</p>)"));
     EXPECT_TRUE(has(html, R"(<p><span class="Big_Text">y</span></p>)"));
@@ -99,8 +106,10 @@ TEST(HTML, StylesBecomeClassesAndCss)
 TEST(HTML, BoldAndColourBecomeCss)
 {
     text_doc doc;
-    const auto pass =
-        doc.add_style(style("Pass", text_props(font_weight::bold, colour::rgb(0, 128, 255))));
+    const auto pass = doc.styles()
+                          .insert(paragraph_style(
+                              "Pass", text_props(font_weight::bold, colour::rgb(0, 128, 255))))
+                          .first;
     doc.add(paragraph("ok").set_style(pass));
 
     EXPECT_TRUE(has(html::file(doc).to_string(), ".Pass { font-weight: bold; color: #0080ff; }"));
@@ -108,15 +117,17 @@ TEST(HTML, BoldAndColourBecomeCss)
 
 TEST(HTML, ListsFollowListStyles)
 {
-    list_style alpha("L1", {list_style_num(style{}, 1, list_enum::lower_alpha, ")", 3)});
-    list_style bullets("L2", {list_style_bullet(style{}, 1, bullet_type::bullet())});
+    list_style alpha("L1",
+        {number_level{
+            .level = 1, .format = list_enum::lower_alpha, .suffix = ")", .start_from = 3}});
+    list_style bullets("L2", {bullet_level{.level = 1, .bullet = bullet_type::bullet()}});
     text_doc doc{
-        list(list_item("a"), list_item("b")).set_style(alpha),
-        list(list_item("x")).set_style(bullets),
+        list(list_item("a"), list_item("b")).set_style(alpha.name()),
+        list(list_item("x")).set_style(bullets.name()),
         list(list_item("plain")),
     };
-    doc.list_styles().add(alpha);
-    doc.list_styles().add(bullets);
+    doc.styles().insert(alpha);
+    doc.styles().insert(bullets);
     const auto html = html::file(doc).to_string();
 
     EXPECT_TRUE(has(html, R"(<ol class="L1" type="a" start="3">)"));
@@ -127,10 +138,12 @@ TEST(HTML, ListsFollowListStyles)
 
 TEST(HTML, NestedListContinuesOuterStyle)
 {
-    list_style ls("L1", {list_style_bullet(style{}, 1, bullet_type::bullet()),
-                            list_style_num(style{}, 2, list_enum::upper_roman)});
-    text_doc doc{list(list_item(paragraph("outer"), list(list_item("inner")))).set_style(ls)};
-    doc.list_styles().add(ls);
+    list_style ls("L1",
+        {bullet_level{.level = 1, .bullet = bullet_type::bullet()},
+            number_level{.level = 2, .format = list_enum::upper_roman}});
+    text_doc doc{
+        list(list_item(paragraph("outer"), list(list_item("inner")))).set_style(ls.name())};
+    doc.styles().insert(ls);
     const auto html = html::file(doc).to_string();
 
     EXPECT_TRUE(has(html, R"(<ul class="L1">)"));
@@ -324,15 +337,13 @@ TEST(HTML, ParsedOdtHasStylesAndNumbering)
 TEST(HTML, ParagraphSpacingAndAlignment)
 {
     text_doc doc;
-    doc.add_style(style("Base",
-        style_family::paragraph,
-        paragraph_props(space_before{pt(12)}, text_align::justify, keep_together{})));
-    style child("Note",
-        style_family::paragraph,
-        paragraph_props(text_align::centre, indent_start{pt(18)}, first_line_indent{pt(-9)},
-            keep_with_next{}));
-    child.m_parent_style = "Base";
-    doc.add_style(child);
+    doc.styles().insert(paragraph_style(
+        "Base", paragraph_props(space_before{pt(12)}, text_align::justify, keep_together{})));
+    paragraph_style child("Note",
+        paragraph_props(
+            text_align::centre, indent_start{pt(18)}, first_line_indent{pt(-9)}, keep_with_next{}));
+    child.parent = "Base";
+    doc.styles().insert(child);
     doc.add(paragraph("x").set_style("Note"));
     const auto html = html::file(doc).to_string();
     EXPECT_TRUE(has(html,
@@ -344,12 +355,24 @@ TEST(HTML, ParagraphSpacingAndAlignment)
 TEST(HTML, CssIncludesInheritedProperties)
 {
     text_doc doc;
-    doc.add_style(style("Base", text_props(font_style::italic, font_size(10))));
-    style child("Child", text_props(font_size(12)));
-    child.m_parent_style = "Base";
-    doc.add_style(child);
+    doc.styles().insert(text_style("Base", text_props(font_style::italic, font_size(10))));
+    text_style child("Child", text_props(font_size(12)));
+    child.parent = "Base";
+    doc.styles().insert(child);
     const auto html = html::file(doc).to_string();
     EXPECT_TRUE(has(html, ".Child { font-size: 12pt; font-style: italic; }"));
+}
+
+TEST(HTML, CellStyleText)
+{
+    text_doc doc;
+    doc.styles().insert(cell_style("Key", text_props(font_weight::bold)));
+    table t(1, 1);
+    t.cell(0, 0).set_style("Key").add("a");
+    doc.add(t);
+    const auto html = html::file(doc).to_string();
+    EXPECT_TRUE(has(html, ".Key_20_Text { font-weight: bold; }")) << html;
+    EXPECT_TRUE(has(html, R"(<p class="Key_20_Text">a</p>)")) << html;
 }
 
 TEST(HTML, HeaderRows)
@@ -389,10 +412,10 @@ TEST(HTML, Preformatted)
 {
     text_doc doc{paragraph("\n<a>\n  b\tc").set_style(builtin::preformatted),
         paragraph("Run ", span("make").set_style(builtin::source_text), ".")};
-    style log("Log");
-    log.m_parent_style = builtin::preformatted;
-    doc.add_style(log);
-    doc.add(paragraph("x  y").set_style(log));
+    paragraph_style log("Log");
+    log.parent = builtin::preformatted;
+    doc.styles().insert(log);
+    doc.add(paragraph("x  y").set_style(log.name()));
     const auto html = html::file(doc).to_string();
 
     // As is inside <pre>; the extra newline keeps the leading one.
@@ -466,16 +489,15 @@ text_doc formatted_table()
     text_doc doc;
     const border thick = border::solid(pt(1.5), colour::rgb(0x20, 0x40, 0x60));
     const border thin = border::solid(pt(0.5));
-    doc.add_style(style("Grid",
-        style_family::table,
+    doc.styles().insert(table_style("Grid",
         table_props(percent{80},
             table_align::centre,
             outer_border{thick},
             inside_h{thin},
             header_cells{cell_props(colour::rgb(0xdd, 0xdd, 0xdd),
                 cell_borders{.m_bottom = thick},
-                paragraph_style{"Table Heading"})})));
-    doc.add_style(style("Table Heading", style_family::paragraph, text_props(font_weight::bold)));
+                para_style_name("Table Heading"))})));
+    doc.styles().insert(paragraph_style("Table Heading", text_props(font_weight::bold)));
     table t = table::from_cells({{"Test", "Result"}, {"open", "pass"}, {"save", "fail"}});
     t.set_header_rows(1).set_style("Grid").set_column_widths({3, 1});
     t.cell(2, 1).props.set(colour::rgb(0xff, 0xcc, 0xcc));
@@ -512,16 +534,16 @@ TEST(HTML, TableFormatting)
 
 TEST(HTML, ListNumbering)
 {
-    list_style num("N", {list_style_num(style{}, 1, list_enum::arabic)});
+    list_style num("N", {number_level{.level = 1, .format = list_enum::arabic}});
     list l(list_item("header"), list_item("one"), list_item("five"), list_item("six"));
-    l.set_style(num);
+    l.set_style(num.name());
     l.items()[0].numbered = false;
     l.items()[2].start_value = 5;
     list more(list_item("seven"));
-    more.set_style(num);
+    more.set_style(num.name());
     more.continue_numbering = true;
     text_doc doc{l, paragraph("between"), more};
-    doc.list_styles().add(num);
+    doc.styles().insert(num);
     const auto html = html::file(doc).to_string();
 
     // <ol> counts the unnumbered item too, so "one" says its number.
@@ -566,17 +588,14 @@ namespace
 text_doc defaults_doc()
 {
     text_doc doc;
-    doc.add_style(style(builtin::default_paragraph,
-        style_family::paragraph,
+    doc.styles().insert(paragraph_style(builtin::para,
         text_props(font_name("Liberation Serif"), font_size(11)),
         paragraph_props(space_after{pt(6)})));
-    doc.add_style(
-        style(builtin::heading(1), style_family::paragraph, text_props(font_weight::bold)));
-    doc.add_style(style(builtin::link, style_family::text, text_props(colour::rgb(0, 0, 200))));
-    doc.add_style(
-        style(builtin::default_table, style_family::table, table_props(cell_padding{pt(2)})));
-    doc.add_style(
-        list_style(builtin::default_list, {list_style_num(style{}, 1, list_enum::arabic, ".", 1)}));
+    doc.styles().insert(paragraph_style(builtin::heading(1), text_props(font_weight::bold)));
+    doc.styles().insert(text_style(builtin::link, text_props(colour::rgb(0, 0, 200))));
+    doc.styles().insert(table_style(builtin::table, table_props(cell_padding{pt(2)})));
+    doc.styles().insert(list_style(builtin::list,
+        {number_level{.level = 1, .format = list_enum::arabic, .suffix = ".", .start_from = 1}}));
     list_item nested("one");
     nested.add(list(list_item("one.one")));
     doc.add(heading(1, "Introduction"))

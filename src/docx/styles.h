@@ -22,6 +22,7 @@
 
 #include <optional>
 #include <string>
+#include <variant>
 
 #include <pugixml.hpp>
 
@@ -52,20 +53,29 @@ std::optional<table_props> read_style_tblpr(const pugi::xml_node &tbl_pr);
 inline int twips(const length &l) { return static_cast<int>(l.m_points * 20 + 0.5); }
 std::optional<paragraph_props> read_ppr(const pugi::xml_node &ppr);
 
-/// Fills an empty w:style with s, in the family type (style_type()), as id.
+/// Fills an empty w:style with s, in its family's type (style_type()), as id.
 /// link: the id of the linked style of the other family, if any.
-void write_style(pugi::xml_node n, const style &s, const char *type, const std::string &id,
+void write_style(pugi::xml_node n, const paragraph_style &s, const std::string &id,
+    const std::string &based_on, const std::string &link = {});
+void write_style(pugi::xml_node n, const text_style &s, const std::string &id,
+    const std::string &based_on, const std::string &link = {});
+void write_style(pugi::xml_node n, const table_style &s, const std::string &id,
     const std::string &based_on, const std::string &link = {});
 
-/// A w:style named by its w:styleId, or nullopt for numbering styles.
-std::optional<style> read_style(const pugi::xml_node &n);
+/// A w:style DOCX has a family of the model's for.
+using docx_style = std::variant<paragraph_style, text_style, table_style>;
+
+/// A w:style, called name and based on parent (the model's names for its
+/// w:styleId and w:basedOn), or nullopt for numbering styles.
+std::optional<docx_style> read_style(
+    const pugi::xml_node &n, const std::string &name, const std::string &parent);
 
 /// Fills an empty w:abstractNum with id and ls's levels, named ls's name.
 void write_abstract_num(pugi::xml_node n, int id, const list_style &ls);
 
 /// A w:abstractNum as a list style called name. Levels the model can't
 /// represent (no numbering, other number formats, picture bullets) are left out.
-list_style read_abstract_num(const pugi::xml_node &n, const style_name &name);
+list_style read_abstract_num(const pugi::xml_node &n, const list_style_name &name);
 
 /// The indent of list level ilvl (0-based), in twips: left, hanging.
 inline int list_indent(int ilvl) { return 720 * (ilvl + 1); }

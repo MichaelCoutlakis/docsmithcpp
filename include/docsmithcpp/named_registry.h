@@ -17,36 +17,61 @@
  *****************************************************************************/
 #pragma once
 
-#include <string>
-#include <unordered_map>
+#include <concepts>
+#include <cstddef>
+#include <map>
 #include <utility>
 
-template <typename T, std::string (*GetName)(const T &)>
+namespace docsmith
+{
+
+/// Definitions keyed by their name(), in name order: a std::map that takes
+/// the key from the value. T has a name() returning a Key.
+template <typename Key, typename T>
 class named_registry
 {
 public:
-    using key_type = std::string;
+    using key_type = Key;
     using mapped_type = T;
-    using container_type = std::unordered_map<key_type, mapped_type>;
+    using container_type = std::map<Key, T>;
+    using value_type = typename container_type::value_type;
     using iterator = typename container_type::iterator;
     using const_iterator = typename container_type::const_iterator;
 
-    mapped_type &add(const mapped_type &value)
+    /// Adds value unless one of its name is there, which is kept, as
+    /// std::map::insert. The bool says whether value was added.
+    std::pair<iterator, bool> insert(T value)
     {
-        auto key = GetName(value);
-        auto [it, insrt_op] = m_data.insert_or_assign(std::move(key), value);
-        return it->second;
+        Key key = value.name();
+        return m_data.try_emplace(std::move(key), std::move(value));
     }
-    mapped_type *find(const key_type &name)
+    /// Adds value, replacing any of its name, as std::map::insert_or_assign.
+    /// The bool says whether it was added rather than replaced.
+    std::pair<iterator, bool> insert_or_assign(T value)
+    {
+        Key key = value.name();
+        return m_data.insert_or_assign(std::move(key), std::move(value));
+    }
+    /// The definition of that name, added (empty) if there's none, as
+    /// std::map::operator[].
+    T &operator[](const Key &name)
+        requires std::constructible_from<T, const Key &>
+    { return m_data.try_emplace(name, name).first->second; }
+
+    /// The definition of that name, or nullptr.
+    T *find(const Key &name)
     {
         auto it = m_data.find(name);
         return it != m_data.end() ? &it->second : nullptr;
     }
-    const mapped_type *find(const key_type &name) const
+    const T *find(const Key &name) const
     {
         auto it = m_data.find(name);
         return it != m_data.end() ? &it->second : nullptr;
     }
+    bool contains(const Key &name) const { return m_data.contains(name); }
+    /// Removes the definition of that name; returns how many were removed.
+    std::size_t erase(const Key &name) { return m_data.erase(name); }
 
     iterator begin() noexcept { return m_data.begin(); }
     iterator end() noexcept { return m_data.end(); }
@@ -59,5 +84,7 @@ public:
     bool operator==(const named_registry &) const = default;
 
 private:
-    std::unordered_map<key_type, mapped_type> m_data;
+    container_type m_data;
 };
+
+} // namespace docsmith

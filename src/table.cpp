@@ -21,6 +21,7 @@
 #include <stdexcept>
 
 #include "docsmithcpp/nodes.h"
+#include "lineage.h"
 
 namespace docsmith
 {
@@ -52,7 +53,7 @@ const table_cell &table::cell(size_t r, size_t c) const
     return m_cells[r * m_cols + c];
 }
 
-table &table::add_row(std::vector<table_cell> cells, style_name row_style)
+table &table::add_row(std::vector<table_cell> cells, row_style_name row_style)
 {
     if(m_rows.empty() && m_cols == 0)
     {
@@ -77,7 +78,7 @@ void table::remove_row(size_t r)
         --m_header_rows;
 }
 
-table &table::set_row_style(size_t r, style_name sn)
+table &table::set_row_style(size_t r, row_style_name sn)
 {
     m_rows.at(r).style = std::move(sn);
     return *this;
@@ -98,7 +99,7 @@ table &table::set_column_width(size_t c, std::optional<double> width)
     return *this;
 }
 
-table &table::set_column_style(size_t c, style_name sn)
+table &table::set_column_style(size_t c, cell_style_name sn)
 {
     m_columns.at(c).style = std::move(sn);
     return *this;
@@ -319,19 +320,6 @@ std::vector<double> column_shares(const table &t)
 
 namespace
 {
-/// sn and its parents, nearest first.
-std::vector<const style *> lineage(const style_name &sn, const style_registry &styles)
-{
-    std::vector<const style *> out;
-    const style *s = styles.find(sn.get_name());
-    for(int depth = 0; s && depth != 32; ++depth) // guards against a cycle
-    {
-        out.push_back(s);
-        s = styles.find(s->m_parent_style.get_name());
-    }
-    return out;
-}
-
 template <typename T>
 void take(std::optional<T> &into, const std::optional<T> &from)
 {
@@ -348,28 +336,40 @@ void overlay(cell_borders &into, const cell_borders &over)
 }
 } // namespace
 
-cell_props effective_cell_style(const style_name &sn, const style_registry &styles)
+cell_props effective_cell_style(const cell_style_name &sn, const style_sheet &styles)
 {
     cell_props out;
-    const auto chain = lineage(sn, styles);
+    const auto chain = detail::lineage(sn, styles);
     for(auto it = chain.rbegin(); it != chain.rend(); ++it)
-        if((*it)->m_cell_props)
-            out.overlay(*(*it)->m_cell_props);
+        out.overlay((*it)->cell);
     return out;
 }
 
-table_props effective_table_props(const table &t, const style_registry &styles)
-{ return effective_table_style(t.style.is_empty() ? builtin::default_table : t.style, styles); }
+cell_text effective_cell_text(const table &t, const style_sheet &styles, size_t row, size_t col)
+{
+    cell_text out;
+    for(const cell_style_name &sn : {t.column_style(col), t.cell(row, col).style})
+    {
+        const auto chain = detail::lineage(sn, styles);
+        for(auto it = chain.rbegin(); it != chain.rend(); ++it)
+        {
+            out.para.overlay((*it)->para);
+            out.text.overlay((*it)->text);
+        }
+    }
+    return out;
+}
 
-table_props effective_table_style(const style_name &sn, const style_registry &styles)
+table_props effective_table_props(const table &t, const style_sheet &styles)
+{ return effective_table_style(t.style.empty() ? builtin::table : t.style, styles); }
+
+table_props effective_table_style(const table_style_name &sn, const style_sheet &styles)
 {
     table_props out;
-    const auto chain = lineage(sn, styles);
+    const auto chain = detail::lineage(sn, styles);
     for(auto it = chain.rbegin(); it != chain.rend(); ++it)
     {
-        if(!(*it)->m_table_props)
-            continue;
-        const table_props &p = *(*it)->m_table_props;
+        const table_props &p = (*it)->table;
         take(out.m_width, p.m_width);
         take(out.m_align, p.m_align);
         overlay(out.m_outer, p.m_outer);
@@ -382,7 +382,7 @@ table_props effective_table_style(const style_name &sn, const style_registry &st
 }
 
 cell_props effective_cell_props(
-    const table &t, const style_registry &styles, size_t row, size_t col, bool table_lines)
+    const table &t, const style_sheet &styles, size_t row, size_t col, bool table_lines)
 {
     const table_cell &c = t.cell(row, col);
     const size_t rows = t.num_rows(), cols = t.num_cols();

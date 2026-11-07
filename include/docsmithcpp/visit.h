@@ -131,7 +131,7 @@ void strip_styles(Doc &doc)
         [](auto &n)
         {
             if constexpr(requires { n.style; })
-                n.style = style_name{};
+                n.style = {};
             if constexpr(std::is_same_v<std::decay_t<decltype(n)>, table>)
             {
                 for(size_t r = 0; r != n.num_rows(); ++r)

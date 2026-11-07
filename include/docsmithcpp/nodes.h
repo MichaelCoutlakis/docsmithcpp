@@ -47,7 +47,8 @@
 namespace docsmith
 {
 
-class paragraph : public styled<paragraph>, public has_children<inline_node, paragraph, false>
+class paragraph : public styled<paragraph, style_family::para>,
+                  public has_children<inline_node, paragraph, false>
 {
 public:
     paragraph() = default;
@@ -61,7 +62,8 @@ public:
     bool operator==(const paragraph &) const = default;
 };
 
-class heading : public styled<heading>, public has_children<inline_node, heading, false>
+class heading : public styled<heading, style_family::para>,
+                public has_children<inline_node, heading, false>
 {
 public:
     int level{1};

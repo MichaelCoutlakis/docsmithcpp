@@ -84,7 +84,7 @@
   </Type>
 
   <!-- Leaves. -->
-  <Type Name="docsmith::style_name">
+  <Type Name="docsmith::style_name&lt;*&gt;">
     <DisplayString>{m_name}</DisplayString>
   </Type>
   <Type Name="docsmith::text">

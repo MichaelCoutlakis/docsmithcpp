@@ -64,8 +64,6 @@ private:
     std::string m_media_type;
 };
 
-inline std::string get_resource_name(const resource &r) { return r.name(); }
-
-using resource_registry = named_registry<resource, get_resource_name>;
+using resource_registry = named_registry<std::string, resource>;
 
 } // namespace docsmith

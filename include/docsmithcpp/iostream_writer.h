@@ -50,7 +50,7 @@ public:
 
     void operator()(const paragraph &p)
     {
-        line("Paragraph: style=", p.style.get_name());
+        line("Paragraph: style=", p.style.str());
         kids(p.children());
     }
     void operator()(const heading &h)
@@ -60,12 +60,12 @@ public:
     }
     void operator()(const span &s)
     {
-        line("Span: style=", s.style.get_name());
+        line("Span: style=", s.style.str());
         kids(s.children());
     }
     void operator()(const hyperlink &h)
     {
-        const std::string style = h.style.is_empty() ? "" : " style=" + h.style.get_name();
+        const std::string style = h.style.empty() ? "" : " style=" + h.style.str();
         std::visit(overloaded{[&](const url_target &u) { line("Hyperlink: ", u.url, style); },
                        [&](const bookmark_target &b) { line("Hyperlink: bookmark ", b.name, style); }},
             h.target);
@@ -76,7 +76,7 @@ public:
     {
         auto pts = [](const std::optional<length> &l)
         { return l ? std::to_string(l->m_points) + "pt" : std::string("auto"); };
-        line("Frame: style=", f.style.get_name(), ", size=", pts(f.width), " x ", pts(f.height));
+        line("Frame: style=", f.style.str(), ", size=", pts(f.width), " x ", pts(f.height));
         ++m_indent;
         (*this)(f.img);
         --m_indent;
@@ -95,7 +95,7 @@ public:
 
     void operator()(const list &l)
     {
-        line("List: style ", l.style.get_name(), l.continue_numbering ? ", continues" : "");
+        line("List: style ", l.style.str(), l.continue_numbering ? ", continues" : "");
         ++m_indent;
         for(const auto &it : l.items())
             (*this)(it);
@@ -122,7 +122,7 @@ public:
     }
     void operator()(const table_cell &c)
     {
-        line("Cell: rowspan=", c.rowspan, ", colspan=", c.colspan, ", style=", c.style.get_name());
+        line("Cell: rowspan=", c.rowspan, ", colspan=", c.colspan, ", style=", c.style.str());
         ++m_indent;
         for(const auto &b : c.children())
             (*this)(b);

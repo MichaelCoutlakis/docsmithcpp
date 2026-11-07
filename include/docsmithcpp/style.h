@@ -16,73 +16,110 @@
  * limitations under the License.
  *****************************************************************************/
 #pragma once
+
+// Styles: the property types, the style type of each family, and the style
+// sheet a document keeps them in.
+
 #include <algorithm>
 #include <cstdint>
+#include <initializer_list>
 #include <optional>
 #include <string>
 #include <type_traits>
+#include <utility>
 #include <variant>
+#include <vector>
 
 #include "docsmithcpp/named_registry.h"
 
 namespace docsmith
 {
 
+/// What kind of node a style applies to. Each family has its own style type
+/// and its own names: a paragraph style and a text style may share a name.
+enum class style_family
+{
+    para,  //!< paragraph, heading: paragraph_style
+    text,  //!< span, hyperlink: text_style
+    table, //!< table: table_style
+    cell,  //!< table_cell, and a table's columns: cell_style
+    row,   //!< a table's rows: row_style
+    frame, //!< frame: frame_style
+    list,  //!< list: list_style
+};
+
+/// The name of a style of family F. A string converts to it, so a node's
+/// set_style("Note") names a style of the node's family.
+template <style_family F>
 class style_name
 {
 public:
+    static constexpr style_family family = F;
+
     style_name() = default;
-
     style_name(const char *name) :
-        style_name(std::string(name))
+        m_name(name)
     {
     }
-    style_name(const std::string &name) :
-        m_name{name}
+    style_name(std::string name) :
+        m_name(std::move(name))
     {
     }
 
-    const std::string &get_name() const { return m_name; }
-    bool is_empty() const { return m_name.empty(); }
-    bool operator==(const style_name &rhs) const = default;
+    const std::string &str() const { return m_name; }
+    bool empty() const { return m_name.empty(); }
+
+    bool operator==(const style_name &) const = default;
+    friend bool operator<(const style_name &a, const style_name &b) { return a.m_name < b.m_name; }
 
 private:
     std::string m_name;
 };
 
-/// Style names writers know without a definition in text_doc::styles(). Each
-/// writer maps them to its format's own style of that name.
+using para_style_name = style_name<style_family::para>;
+using text_style_name = style_name<style_family::text>;
+using table_style_name = style_name<style_family::table>;
+using cell_style_name = style_name<style_family::cell>;
+using row_style_name = style_name<style_family::row>;
+using frame_style_name = style_name<style_family::frame>;
+using list_style_name = style_name<style_family::list>;
+
+/// Style names writers know without a definition in the document's styles().
+/// Each writer maps them to its format's own style of that name.
 ///
-/// The defaults are the styles of nodes with none of their own: an unstyled
-/// paragraph has default_paragraph, and so on. Each is a definable style like
-/// any other. Undefined, the format's own default applies; defined (in code, or
-/// by the template loaded), it applies in every format. Reading a file gives
-/// its defaults as these definitions and the nodes using them as unstyled.
+/// para, heading(n), link, table and list are the defaults: the styles of
+/// nodes with none of their own. An unstyled paragraph has builtin::para, and
+/// so on. Each is a definable style like any other. Undefined, the format's
+/// own default applies; defined (in code, or by the template loaded), it
+/// applies in every format. Reading a file gives its defaults as these
+/// definitions and the nodes using them as unstyled.
 namespace builtin
 {
 /// Paragraphs: LibreOffice's Default Paragraph Style, Word's Normal, and a
 /// plain <p> in HTML. Other paragraph styles, headings' included, usually
 /// derive from it, so a font set here applies to them too.
-inline const style_name default_paragraph{"Standard"};
+inline const para_style_name para{"Standard"};
 /// Headings of a level (1-10): LibreOffice's and Word's Heading 1, ..., and
 /// <h1>, ... in HTML.
-inline style_name heading(int level)
-{ return style_name("Heading_20_" + std::to_string(std::clamp(level, 1, 10))); }
+inline para_style_name heading(int level)
+{ return para_style_name("Heading_20_" + std::to_string(std::clamp(level, 1, 10))); }
 /// Links: LibreOffice's Internet Link, Word's Hyperlink, and a plain <a> in
 /// HTML.
-inline const style_name link{"Internet_20_link"};
+inline const text_style_name link{"Internet_20_link"};
 /// Tables: Word's Normal Table. ODF has none of its own, so an ODT file names
 /// it on its tables.
-inline const style_name default_table{"Default_20_Table"};
-/// Lists, as a list_style: a list with no style that isn't nested in another
-/// (a nested one continues the enclosing list's style).
-inline const style_name default_list{"Default_20_List"};
-inline const style_name title{"Title"};
+inline const table_style_name table{"Default_20_Table"};
+/// Lists: a list with no style that isn't nested in another (a nested one
+/// continues the enclosing list's style).
+inline const list_style_name list{"Default_20_List"};
+
+/// A title paragraph (text_doc::set_title()).
+inline const para_style_name title{"Title"};
 /// A monospace paragraph for code and logs, with its lines separated by '\n':
 /// LibreOffice's Preformatted Text, and <pre> in HTML.
-inline const style_name preformatted{"Preformatted_20_Text"};
+inline const para_style_name preformatted{"Preformatted_20_Text"};
 /// Monospace text within a line: LibreOffice's Source Text, and <code> in HTML.
-inline const style_name source_text{"Source_20_Text"};
+inline const text_style_name source_text{"Source_20_Text"};
 } // namespace builtin
 
 /// A font family, e.g. "Liberation Sans". ODT writes it as a font declaration
@@ -155,8 +192,9 @@ struct percent
 
 struct text_props
 {
+    text_props() = default;
     template <typename... Args>
-        requires(!std::is_same_v<std::decay_t<Args>, text_props> && ...)
+        requires(sizeof...(Args) >= 1) && (!std::is_same_v<std::decay_t<Args>, text_props> && ...)
     explicit text_props(Args &&...args)
     {
         (set(args), ...);
@@ -187,6 +225,22 @@ struct text_props
         m_colour = c;
         return *this;
     }
+    /// Sets each property over holds, keeping the others.
+    text_props &overlay(const text_props &over)
+    {
+        auto take = [](auto &into, const auto &from)
+        {
+            if(from)
+                into = from;
+        };
+        take(m_font_size, over.m_font_size);
+        take(m_font_style, over.m_font_style);
+        take(m_font_name, over.m_font_name);
+        take(m_font_weight, over.m_font_weight);
+        take(m_colour, over.m_colour);
+        return *this;
+    }
+    bool empty() const { return *this == text_props{}; }
     bool operator==(const text_props &rhs) const = default;
 
     std::optional<font_size> m_font_size;
@@ -237,8 +291,10 @@ struct keep_together { bool m_on{true}; bool operator==(const keep_together&) co
 class paragraph_props
 {
 public:
+    paragraph_props() = default;
     template <typename... Args>
-        requires(!std::is_same_v<std::decay_t<Args>, paragraph_props> && ...)
+        requires(sizeof...(Args) >= 1) &&
+        (!std::is_same_v<std::decay_t<Args>, paragraph_props> && ...)
     explicit paragraph_props(Args &&...args)
     {
         (set(std::forward<Args>(args)), ...);
@@ -296,6 +352,7 @@ public:
     }
     /// Sets each property over holds, keeping the others.
     paragraph_props &overlay(const paragraph_props &over);
+    bool empty() const { return *this == paragraph_props{}; }
     bool operator==(const paragraph_props &rhs) const = default;
 
     std::optional<break_before> m_break_before;
@@ -377,22 +434,15 @@ enum class cell_valign
     bottom
 };
 
-/// The paragraph style for a cell's paragraphs that have no style of their
-/// own (cell_props).
-struct paragraph_style
-{
-    style_name m_name;
-    bool operator==(const paragraph_style &rhs) const = default;
-};
-
 /// How a table cell looks: in a table_cell style, as a cell's direct
 /// formatting (table_cell::props), or in a table style for its header rows
 /// (header_cells). See DESIGN.md, Tables.
 class cell_props
 {
 public:
+    cell_props() = default;
     template <typename... Args>
-        requires(!std::is_same_v<std::decay_t<Args>, cell_props> && ...)
+        requires(sizeof...(Args) >= 1) && (!std::is_same_v<std::decay_t<Args>, cell_props> && ...)
     explicit cell_props(Args &&...args)
     { (set(args), ...); }
 
@@ -417,9 +467,11 @@ public:
         m_padding = p.m_length;
         return *this;
     }
-    cell_props &set(const paragraph_style &p)
+    /// The paragraph style for the cell's paragraphs that have no style of
+    /// their own.
+    cell_props &set(const para_style_name &p)
     {
-        m_paragraph_style = p.m_name;
+        m_paragraph_style = p;
         return *this;
     }
     /// Sets each property over holds, keeping the others.
@@ -434,7 +486,7 @@ public:
     /// For the cell's paragraphs that have no style of their own; empty for
     /// none. Writers put it on those paragraphs: no format holds it in a
     /// cell style.
-    style_name m_paragraph_style;
+    para_style_name m_paragraph_style;
 };
 
 inline cell_props &cell_props::overlay(const cell_props &over)
@@ -451,7 +503,7 @@ inline cell_props &cell_props::overlay(const cell_props &over)
     take(m_background, over.m_background);
     take(m_valign, over.m_valign);
     take(m_padding, over.m_padding);
-    if(!over.m_paragraph_style.is_empty())
+    if(!over.m_paragraph_style.empty())
         m_paragraph_style = over.m_paragraph_style;
     return *this;
 }
@@ -480,14 +532,13 @@ struct header_cells
     bool operator==(const header_cells &rhs) const = default;
 };
 
-/// How a table looks, in a table style. The lines and the header apply to
-/// cells by their position when the document is written, under each cell's
-/// own style and direct formatting. See DESIGN.md, Tables.
+/// How a table looks, in a table_style.
 class table_props
 {
 public:
+    table_props() = default;
     template <typename... Args>
-        requires(!std::is_same_v<std::decay_t<Args>, table_props> && ...)
+        requires(sizeof...(Args) >= 1) && (!std::is_same_v<std::decay_t<Args>, table_props> && ...)
     explicit table_props(Args &&...args)
     { (set(args), ...); }
 
@@ -545,97 +596,316 @@ public:
     std::optional<border> m_inside_v;
     std::optional<length> m_padding; //!< Every cell's, unless it sets its own
     cell_props m_header; //!< The header rows' cells (header_cells)
+
+    bool empty() const { return *this == table_props{}; }
 };
 
-/// What kind of node a style applies to. ODF and DOCX keep styles of different
-/// families apart, so the same name may be defined once per family.
-enum class style_family
-{
-    paragraph, //!< paragraph, heading
-    text,      //!< span
-    graphic,   //!< frame
-    table,
-    table_column,
-    table_row,
-    table_cell
-};
-
-///
-class style
+/// What every style has: its name, which is fixed, as it is the key the style
+/// is found by in its family's registry.
+template <style_family F>
+class style_base
 {
 public:
-    style() = default;
-    template <typename... Args>
-    explicit style(const style_name &name, const Args &...args) :
-        m_name{name}
+    static constexpr style_family family = F;
+    using name_type = style_name<F>;
+
+    const name_type &name() const { return m_name; }
+
+    bool operator==(const style_base &) const = default;
+
+protected:
+    explicit style_base(name_type name) :
+        m_name(std::move(name))
     {
-        (set(args), ...);
     }
 
-    style &set(style_family f)
-    {
-        m_family = f;
-        return *this;
-    }
-    style &set(const text_props &props)
-    {
-        m_text_props = props;
-        return *this;
-    }
-    style &set(const paragraph_props &props)
-    {
-        m_paragraph_props = props;
-        return *this;
-    }
-    style &set(const table_props &props)
-    {
-        m_table_props = props;
-        return *this;
-    }
-    style &set(const cell_props &props)
-    {
-        m_cell_props = props;
-        return *this;
-    }
-
-    /// The style's properties of a kind, to change some and keep the rest
-    /// (set() replaces them all). Added, empty, if it has none:
-    ///
-    ///     doc.builtin_style(builtin::heading(1)).text().set(font_size(20));
-    text_props &text() { return m_text_props ? *m_text_props : m_text_props.emplace(); }
-    paragraph_props &paragraph()
-    { return m_paragraph_props ? *m_paragraph_props : m_paragraph_props.emplace(); }
-    table_props &table() { return m_table_props ? *m_table_props : m_table_props.emplace(); }
-    cell_props &cell() { return m_cell_props ? *m_cell_props : m_cell_props.emplace(); }
-
-    operator style_name() const { return m_name; }
-    bool operator==(const style &rhs) const = default;
-
-    style_name m_name;
-    /// Empty: writers that need a family work it out from the nodes that use
-    /// the style, writing it once per family if they differ.
-    std::optional<style_family> m_family;
-    style_name m_parent_style;
-    std::optional<text_props> m_text_props;
-    std::optional<paragraph_props> m_paragraph_props;
-    std::optional<table_props> m_table_props; //!< family table
-    std::optional<cell_props> m_cell_props;   //!< family table_cell
+private:
+    name_type m_name;
 };
 
-inline std::string get_style_name(const style &s) { return s.m_name.get_name(); }
+/// A paragraph style, for paragraphs and headings. Its properties are given in
+/// any order:
+///
+///     paragraph_style("Note", paragraph_props(space_after{pt(6)}), text_props(font_size(9)))
+class paragraph_style : public style_base<style_family::para>
+{
+public:
+    template <typename... Props>
+    explicit paragraph_style(name_type name, const Props &...props) :
+        style_base(std::move(name))
+    { (assign(props), ...); }
 
-using style_registry = named_registry<style, get_style_name>;
+    name_type parent; //!< The style it inherits from; empty for none
+    paragraph_props para;
+    text_props text;
 
-/// CRTP mixin giving a node a style name plus a fluent set_style(). It is a
-/// plain code-sharing base (no virtuals, no shared root), not the polymorphic
-/// plumbing the old design used. A derived type's defaulted operator== compares
-/// this base subobject, so style equality composes automatically.
-template <typename Derived>
+    bool operator==(const paragraph_style &) const = default;
+
+private:
+    void assign(const paragraph_props &p) { para = p; }
+    void assign(const text_props &t) { text = t; }
+};
+
+/// A text style, for spans and links.
+class text_style : public style_base<style_family::text>
+{
+public:
+    explicit text_style(name_type name, const text_props &props = {}) :
+        style_base(std::move(name)), text(props)
+    {
+    }
+
+    name_type parent; //!< The style it inherits from; empty for none
+    text_props text;
+
+    bool operator==(const text_style &) const = default;
+};
+
+/// How a table looks. The lines and the header apply to cells by their
+/// position when the document is written, under each cell's own style and
+/// direct formatting. See DESIGN.md, Tables.
+class table_style : public style_base<style_family::table>
+{
+public:
+    explicit table_style(name_type name, const table_props &props = {}) :
+        style_base(std::move(name)), table(props)
+    {
+    }
+
+    name_type parent; //!< The style it inherits from; empty for none
+    table_props table;
+
+    bool operator==(const table_style &) const = default;
+};
+
+/// How a table cell looks, for cells and a table's columns. para and text are
+/// for the cell's paragraphs that have no style of their own, over
+/// cell.m_paragraph_style: writers give those paragraphs a paragraph style
+/// made from them, as LibreOffice ignores them in a cell style.
+class cell_style : public style_base<style_family::cell>
+{
+public:
+    template <typename... Props>
+    explicit cell_style(name_type name, const Props &...props) :
+        style_base(std::move(name))
+    { (assign(props), ...); }
+
+    name_type parent; //!< The style it inherits from; empty for none
+    cell_props cell;
+    paragraph_props para;
+    text_props text;
+
+    bool operator==(const cell_style &) const = default;
+
+private:
+    void assign(const cell_props &c) { cell = c; }
+    void assign(const paragraph_props &p) { para = p; }
+    void assign(const text_props &t) { text = t; }
+};
+
+/// A table row's style. The model holds no row properties yet, so it is kept
+/// by name.
+class row_style : public style_base<style_family::row>
+{
+public:
+    explicit row_style(name_type name) :
+        style_base(std::move(name))
+    {
+    }
+    bool operator==(const row_style &) const = default;
+};
+
+/// A frame's style. The model holds no frame properties yet, so it is kept by
+/// name.
+class frame_style : public style_base<style_family::frame>
+{
+public:
+    explicit frame_style(name_type name) :
+        style_base(std::move(name))
+    {
+    }
+    bool operator==(const frame_style &) const = default;
+};
+
+enum class list_enum : char
+{
+    arabic = '1',
+    lower_alpha = 'a',
+    upper_alpha = 'A',
+    lower_roman = 'i',
+    upper_roman = 'I',
+};
+
+/// A numbered level of a list style:
+///
+///     number_level{.level = 1, .format = list_enum::lower_alpha, .suffix = ")"}
+struct number_level
+{
+    int level{1}; //!< Nesting level, from 1
+    list_enum format{list_enum::arabic};
+    std::string prefix;      //!< Before the number
+    std::string suffix{"."}; //!< After the number
+    int start_from{1};
+    text_style_name style; //!< The number's text style
+    text_props text{};     //!< The number's own text properties
+
+    bool operator==(const number_level &) const = default;
+};
+
+/// Bullet characters for bullet_level.
+struct bullet_type
+{
+    // Not constexpr: std::string only became a literal type in GCC 12's
+    // libstdc++, and GCC 11 is supported.
+    static std::string bullet() { return "•"; }
+    static std::string black_circ() { return "●"; }
+    static std::string heavy_check_mark() { return "✔"; }
+    static std::string ballot_x() { return "✗"; }
+    static std::string right_arrow() { return "➔"; }
+    static std::string three_d_right_arrow() { return "➢"; }
+};
+
+/// A bulleted level of a list style:
+///
+///     bullet_level{.level = 2, .bullet = bullet_type::black_circ()}
+struct bullet_level
+{
+    int level{1}; //!< Nesting level, from 1
+    std::string bullet{bullet_type::bullet()};
+    text_style_name style; //!< The bullet's text style
+
+    bool operator==(const bullet_level &) const = default;
+};
+
+/// How a list numbers or bullets its items, level by level.
+class list_style : public style_base<style_family::list>
+{
+public:
+    using level = std::variant<number_level, bullet_level>;
+
+    explicit list_style(name_type name, std::initializer_list<level> lvls = {}) :
+        style_base(std::move(name)), levels(lvls)
+    {
+    }
+
+    std::vector<level> levels;
+
+    bool operator==(const list_style &) const = default;
+};
+
+/// The styles of one family, by name.
+template <typename S>
+using style_registry = named_registry<typename S::name_type, S>;
+
+/// A style type: paragraph_style, text_style, ...
+template <typename S>
+concept style_type = std::is_base_of_v<style_base<S::family>, S>;
+
+/// A document's styles, a registry per family:
+///
+///     doc.styles()[builtin::para].text.set(font_size(11));
+///     doc.styles().para["Note"].para.set(space_after{pt(6)});
+///     auto [strong, added] = doc.styles().insert(text_style("Strong",
+///     text_props(font_weight::bold)));
+///
+/// A bare string names no family, so doc.styles()["Note"] doesn't compile:
+/// pick the registry, as in styles().para["Note"].
+class style_sheet
+{
+public:
+    style_registry<paragraph_style> para;
+    style_registry<text_style> text;
+    style_registry<table_style> table;
+    style_registry<cell_style> cell;
+    style_registry<row_style> row;
+    style_registry<frame_style> frame;
+    style_registry<list_style> list;
+
+    /// The registry of family F.
+    template <style_family F>
+    auto &of()
+    { return of_impl<F>(*this); }
+    template <style_family F>
+    const auto &of() const
+    { return of_impl<F>(*this); }
+
+    /// The definition of that name in its family, added (empty) if there's
+    /// none, as std::map::operator[]. The reference stays valid until the
+    /// style is erased.
+    template <style_family F>
+    auto &operator[](const style_name<F> &name)
+    { return of<F>()[name]; }
+
+    /// The definition of that name in its family, or nullptr.
+    template <style_family F>
+    auto *find(const style_name<F> &name)
+    { return of<F>().find(name); }
+    template <style_family F>
+    const auto *find(const style_name<F> &name) const
+    { return of<F>().find(name); }
+
+    /// Adds s to its family unless a style of its name is there, which is
+    /// kept, as std::map::insert. Gives s's name, for set_style(), and whether
+    /// s was added.
+    template <style_type S>
+    std::pair<typename S::name_type, bool> insert(S s)
+    {
+        auto [it, added] = of<S::family>().insert(std::move(s));
+        return {it->first, added};
+    }
+    /// Adds s to its family, replacing any style of its name, as
+    /// std::map::insert_or_assign. Gives s's name.
+    template <style_type S>
+    typename S::name_type insert_or_assign(S s)
+    { return of<S::family>().insert_or_assign(std::move(s)).first->first; }
+
+    /// Calls f with each family's registry.
+    template <typename F>
+    void for_each(F &&f)
+    { f(para), f(text), f(table), f(cell), f(row), f(frame), f(list); }
+    template <typename F>
+    void for_each(F &&f) const
+    { f(para), f(text), f(table), f(cell), f(row), f(frame), f(list); }
+
+    bool empty() const
+    {
+        bool out = true;
+        for_each([&](const auto &r) { out = out && r.empty(); });
+        return out;
+    }
+
+    bool operator==(const style_sheet &) const = default;
+
+private:
+    template <style_family F, typename Self>
+    static auto &of_impl(Self &self)
+    {
+        if constexpr(F == style_family::para)
+            return self.para;
+        else if constexpr(F == style_family::text)
+            return self.text;
+        else if constexpr(F == style_family::table)
+            return self.table;
+        else if constexpr(F == style_family::cell)
+            return self.cell;
+        else if constexpr(F == style_family::row)
+            return self.row;
+        else if constexpr(F == style_family::frame)
+            return self.frame;
+        else
+            return self.list;
+    }
+};
+
+/// CRTP mixin giving a node a style name of its family plus a fluent
+/// set_style(). A derived type's defaulted operator== compares this base
+/// subobject, so style equality composes automatically.
+template <typename Derived, style_family F>
 struct styled
 {
-    style_name style;
+    style_name<F> style;
 
-    Derived &set_style(style_name sn)
+    Derived &set_style(style_name<F> sn)
     {
         style = std::move(sn);
         return static_cast<Derived &>(*this);

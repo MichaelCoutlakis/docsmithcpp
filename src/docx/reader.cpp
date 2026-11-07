@@ -37,13 +37,17 @@ namespace docsmith::docx
 namespace
 {
 /// Builtin styles Word or LibreOffice may give another id, by display name.
-constexpr std::pair<const char *, const style_name *> builtin_aliases[] = {
-    {"Preformatted Text", &builtin::preformatted},
-    {"HTML Preformatted", &builtin::preformatted},
-    {"Source Text", &builtin::source_text},
-    {"HTML Code", &builtin::source_text},
-    {"Title", &builtin::title},
-};
+const std::vector<std::pair<const char *, std::string>> &builtin_aliases()
+{
+    static const std::vector<std::pair<const char *, std::string>> aliases{
+        {"Preformatted Text", builtin::preformatted.str()},
+        {"HTML Preformatted", builtin::preformatted.str()},
+        {"Source Text", builtin::source_text.str()},
+        {"HTML Code", builtin::source_text.str()},
+        {"Title", builtin::title.str()},
+    };
+    return aliases;
+}
 
 /// Run properties that alone don't make a run's formatting its own: the
 /// language and proofing marks are on most runs Word writes.
@@ -202,7 +206,7 @@ public:
         for(const frame *f : collect<frame>(m_doc))
             if(!m_doc.resources().find(f->img.uri))
                 if(auto p = m_pkg.take(f->img.uri))
-                    m_doc.resources().add(
+                    m_doc.resources().insert_or_assign(
                         resource(f->img.uri, std::move(p->data), std::move(p->content_type)));
     }
 
@@ -253,18 +257,18 @@ private:
             if(is_default && type == "paragraph")
             {
                 m_default_paragraph = id;
-                alias(id, builtin::default_paragraph.get_name());
+                alias(id, builtin::para.str());
             }
             else if(is_default && type == "table")
-                alias(id, builtin::default_table.get_name());
+                alias(id, builtin::table.str());
             else if(type == "paragraph" && heading_level(id, display))
-                alias(id, builtin::heading(heading_level(id, display)).get_name());
+                alias(id, builtin::heading(heading_level(id, display)).str());
             else if(type == "character" &&
                 (id == "Hyperlink" || display == "Hyperlink" || display == "Internet Link"))
-                alias(id, builtin::link.get_name());
-            for(const auto &[name, builtin] : builtin_aliases)
+                alias(id, builtin::link.str());
+            for(const auto &[name, builtin] : builtin_aliases())
                 if(display == name)
-                    alias(id, builtin->get_name());
+                    alias(id, builtin);
             m_parent[id] = val(s, "w:basedOn");
             m_style_nodes[id] = s;
             auto ppr = s.child("w:pPr");
@@ -275,13 +279,9 @@ private:
                     numbering_ref{val(num, "w:numId"), std::atoi(val(num, "w:ilvl").c_str())};
         }
         for(auto s : root.children("w:style"))
-            if(auto def = read_style(s))
-            {
-                def->m_name = name_of(def->m_name.get_name());
-                def->m_parent_style = name_of(def->m_parent_style.get_name());
-                if(!m_doc.styles().find(def->m_name.get_name()))
-                    m_doc.styles().add(*def);
-            }
+            if(auto def = read_style(
+                   s, name_of(s.attribute("w:styleId").as_string()), name_of(val(s, "w:basedOn"))))
+                std::visit([&](const auto &d) { m_doc.styles().insert(d); }, *def);
     }
 
     /// The model's name for a style id.
@@ -293,9 +293,9 @@ private:
         if(!m_style_nodes.contains(id))
         {
             if(const int level = heading_level(id, {}))
-                return builtin::heading(level).get_name();
+                return builtin::heading(level).str();
             if(id == "Hyperlink")
-                return builtin::link.get_name();
+                return builtin::link.str();
         }
         return id;
     }
@@ -331,22 +331,37 @@ private:
         for(;;)
         {
             std::string name = prefix + std::to_string(++m_direct_count[prefix]);
-            if(!m_doc.styles().find(name) && !m_st.direct.contains(name))
+            if(!m_doc.styles().para.contains(name) && !m_doc.styles().text.contains(name) &&
+                !m_st.direct_para.contains(name) && !m_st.direct_text.contains(name))
                 return name;
         }
     }
 
     /// The style standing for direct formatting: the same one for the same
     /// formatting on the same style.
-    std::string direct_style(const char *prefix, style def, std::string xml)
+    std::string direct_style(const std::string &parent, const text_props &tp, std::string xml)
     {
-        const auto key = std::make_pair(def.m_parent_style.get_name(), xml);
+        const auto key = std::make_pair(parent, xml);
         if(auto it = m_direct_keys.find(key); it != m_direct_keys.end())
             return it->second;
-        def.m_name = new_style_name(prefix);
-        const std::string name = def.m_name.get_name();
-        m_doc.styles().add(def);
-        m_st.direct[name] = direct_format{def, std::move(xml)};
+        text_style def(new_style_name("T"), tp);
+        def.parent = parent;
+        const std::string name = def.name().str();
+        m_doc.styles().insert(def);
+        m_st.direct_text.insert_or_assign(name, direct_format<text_style>{def, std::move(xml)});
+        return m_direct_keys[key] = name;
+    }
+    std::string direct_style(const std::string &parent, const paragraph_props &pp, std::string xml)
+    {
+        const auto key = std::make_pair(parent, xml);
+        if(auto it = m_direct_keys.find(key); it != m_direct_keys.end())
+            return it->second;
+        paragraph_style def(new_style_name("P"), pp);
+        def.parent = parent;
+        const std::string name = def.name().str();
+        m_doc.styles().insert(def);
+        m_st.direct_para.insert_or_assign(
+            name, direct_format<paragraph_style>{def, std::move(xml)});
         return m_direct_keys[key] = name;
     }
 
@@ -418,7 +433,7 @@ private:
     {
         const std::string rstyle = val(rpr, "w:rStyle");
         std::string id = rstyle;
-        if(in_link && name_of(id) == builtin::link.get_name())
+        if(in_link && name_of(id) == builtin::link.str())
             id.clear();
         pugi::xml_document own;
         auto copy = own.append_copy(rpr);
@@ -437,12 +452,8 @@ private:
         }
         if(!significant)
             return name_of(id);
-        style def;
-        def.set(style_family::text);
-        def.m_parent_style = name_of(rstyle);
-        if(auto tp = read_rpr(copy))
-            def.set(*tp);
-        return direct_style("T", def, xml::serialize(copy));
+        return direct_style(
+            name_of(rstyle), read_rpr(copy).value_or(text_props{}), xml::serialize(copy));
     }
 
     // ---- numbering ----
@@ -510,9 +521,9 @@ private:
             return {};
         if(name.empty())
             name = "WWNum" + std::string(a.attribute("w:abstractNumId").as_string());
-        if(!m_doc.list_styles().find(name))
-            m_doc.list_styles().add(read_abstract_num(a, style_name(name)));
-        return name == builtin::default_list.get_name() ? std::string() : name;
+        if(!m_doc.styles().list.contains(name))
+            m_doc.styles().insert(read_abstract_num(a, name));
+        return name == builtin::list.str() ? std::string() : name;
     }
 
     // ---- page ----
@@ -672,17 +683,13 @@ private:
             }
             if(significant)
             {
-                style def;
-                def.set(style_family::paragraph);
-                def.m_parent_style = own_style;
-                if(auto pp = read_ppr(copy))
-                    def.set(*pp);
-                own_style = direct_style("P", def, xml::serialize(copy));
+                own_style = direct_style(
+                    own_style, read_ppr(copy).value_or(paragraph_props{}), xml::serialize(copy));
             }
         }
         // The defaults read as no style: the default paragraph style, and a
         // heading's Heading<level>.
-        if((level && own_style == builtin::heading(level).get_name()) ||
+        if((level && own_style == builtin::heading(level).str()) ||
             (!m_default_paragraph.empty() && own_style == name_of(m_default_paragraph)))
             own_style.clear();
 
@@ -927,7 +934,7 @@ private:
         // link's style, as the writer writes it.
         auto &kids = link.children();
         const auto *first = kids.empty() ? nullptr : std::get_if<span>(&kids.front().v);
-        if(first && !first->style.is_empty() &&
+        if(first && !first->style.empty() &&
             std::all_of(kids.begin(),
                 kids.end(),
                 [&](const inline_node &k)
@@ -1169,7 +1176,7 @@ private:
                 auto empty_paragraph = [](const block_node &b)
                 {
                     const auto *p = std::get_if<paragraph>(&b.v);
-                    return p && p->style.is_empty() && p->children().empty();
+                    return p && p->style.empty() && p->children().empty();
                 };
                 if(!kids.empty() && empty_paragraph(kids.back()) &&
                     (kids.size() == 1 || std::holds_alternative<table>(kids[kids.size() - 2].v)))
@@ -1196,8 +1203,8 @@ private:
         t.set_header_rows(header_rows);
         auto tbl_pr = tbl.child("w:tblPr");
         if(const std::string id = val(tbl_pr, "w:tblStyle"); !id.empty())
-            if(name_of(id) != builtin::default_table.get_name())
-                t.style = style_name(name_of(id));
+            if(name_of(id) != builtin::table.str())
+                t.style = name_of(id);
         t.accessibility_title = val(tbl_pr, "w:tblCaption");
         t.accessibility_description = val(tbl_pr, "w:tblDescription");
 
@@ -1253,7 +1260,7 @@ private:
         table_of_contents toc(std::string(), toc_levels(first_instr(p)));
         if(!out.empty())
             if(const auto *title = std::get_if<paragraph>(&out.back().v);
-                title && title->style.get_name() == "TOCHeading")
+                title && title->style.str() == "TOCHeading")
             {
                 toc.title = trim(detail::plain_text(title->children()));
                 out.pop_back();

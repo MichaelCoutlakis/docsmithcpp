@@ -35,9 +35,8 @@ namespace
 text_doc report()
 {
     text_doc doc;
-    const auto pass = doc.add_style(style("Pass", text_props(font_weight::bold)));
-    const auto steps =
-        doc.add_style(list_style("Steps", {list_style_num(style{}, 1, list_enum::arabic)}));
+    const auto pass = doc.styles().insert(text_style("Pass", text_props(font_weight::bold))).first;
+    const auto steps = doc.styles().insert(list_style("Steps", {number_level{.level = 1}})).first;
 
     table results(3, 2);
     results.set_header_rows(1);

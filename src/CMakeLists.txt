@@ -21,6 +21,9 @@ add_library(docsmithcpp
     # Private: the archive and XML details stay out of the public headers.
     "bytes.h"
     "bytes.cpp"
+    "cell_text.h"
+    "cell_text.cpp"
+    "lineage.h"
     "format.h"
     "list_numbers.h"
     "outline.h"

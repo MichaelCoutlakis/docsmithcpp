@@ -41,14 +41,14 @@ namespace docsmith
 /// is this (ignoring white space around it). A string is text:
 ///
 ///     doc.replace("{{summary}}", ...);        // the paragraph that reads {{summary}}
-///     doc.replace(style_name("Summary"), ...); // the first one with that style
+///     doc.replace(para_style_name("Summary"), ...); // the first one with that style
 struct placeholder
 {
     placeholder(bookmark b) :
         v(std::move(b))
     {
     }
-    placeholder(style_name sn) :
+    placeholder(para_style_name sn) :
         v(std::move(sn))
     {
     }
@@ -65,7 +65,7 @@ struct placeholder
     {
     }
 
-    std::variant<bookmark, style_name, text> v;
+    std::variant<bookmark, para_style_name, text> v;
 };
 
 class text_doc
@@ -92,21 +92,22 @@ public:
         return *this;
     }
 
-    /// Appends other's body, and adds its styles, list styles and resources.
-    /// A name defined in both keeps one copy if the definitions are equal, and
+    /// Appends other's body, and adds its styles and resources. A name
+    /// defined in both (in the same family) keeps one copy if the definitions
+    /// are equal, and
     /// throws std::invalid_argument (leaving this document unchanged) if not.
     /// other.meta is not copied; a title paragraph in other's body is appended
     /// like any other paragraph.
     text_doc &append(const text_doc &other);
 
     /// Filling in a template: puts content's body in place of, after or
-    /// before the placeholder, and adds content's styles, list styles and
-    /// resources as append() does. The placeholder is looked for depth first
+    /// before the placeholder, and adds content's styles and resources as
+    /// append() does. The placeholder is looked for depth first
     /// in the body (lists and table cells included), then the page header and
     /// footer. Returns false, leaving the document unchanged, if nothing
     /// matches.
     ///
-    ///     doc.replace(text{"{{summary}}"}, {heading(1, "Summary"), results});
+    ///     doc.replace("{{summary}}", {heading(1, "Summary"), results});
     ///     doc.insert_after(bookmark{"log"}, paragraph(log));
     bool replace(const placeholder &p, const text_doc &content);
     bool insert_after(const placeholder &p, const text_doc &content);
@@ -116,35 +117,18 @@ public:
     /// compare the bodies: a.body == b.body.
     bool operator==(const text_doc &) const = default;
 
-    style_registry &styles() { return m_styles; }
-    const style_registry &styles() const { return m_styles; }
-    list_style_registry &list_styles() { return m_list_styles; }
-    const list_style_registry &list_styles() const { return m_list_styles; }
+    /// The style definitions, a registry per family (see style_sheet):
+    ///
+    ///     doc.styles()[builtin::para].text.set(font_size(11));
+    ///     auto [note, added] = doc.styles().insert(paragraph_style("Note", ...));
+    ///
+    /// A builtin's definition made with operator[] starts empty, so the look
+    /// a writer gives an undefined builtin (ODT's Title or Heading 1, say)
+    /// isn't in it.
+    style_sheet &styles() { return m_styles; }
+    const style_sheet &styles() const { return m_styles; }
     resource_registry &resources() { return m_resources; }
     const resource_registry &resources() const { return m_resources; }
-
-    /// Adds the style definition, if none of that name is defined yet, and
-    /// returns its name, for set_style(). Like std::map::insert, an existing
-    /// definition stays as it is.
-    style_name add_style(const style &s);
-    style_name add_style(const list_style &ls);
-    /// Adds the style definition, replacing any of that name, and returns its
-    /// name. Like std::map::insert_or_assign.
-    style_name add_or_overwrite_style(const style &s);
-    style_name add_or_overwrite_style(const list_style &ls);
-
-    /// The definition of a style, to edit: the document's (loaded from a
-    /// template, say), else a new empty one, of the builtin's family for a
-    /// builtin. Meant for the builtin defaults:
-    ///
-    ///     doc.builtin_style(builtin::default_paragraph)
-    ///         .set(text_props(font_name("Liberation Serif"), font_size(11)));
-    ///
-    /// A new one starts empty, so the look a writer gives an undefined builtin
-    /// (ODT's Title or Heading 1, say) isn't in it. builtin::default_list is a
-    /// list style: use list_styles() or add_or_overwrite_style() for it. The
-    /// reference stays valid until the style is removed from styles().
-    style &builtin_style(const style_name &name);
 
     /// Adds data as the resource name (a relative path, e.g. "Pictures/a.png")
     /// and returns an image that refers to it.
@@ -178,8 +162,7 @@ private:
     /// Adds other's registries, or throws (changing nothing) on a clash.
     void merge_registries(const text_doc &other);
 
-    style_registry m_styles;
-    list_style_registry m_list_styles;
+    style_sheet m_styles;
     resource_registry m_resources;
 };
 

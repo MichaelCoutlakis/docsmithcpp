@@ -55,20 +55,20 @@ void write_example_test_report()
 
     // The results table's look: lines, a shaded header and padding. ODT can't
     // keep a table style's lines in a template, so it is defined here.
-    const auto heading_style = doc.add_style(
-        style("Table_20_Heading", style_family::paragraph, text_props(font_weight::bold)));
+    const auto heading_style =
+        doc.styles()
+            .insert(paragraph_style("Table_20_Heading", text_props(font_weight::bold)))
+            .first;
     const border rule = border::solid(pt(1), colour::rgb(0x40, 0x40, 0x40));
     const border black = border::solid(pt(1), colour::rgb(0, 0, 0));
-    const auto results_style = doc.add_style(style("Results",
-        style_family::table,
+    const auto results_style = doc.styles().insert_or_assign(table_style("Results",
         table_props(percent{100},
             cell_borders{rule, rule, black, black},
             inside_h{border::solid(pt(0.5), colour::rgb(0xa0, 0xa0, 0xa0))},
             inside_v{black},
             cell_padding{pt(3)},
-            header_cells{cell_props(colour::rgb(0xe8, 0xe8, 0xe8),
-                cell_borders{.m_bottom = rule},
-                paragraph_style{heading_style})})));
+            header_cells{cell_props(
+                colour::rgb(0xe8, 0xe8, 0xe8), cell_borders{.m_bottom = rule}, heading_style)})));
 
     auto summary_table = table::from_cells({{{"Test Case"}, {"Result"}}}).set_header_rows(1);
     summary_table.set_style(results_style).set_column_widths({3, 1});
@@ -121,8 +121,8 @@ int main(int argc, char **argv)
 
     const std::string name = argc > 1 ? argv[1] : "basic";
 
-    style note("Note", text_props(font_style::italic));
-    list_style steps("Steps", {list_style_num(style{}, 1, list_enum::arabic)});
+    const paragraph_style note("Note", text_props(font_style::italic));
+    const list_style steps("Steps", {number_level{.level = 1}});
 
     // Built in one go: nodes nest as constructor arguments.
     text_doc doc{
@@ -130,21 +130,21 @@ int main(int argc, char **argv)
         paragraph("This is the standard example, with a ",
             hyperlink("https://github.com/MichaelCoutlakis/docsmithcpp", "link"),
             "."),
-        paragraph("Styles carry over to both formats.").set_style(note),
+        paragraph("Styles carry over to both formats.").set_style(note.name()),
         // A link to a bookmark in a later section.
         paragraph("The results are in ", hyperlink(bookmark{"results"}, "the table"), " below."),
         heading(2, "A list"),
-        list(list_item("Build the document"), list_item("Save it")).set_style(steps),
+        list(list_item("Build the document"), list_item("Save it")).set_style(steps.name()),
     };
-    doc.styles().add(note);
-    doc.list_styles().add(steps);
+    doc.styles().insert(note);
+    doc.styles().insert(steps);
 
     // Built piece by piece: a table is a plain value, filled in and then added.
     table results(3, 2);
     results.row(0).assign("Name", "Value");
     results.row(1).assign("answer", "42");
     results.cell(2, 0).add("pi");
-    results.cell(2, 1).add(paragraph("3.14159").set_style(note));
+    results.cell(2, 1).add(paragraph("3.14159").set_style(note.name()));
 
     doc.add(heading(2, bookmark{"results"}, "A table")).add(results);
 

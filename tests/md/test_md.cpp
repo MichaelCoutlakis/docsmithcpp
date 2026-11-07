@@ -43,21 +43,22 @@ std::string read(const fs::path &path)
 text_doc with_styles()
 {
     text_doc doc;
-    doc.add_style(style("Bold", text_props(font_weight::bold)));
-    doc.add_style(style("Italic", text_props(font_style::italic)));
-    doc.add_style(style("BoldItalic", text_props(font_weight::bold, font_style::italic)));
-    style child("Child");
-    child.m_parent_style = "Bold";
-    doc.add_style(child);
-    doc.add_style(style("Red", text_props(colour::rgb(255, 0, 0))));
+    doc.styles().insert(text_style("Bold", text_props(font_weight::bold)));
+    doc.styles().insert(text_style("Italic", text_props(font_style::italic)));
+    doc.styles().insert(
+        text_style("BoldItalic", text_props(font_weight::bold, font_style::italic)));
+    text_style child("Child");
+    child.parent = "Bold";
+    doc.styles().insert(child);
+    doc.styles().insert(text_style("Red", text_props(colour::rgb(255, 0, 0))));
     return doc;
 }
 
 list_style numbered(std::string name, int start = 1)
 {
     return list_style(name,
-        {list_style_num(style{}, 1, list_enum::arabic, ".", start),
-            list_style_bullet(style{}, 2, bullet_type::bullet())});
+        {number_level{.level = 1, .format = list_enum::arabic, .suffix = ".", .start_from = start},
+            bullet_level{.level = 2, .bullet = bullet_type::bullet()}});
 }
 } // namespace
 
@@ -184,7 +185,7 @@ TEST(Markdown, BookmarksAreAnchors)
 TEST(Markdown, ListsFollowListStyles)
 {
     text_doc doc;
-    const auto num = doc.add_style(numbered("N", 3));
+    const auto num = doc.styles().insert(numbered("N", 3)).first;
     doc.add(list(list_item("a", list(list_item("nested"))), list_item("b")).set_style(num));
     doc.add(paragraph("between"));
     doc.add(list(list_item("x"), list_item("y")));
@@ -352,9 +353,9 @@ TEST(MarkdownInput, Blocks)
     EXPECT_EQ(doc.body[2], block_node{page_break{}});
     EXPECT_EQ(doc.body[3], block_node{paragraph("int x;").set_style(builtin::preformatted)});
 
-    const style *em = doc.styles().find("Emphasis");
+    const text_style *em = doc.styles().text.find("Emphasis");
     ASSERT_NE(em, nullptr);
-    EXPECT_EQ(em->m_text_props->m_font_style, font_style::italic);
+    EXPECT_EQ(em->text.m_font_style, font_style::italic);
 }
 
 TEST(MarkdownInput, InlineContent)
@@ -393,19 +394,19 @@ TEST(MarkdownInput, ListsGetListStyles)
     const text_doc doc = md::parse("1. a\n   - b\n     1. c\n2. d\n\n- e\n\n5. f\n");
     ASSERT_EQ(doc.body.size(), 3U);
     const auto &outer = std::get<list>(doc.body[0].v);
-    EXPECT_EQ(outer.style, style_name("Numbering_20_123"));
+    EXPECT_EQ(outer.style, list_style_name("Numbering_20_123"));
     const auto &inner = std::get<list>(outer.items()[0].children()[1].v);
-    EXPECT_EQ(inner.style, style_name("List_20_1"));
-    EXPECT_EQ(
-        std::get<list>(inner.items()[0].children()[1].v).style, style_name("Numbering_20_123"));
-    EXPECT_EQ(std::get<list>(doc.body[1].v).style, style_name("List_20_1"));
-    EXPECT_EQ(std::get<list>(doc.body[2].v).style, style_name("Numbering_20_123_start_5"));
+    EXPECT_EQ(inner.style, list_style_name("List_20_1"));
+    EXPECT_EQ(std::get<list>(inner.items()[0].children()[1].v).style,
+        list_style_name("Numbering_20_123"));
+    EXPECT_EQ(std::get<list>(doc.body[1].v).style, list_style_name("List_20_1"));
+    EXPECT_EQ(std::get<list>(doc.body[2].v).style, list_style_name("Numbering_20_123_start_5"));
     EXPECT_EQ(outer.items()[1].children(), std::vector<block_node>{block_node{paragraph("d")}});
 
     // A nested list of the same kind continues its parent's style.
     const text_doc same = md::parse("- a\n  - b\n");
     EXPECT_TRUE(
-        std::get<list>(std::get<list>(same.body[0].v).items()[0].children()[1].v).style.is_empty());
+        std::get<list>(std::get<list>(same.body[0].v).items()[0].children()[1].v).style.empty());
 }
 
 TEST(MarkdownInput, Tables)
@@ -503,7 +504,7 @@ TEST(Markdown, ListNumbering)
     // Markdown has no unnumbered item: one at the start goes before the list,
     // a later one is more of the item before it.
     text_doc doc;
-    const auto num = doc.add_style(numbered("N"));
+    const auto num = doc.styles().insert(numbered("N")).first;
     list l(list_item("header"), list_item("one"), list_item("more"), list_item("five"));
     l.set_style(num);
     l.items()[0].numbered = false;

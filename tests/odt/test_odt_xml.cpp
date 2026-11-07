@@ -77,10 +77,12 @@ std::map<std::pair<std::string, std::string>, int> definitions(const pugi::xml_n
 TEST(ODT_XML, StylesGoInStylesXml)
 {
     text_doc doc;
-    auto red = doc.add_style(style("Red", text_props(colour::rgb(255, 0, 0))));
-    auto both = doc.add_style(style("Both", text_props(font_weight::bold)));
+    auto red = doc.styles().insert(text_style("Red", text_props(colour::rgb(255, 0, 0)))).first;
+    auto both = doc.styles().insert(text_style("Both", text_props(font_weight::bold))).first;
+    auto both_para =
+        doc.styles().insert(paragraph_style("Both", text_props(font_weight::bold))).first;
     doc.add(paragraph("Bold ", span("red").set_style(red), span("span").set_style(both))
-            .set_style(both));
+            .set_style(both_para));
     odt::file(doc).save("odt/out/styles_in_styles_xml.odt");
 
     const part styles("odt/out/styles_in_styles_xml.odt", "styles.xml");
@@ -115,12 +117,12 @@ TEST(ODT_XML, ResaveWritesEachDefinitionOnce)
 TEST(ODT_XML, EditedStyleReplacesTheOriginal)
 {
     auto f = odt::file::load("odt/moderate.odt");
-    style *h1 = f.doc.styles().find("Heading_20_1");
+    paragraph_style *h1 = f.doc.styles().find(builtin::heading(1));
     ASSERT_NE(h1, nullptr);
-    h1->m_text_props->set(font_size(20));
-    list_style *l1 = f.doc.list_styles().find("L1");
+    h1->text.set(font_size(20));
+    list_style *l1 = f.doc.styles().list.find("L1");
     ASSERT_NE(l1, nullptr);
-    std::get<list_style_num>(l1->m_level_styles.front()).m_start_from = 3;
+    std::get<number_level>(l1->levels.front()).start_from = 3;
     f.save("odt/out/moderate_edited_style.odt");
 
     const part styles("odt/out/moderate_edited_style.odt", "styles.xml");
@@ -129,8 +131,8 @@ TEST(ODT_XML, EditedStyleReplacesTheOriginal)
     EXPECT_EQ((definitions(automatic_styles_of(content)).at({"L1", "list"})), 1);
 
     const auto again = odt::file::load("odt/out/moderate_edited_style.odt");
-    EXPECT_EQ(*again.doc.styles().find("Heading_20_1"), *h1);
-    EXPECT_EQ(*again.doc.list_styles().find("L1"), *l1);
+    EXPECT_EQ(*again.doc.styles().find(builtin::heading(1)), *h1);
+    EXPECT_EQ(*again.doc.styles().list.find("L1"), *l1);
 }
 
 TEST(ODT_XML, LoadedStylesXmlIsKept)
@@ -193,7 +195,7 @@ TEST(ODT_XML, ReadsWhiteSpaceAsOdfDoes)
 TEST(ODT_XML, PageBreakFoldsIntoNextParagraph)
 {
     text_doc doc;
-    auto note = doc.add_style(style("Note", text_props(font_style::italic)));
+    auto note = doc.styles().insert(paragraph_style("Note", text_props(font_style::italic))).first;
     doc.add(paragraph("one")).add(page_break{}).add(paragraph("two").set_style(note));
     odt::file(doc).save("odt/out/page_break_xml.odt");
 
@@ -316,8 +318,9 @@ TEST(ODT_XML, TableOfContentsEntries)
 TEST(ODT_XML, FontsAreDeclared)
 {
     text_doc doc;
-    doc.add(paragraph("x").set_style(
-        doc.add_style(style("Body", text_props(font_name("Liberation Serif"))))));
+    doc.add(paragraph("x").set_style(doc.styles()
+            .insert(paragraph_style("Body", text_props(font_name("Liberation Serif"))))
+            .first));
     odt::file(doc).save("odt/out/font_faces.odt");
 
     for(const char *name : {"styles.xml", "content.xml"})
@@ -332,9 +335,10 @@ TEST(ODT_XML, FontsAreDeclared)
 TEST(ODT_XML, DisplayNamesForEncodedStyleNames)
 {
     text_doc doc;
-    doc.add(
-        paragraph("x").set_style(doc.add_style(style("Text_20_body", text_props(font_size(11))))));
-    doc.add(paragraph("y").set_style(doc.add_style(style("Plain", text_props(font_size(11))))));
+    doc.add(paragraph("x").set_style(
+        doc.styles().insert(paragraph_style("Text_20_body", text_props(font_size(11)))).first));
+    doc.add(paragraph("y").set_style(
+        doc.styles().insert(paragraph_style("Plain", text_props(font_size(11)))).first));
     odt::file(doc).save("odt/out/display_names.odt");
 
     part styles("odt/out/display_names.odt", "styles.xml");
@@ -375,7 +379,7 @@ TEST(ODT_XML, ListNumbering)
 TEST(ODT_XML, ColumnStyle)
 {
     text_doc doc;
-    doc.add_style(style("Key", style_family::table_cell, cell_props(paragraph_style{"Key"})));
+    doc.styles().insert(cell_style("Key", cell_props(para_style_name("Key"))));
     table t = table::from_cells({{"a", "1"}, {"b", "2"}});
     t.set_column_style(0, "Key");
     doc.add(t);
@@ -401,7 +405,7 @@ TEST(ODT_XML, ColumnStyle)
 TEST(ODT_XML, FontNameIsTheFamily)
 {
     text_doc doc;
-    doc.add_style(style("Sans", style_family::paragraph, text_props(font_name("Liberation Sans"))));
+    doc.styles().insert(paragraph_style("Sans", text_props(font_name("Liberation Sans"))));
     doc.add(paragraph("x").set_style("Sans"));
     odt::file(doc).save("odt/out/font_family.odt");
 
@@ -424,7 +428,7 @@ TEST(ODT_XML, FontNameIsTheFamily)
     pkg.write("odt/out/font_family_renamed.odt");
 
     const auto f = odt::file::load("odt/out/font_family_renamed.odt");
-    EXPECT_EQ(f.doc.styles().find("Sans")->m_text_props->m_font_name, font_name("Liberation Sans"));
+    EXPECT_EQ(f.doc.styles().para.find("Sans")->text.m_font_name, font_name("Liberation Sans"));
     EXPECT_NE(html::file(f.doc).to_string().find(R"(font-family: "Liberation Sans";)"),
         std::string::npos);
 
@@ -459,17 +463,14 @@ namespace
 text_doc defaults_doc()
 {
     text_doc doc;
-    doc.add_style(style(builtin::default_paragraph,
-        style_family::paragraph,
+    doc.styles().insert(paragraph_style(builtin::para,
         text_props(font_name("Liberation Serif"), font_size(11)),
         paragraph_props(space_after{pt(6)})));
-    doc.add_style(
-        style(builtin::heading(1), style_family::paragraph, text_props(font_weight::bold)));
-    doc.add_style(style(builtin::link, style_family::text, text_props(colour::rgb(0, 0, 200))));
-    doc.add_style(
-        style(builtin::default_table, style_family::table, table_props(cell_padding{pt(2)})));
-    doc.add_style(
-        list_style(builtin::default_list, {list_style_num(style{}, 1, list_enum::arabic, ".", 1)}));
+    doc.styles().insert(paragraph_style(builtin::heading(1), text_props(font_weight::bold)));
+    doc.styles().insert(text_style(builtin::link, text_props(colour::rgb(0, 0, 200))));
+    doc.styles().insert(table_style(builtin::table, table_props(cell_padding{pt(2)})));
+    doc.styles().insert(list_style(builtin::list,
+        {number_level{.level = 1, .format = list_enum::arabic, .suffix = ".", .start_from = 1}}));
     list_item nested("one");
     nested.add(list(list_item("one.one")));
     doc.add(heading(1, "Introduction"))
@@ -515,23 +516,23 @@ TEST(ODT_XML, DefaultStyles)
     for(size_t i : {0, 1, 3})
         EXPECT_EQ(back.body[i], doc.body[i]) << "the defaults read back as no style";
     const auto &t = std::get<table>(back.body[2].v);
-    EXPECT_TRUE(t.style.is_empty());
+    EXPECT_TRUE(t.style.empty());
     EXPECT_EQ(effective_cell_props(t, back.styles(), 0, 0).m_padding, pt(2));
-    for(const auto &sn :
-        {builtin::default_paragraph, builtin::heading(1), builtin::link, builtin::default_table})
-        ASSERT_NE(back.styles().find(sn.get_name()), nullptr) << sn.get_name();
-    EXPECT_EQ(back.styles().find(builtin::default_paragraph.get_name())->m_text_props,
-        doc.styles().find(builtin::default_paragraph.get_name())->m_text_props);
-    EXPECT_NE(back.list_styles().find(builtin::default_list.get_name()), nullptr);
+    ASSERT_NE(back.styles().find(builtin::para), nullptr);
+    ASSERT_NE(back.styles().find(builtin::heading(1)), nullptr);
+    ASSERT_NE(back.styles().find(builtin::link), nullptr);
+    ASSERT_NE(back.styles().find(builtin::table), nullptr);
+    EXPECT_EQ(back.styles().find(builtin::para)->text, doc.styles().find(builtin::para)->text);
+    EXPECT_NE(back.styles().find(builtin::list), nullptr);
 }
 
 // A template's defaults are what content added to it gets.
 TEST(ODT_XML, LoadedDefaultStyles)
 {
     auto f = odt::file::load("odt/moderate.odt");
-    EXPECT_NE(f.doc.styles().find(builtin::default_paragraph.get_name()), nullptr);
+    EXPECT_NE(f.doc.styles().find(builtin::para), nullptr);
     for(const paragraph *p : find_all<paragraph>(f.doc, [](const paragraph &) { return true; }))
-        EXPECT_FALSE(p->style == builtin::default_paragraph) << "read as no style";
+        EXPECT_FALSE(p->style == builtin::para) << "read as no style";
 }
 
 // LibreOffice applies a style only if the file defines it, its own Heading 1
@@ -551,21 +552,20 @@ TEST(ODT_XML, BuiltinHeadingAndLinkStylesAreDefined)
 }
 
 // A template's defaults are loaded as the builtin styles. Replacing one, or
-// editing the one builtin_style() gives, is what is saved, in place.
+// editing the one styles()[] gives, is what is saved, in place.
 TEST(ODT_XML, TemplateDefaultStylesCanBeReplacedOrEdited)
 {
     auto f = odt::file::load("odt/moderate.odt");
-    style *h1 = &f.doc.builtin_style(builtin::heading(1));
-    EXPECT_EQ(h1->m_parent_style, style_name("Heading")) << "as LibreOffice defines it";
-    ASSERT_NE(f.doc.styles().find(builtin::default_paragraph.get_name()), nullptr);
-    ASSERT_NE(f.doc.styles().find(builtin::link.get_name()), nullptr);
+    paragraph_style *h1 = &f.doc.styles()[builtin::heading(1)];
+    EXPECT_EQ(h1->parent, para_style_name("Heading")) << "as LibreOffice defines it";
+    ASSERT_NE(f.doc.styles().find(builtin::para), nullptr);
+    ASSERT_NE(f.doc.styles().find(builtin::link), nullptr);
 
     // Edited in place: the rest of its definition stays.
-    h1->text().set(font_size(20));
+    h1->text.set(font_size(20));
     // Replaced.
-    f.doc.add_or_overwrite_style(style(builtin::default_paragraph,
-        style_family::paragraph,
-        text_props(font_name("Liberation Sans"), font_size(11))));
+    f.doc.styles().insert_or_assign(
+        paragraph_style(builtin::para, text_props(font_name("Liberation Sans"), font_size(11))));
     f.doc.add(paragraph("added"));
     f.save("odt/out/template_defaults.odt");
 
@@ -577,12 +577,12 @@ TEST(ODT_XML, TemplateDefaultStylesCanBeReplacedOrEdited)
         1U);
 
     const auto back = odt::file::load("odt/out/template_defaults.odt").doc;
-    const style *h1_back = back.styles().find(builtin::heading(1).get_name());
+    const paragraph_style *h1_back = back.styles().find(builtin::heading(1));
     ASSERT_NE(h1_back, nullptr);
-    EXPECT_EQ(h1_back->m_parent_style, style_name("Heading"));
-    EXPECT_EQ(h1_back->m_text_props->m_font_size, font_size(20));
-    const style *standard = back.styles().find(builtin::default_paragraph.get_name());
+    EXPECT_EQ(h1_back->parent, para_style_name("Heading"));
+    EXPECT_EQ(h1_back->text.m_font_size, font_size(20));
+    const paragraph_style *standard = back.styles().find(builtin::para);
     ASSERT_NE(standard, nullptr);
-    EXPECT_EQ(standard->m_text_props, text_props(font_name("Liberation Sans"), font_size(11)));
-    EXPECT_TRUE(std::get<paragraph>(back.body.back().v).style.is_empty());
+    EXPECT_EQ(standard->text, text_props(font_name("Liberation Sans"), font_size(11)));
+    EXPECT_TRUE(std::get<paragraph>(back.body.back().v).style.empty());
 }
