@@ -73,7 +73,8 @@ class text_doc
 public:
     text_doc() = default;
 
-    template <typename... Args, typename = content_ctor_t<text_doc, Args...>>
+    template <typename... Args>
+        requires content_args<text_doc, block_node, Args...>
     text_doc(Args &&...args) :
         body{to_block(std::forward<Args>(args))...}
     {
@@ -84,7 +85,7 @@ public:
         body.push_back(std::move(b));
         return *this;
     }
-    template <typename T>
+    template <block_content T>
     text_doc &add(T &&content)
     {
         body.push_back(to_block(std::forward<T>(content)));

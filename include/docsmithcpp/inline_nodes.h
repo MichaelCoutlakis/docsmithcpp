@@ -78,7 +78,8 @@ class span : public styled<span>, public has_children<inline_node, span, true>
 {
 public:
     span() = default;
-    template <typename... Args, typename = content_ctor_t<span, Args...>>
+    template <typename... Args>
+        requires content_args<span, inline_node, Args...>
     span(Args &&...content)
     {
         (this->add(std::forward<Args>(content)), ...);
@@ -126,8 +127,11 @@ public:
     {
     }
     /// A target (as for the one-argument constructors) followed by content.
-    template <typename Target, typename... Args,
-        typename = std::enable_if_t<(sizeof...(Args) >= 1)>>
+    template <typename Target, typename... Args>
+        requires(sizeof...(Args) >= 1) &&
+        (one_of<Target, link_target, url_target, bookmark_target, bookmark> ||
+            std::convertible_to<Target, std::string>) &&
+        (inline_content<Args> && ...)
     hyperlink(Target &&t, Args &&...content) :
         hyperlink(std::forward<Target>(t))
     {

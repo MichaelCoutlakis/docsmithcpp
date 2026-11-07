@@ -121,7 +121,8 @@ class list_item : public has_children<block_node, list_item, true>
 {
 public:
     list_item() = default;
-    template <typename... Args, typename = content_ctor_t<list_item, Args...>>
+    template <typename... Args>
+        requires content_args<list_item, block_node, Args...>
     list_item(Args &&...content)
     {
         (this->add(std::forward<Args>(content)), ...);
@@ -141,7 +142,11 @@ class list : public styled<list>
 {
 public:
     list() = default;
-    template <typename... Args, typename = content_ctor_t<list, Args...>>
+    /// Items, or content that makes one each (list("a", "b")).
+    template <typename... Args>
+        requires(sizeof...(Args) >= 1) &&
+        ((std::convertible_to<Args, list_item> && !std::is_same_v<std::remove_cvref_t<Args>, list>) &&
+            ...)
     list(Args &&...items)
     {
         (add(std::forward<Args>(items)), ...);

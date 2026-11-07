@@ -42,7 +42,8 @@ public:
     cell_props props;
 
     table_cell() = default;
-    template <typename... Args, typename = content_ctor_t<table_cell, Args...>>
+    template <typename... Args>
+        requires content_args<table_cell, block_node, Args...>
     table_cell(Args &&...content)
     { (this->add(std::forward<Args>(content)), ...); }
 
@@ -77,7 +78,7 @@ public:
     }
 
     /// Replace the contents of each viewed cell, in order, with one block each.
-    template <typename... Args>
+    template <block_content... Args>
     cell_view &assign(Args &&...args)
     {
         size_t idx = 0;

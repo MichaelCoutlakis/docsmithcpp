@@ -34,13 +34,13 @@ struct page_style
 
     /// Replaces the header with content, e.g.
     /// set_header(paragraph(field{field_type::title})).
-    template <typename... Args>
+    template <block_content... Args>
     page_style &set_header(Args &&...content)
     {
         header = {to_block(std::forward<Args>(content))...};
         return *this;
     }
-    template <typename... Args>
+    template <block_content... Args>
     page_style &set_footer(Args &&...content)
     {
         footer = {to_block(std::forward<Args>(content))...};

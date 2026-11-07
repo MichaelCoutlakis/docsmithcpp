@@ -291,3 +291,17 @@ TEST(BASIC_USAGE, PropsCopyFromNonConst)
     EXPECT_EQ(cp_copy, cp);
     EXPECT_EQ(tbp_copy, tbp);
 }
+
+// Content of the wrong level is rejected at the call, not deep in std::variant.
+static_assert(std::is_constructible_v<paragraph, const char *, span, hyperlink>);
+static_assert(!std::is_constructible_v<span, paragraph>);
+static_assert(!std::is_constructible_v<paragraph, table>);
+static_assert(!std::is_constructible_v<heading, int, list>);
+static_assert(std::is_constructible_v<table_cell, paragraph, table>);
+static_assert(!std::is_constructible_v<text_doc, span>);
+static_assert(std::is_constructible_v<list, const char *, list_item>);
+template <typename N, typename T>
+concept can_add = requires(N n, T t) { n.add(t); };
+static_assert(can_add<paragraph, text>);
+static_assert(!can_add<paragraph, table>);
+static_assert(!can_add<text_doc, span>);

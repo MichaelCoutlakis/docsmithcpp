@@ -51,7 +51,8 @@ class paragraph : public styled<paragraph>, public has_children<inline_node, par
 {
 public:
     paragraph() = default;
-    template <typename... Args, typename = content_ctor_t<paragraph, Args...>>
+    template <typename... Args>
+        requires content_args<paragraph, inline_node, Args...>
     paragraph(Args &&...content)
     {
         (this->add(std::forward<Args>(content)), ...);
@@ -70,7 +71,8 @@ public:
         level(lvl)
     {
     }
-    template <typename... Args, typename = std::enable_if_t<(sizeof...(Args) >= 1)>>
+    template <typename... Args>
+        requires(sizeof...(Args) >= 1) && (inline_content<Args> && ...)
     heading(int lvl, Args &&...content) :
         level(lvl)
     {

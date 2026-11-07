@@ -78,6 +78,11 @@ held in `std::variant`. This is a breaking change to almost every public API.
   directory. Generated test files go to `tests/odt/out/`.
 
 ### Added
+- **Content concepts**: `inline_content`, `block_content` and `content_for` constrain
+  `add()`, the variadic content constructors, `cell_view::assign()` and
+  `page_style::set_header()` / `set_footer()`. Content of the wrong level, such as
+  a paragraph in a span, fails at the call with "no matching constructor" rather
+  than deep inside `std::variant`. They replace `content_ctor_t`.
 - **Default styles**: `builtin::default_paragraph`, `builtin::heading(level)`,
   `builtin::link`, `builtin::default_table` and the list style
   `builtin::default_list` are the styles of nodes with none of their own. Define

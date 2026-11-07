@@ -23,6 +23,7 @@
 // this; the variants themselves are defined later, once their alternatives are
 // complete.
 
+#include <concepts>
 #include <string>
 #include <type_traits>
 #include <vector>
@@ -52,12 +53,51 @@ block_node to_block(block_node n);
 template <typename T>
 block_node to_block(T node);
 
-// Guard for variadic content constructors: enabled only for >= 1 arguments,
-// none of which is the node type itself -- so a single same-type argument still
-// selects the copy/move constructor (nesting a same-type child uses .add()).
-template <typename Self, typename... Args>
-using content_ctor_t = std::enable_if_t<
-    (sizeof...(Args) >= 1) && (... && !std::is_same_v<std::decay_t<Args>, Self>)>;
+// The node types, for the content concepts below.
+struct text;
+struct bookmark;
+class frame;
+class span;
+class hyperlink;
+struct field;
+struct unknown;
+class paragraph;
+class heading;
+class list;
+class table;
+struct page_break;
+struct table_of_contents;
+
+template <typename T, typename... Ts>
+concept one_of = (std::is_same_v<std::remove_cvref_t<T>, Ts> || ...);
+
+/// What a paragraph, heading, span or hyperlink takes as a child: an inline
+/// node, or a string, which is text.
+template <typename T>
+concept inline_content =
+    one_of<T, inline_node, text, span, hyperlink, frame, bookmark, field, unknown> ||
+    std::convertible_to<T, std::string>;
+
+/// What a document, list item or table cell takes as a child: a block node,
+/// or a string, which is a paragraph.
+template <typename T>
+concept block_content =
+    one_of<T, block_node, paragraph, heading, list, table, frame, page_break, table_of_contents,
+        unknown> ||
+    std::convertible_to<T, std::string>;
+
+/// T is content for a sequence of Child (inline_node or block_node).
+template <typename T, typename Child>
+concept content_for = (std::is_same_v<Child, inline_node> && inline_content<T>) ||
+    (std::is_same_v<Child, block_node> && block_content<T>);
+
+/// Arguments for a variadic content constructor of Self: one or more, each
+/// content for Child and none of them a Self -- so a single same-type argument
+/// still selects the copy/move constructor (nesting a same-type child uses
+/// .add()).
+template <typename Self, typename Child, typename... Args>
+concept content_args = (sizeof...(Args) >= 1) &&
+    ((content_for<Args, Child> && !std::is_same_v<std::remove_cvref_t<Args>, Self>) && ...);
 
 /// CRTP mixin: a node's child sequence, plus children()/add()/iteration.
 /// When Boxed is true the storage is routed through box<> to break the variant
@@ -87,7 +127,7 @@ public:
     auto begin() const { return children().begin(); }
     auto end() const { return children().end(); }
 
-    template <typename T>
+    template <content_for<Child> T>
     Derived &add(T &&content)
     {
         if constexpr(std::is_same_v<Child, inline_node>)
