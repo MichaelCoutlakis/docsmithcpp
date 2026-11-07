@@ -650,7 +650,10 @@ TEST(ODT, PageBreaksRoundTrip)
     const auto again = odt::file::load("odt/out/page_breaks.odt");
     print_compare(doc, again.doc);
     EXPECT_EQ(again.doc.body, doc.body);
-    EXPECT_EQ(again.doc.styles().size(), 1U) << "the writer's break styles aren't loaded";
+    // Note, and the Heading 1 the writer defined for the heading; the writer's
+    // break styles aren't loaded.
+    EXPECT_EQ(again.doc.styles().size(), 2U);
+    EXPECT_NE(again.doc.styles().find(builtin::heading(1).get_name()), nullptr);
 
     // Saved again, same again.
     again.save("odt/out/page_breaks_resaved.odt");

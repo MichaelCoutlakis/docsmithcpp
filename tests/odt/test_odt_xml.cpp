@@ -533,3 +533,19 @@ TEST(ODT_XML, LoadedDefaultStyles)
     for(const paragraph *p : find_all<paragraph>(f.doc, [](const paragraph &) { return true; }))
         EXPECT_FALSE(p->style == builtin::default_paragraph) << "read as no style";
 }
+
+// LibreOffice applies a style only if the file defines it, its own Heading 1
+// too, so the writer defines the default heading and link styles it uses.
+TEST(ODT_XML, BuiltinHeadingAndLinkStylesAreDefined)
+{
+    odt::file(text_doc{heading(2, "Results"), paragraph(hyperlink("https://example.com", "site"))})
+        .save("odt/out/builtin_heading.odt");
+    const part styles("odt/out/builtin_heading.odt", "styles.xml");
+    auto h2 = styles.xml.select_node("//style:style[@style:name='Heading_20_2']").node();
+    ASSERT_TRUE(h2);
+    EXPECT_STREQ(h2.child("style:text-properties").attribute("fo:font-weight").as_string(), "bold");
+    EXPECT_STREQ(h2.attribute("style:default-outline-level").as_string(), "2");
+    EXPECT_TRUE(styles.xml.select_node("//style:style[@style:name='Internet_20_link']"));
+    EXPECT_FALSE(styles.xml.select_node("//style:style[@style:name='Heading_20_1']"))
+        << "only the levels used";
+}

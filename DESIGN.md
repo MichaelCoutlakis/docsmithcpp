@@ -308,7 +308,9 @@ Names in `builtin` are styles writers know without a definition in
 and logs) and `source_text` (monospace text within a line). They are
 LibreOffice's own Title, Preformatted Text and Source Text, so ODT defines each
 as LibreOffice does when the document uses it and neither the document nor the
-loaded file defines it. HTML writes the class and leaves its look to
+loaded file defines it. It does the same for the default heading styles (as the
+DOCX writer's: sans, bold, kept with the next paragraph) and Internet Link:
+LibreOffice applies a style only if the file defines it, even one of its own. HTML writes the class and leaves its look to
 `html::file::css`, except that a preformatted paragraph is `<pre>` and a source
 text span `<code>`, as is anything styled with a style based on them.
 

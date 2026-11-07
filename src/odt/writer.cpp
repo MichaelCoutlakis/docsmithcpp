@@ -139,20 +139,52 @@ std::string contents_style(int level)
         R"~~(cm" style:type="right" style:leader-style="dotted" style:leader-text="."/></style:tab-stops></style:paragraph-properties></style:style>)~~";
 }
 
+// LibreOffice's Internet Link.
+constexpr const char *link_style =
+    R"~~(<style:style style:name="Internet_20_link" style:display-name="Internet Link" style:family="text"><style:text-properties fo:color="#000080" style:text-underline-style="solid" style:text-underline-width="auto" style:text-underline-color="font-color"/></style:style>)~~";
+
+/// A heading level's style, as the DOCX writer's: sans, bold, kept with the
+/// next paragraph.
+std::string heading_style(int level)
+{
+    constexpr int sizes[] = {18, 16, 14, 13, 12, 11, 11, 10, 10, 10};
+    const std::string n = std::to_string(level);
+    const std::string size = std::to_string(sizes[level - 1]) + "pt";
+    return R"~~(<style:style style:name="Heading_20_)~~" + n +
+        R"~~(" style:display-name="Heading )~~" + n +
+        R"~~(" style:family="paragraph" style:parent-style-name="Standard" style:next-style-name="Standard" style:default-outline-level=")~~" +
+        n +
+        R"~~(" style:class="text"><style:paragraph-properties fo:margin-top="12pt" fo:margin-bottom="6pt" fo:keep-with-next="always"/><style:text-properties fo:font-family="'Liberation Sans'" style:font-family-generic="swiss" fo:font-size=")~~" +
+        size + R"~~(" fo:font-weight="bold" style:font-size-asian=")~~" + size +
+        R"~~(" style:font-weight-asian="bold" style:font-size-complex=")~~" + size +
+        R"~~(" style:font-weight-complex="bold"/></style:style>)~~";
+}
+
 /// The builtin styles the writer defines when the document uses one and
-/// neither it nor the loaded file defines it. LibreOffice knows them without a
-/// definition; other readers may not.
+/// neither it nor the loaded file defines it: LibreOffice applies a style only
+/// if the file defines it, even one of its own such as Heading 1.
 struct builtin_def
 {
-    const style_name &name;
+    style_name name;
     style_family family;
-    const char *xml;
+    std::string xml;
 };
-const builtin_def builtin_defs[] = {
-    {builtin::title, style_family::paragraph, title_style},
-    {builtin::preformatted, style_family::paragraph, preformatted_style},
-    {builtin::source_text, style_family::text, source_text_style},
-};
+const std::vector<builtin_def> &builtin_defs()
+{
+    static const std::vector<builtin_def> defs = []
+    {
+        std::vector<builtin_def> out{
+            {builtin::title, style_family::paragraph, title_style},
+            {builtin::preformatted, style_family::paragraph, preformatted_style},
+            {builtin::source_text, style_family::text, source_text_style},
+            {builtin::link, style_family::text, link_style},
+        };
+        for(int level = 1; level <= 10; ++level)
+            out.push_back({builtin::heading(level), style_family::paragraph, heading_style(level)});
+        return out;
+    }();
+    return defs;
+}
 
 /// The families each style name is used with in the body.
 std::map<std::string, std::set<style_family>> used_families(const text_doc &doc)
@@ -392,10 +424,10 @@ void writer::write_styles(const text_doc &doc)
             for(auto decls : {fonts, m_font_faces})
                 add_font_face(decls, s->m_text_props->m_font_name->get_name());
 
-    for(const auto &b : builtin_defs)
+    for(const auto &b : builtin_defs())
         if(auto it = used.find(b.name.get_name()); it != used.end() &&
             it->second.contains(b.family) && !find_style(m_styles, b.name.get_name(), b.family))
-            m_styles.append_buffer(b.xml, std::strlen(b.xml));
+            m_styles.append_buffer(b.xml.data(), b.xml.size());
 }
 
 // Archive path for an image. A document resource is embedded under its name; an

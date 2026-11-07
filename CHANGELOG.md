@@ -84,7 +84,10 @@ held in `std::variant`. This is a breaking change to almost every public API.
   one to style every unstyled paragraph, heading, link, table or list in every
   format; a loaded template's defaults (LibreOffice's Default Paragraph Style,
   Heading 1, Internet Link; Word's Normal, Heading 1, Hyperlink, Normal Table)
-  read as these definitions, with the nodes using them unstyled.
+  read as these definitions, with the nodes using them unstyled. ODT headings
+  and links now have LibreOffice's Heading n and Internet Link, defined when the
+  file doesn't (LibreOffice applies only defined styles), so a document built in
+  code no longer opens with plain headings.
 - **Paragraph spacing and alignment**: `paragraph_props` holds space above and below
   (`space_before`, `space_after`), indents (`indent_start`, `indent_end`,
   `first_line_indent`, negative for hanging), alignment (`text_align`) and
