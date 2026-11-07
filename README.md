@@ -134,12 +134,12 @@ a package manager that names them differently is fine:
 ```cmake
 find_package(pugixml CONFIG REQUIRED)
 find_package(miniz CONFIG REQUIRED)
-# or, e.g. with Conan's names: add_library(pugixml::pugixml ALIAS Pugi::xml)
+# or, e.g. if a package manager names targets differently, say `Pugi::xml`: add_library(pugixml::pugixml ALIAS Pugi::xml)
 ```
 
 Built with `DOCSMITHCPP_MARKDOWN`, the `docsmith::docsmithcpp` target defines
-`DOCSMITHCPP_MARKDOWN` for its users, which `md/file.h` uses to declare the input
-functions. Markdown output needs nothing, so it is always built.
+`DOCSMITHCPP_MARKDOWN` for its users, which `md/file.h` uses to declare the
+input functions. Markdown output needs nothing, so it is always built.
 
 Installed, with `find_package`:
 
@@ -189,9 +189,8 @@ every file they wrote. Skip it with `ctest -LE libreoffice`.
 The `consumer` test installs the library into the build directory and builds
 `tests/consumer/` against it with `find_package`, using the same toolchain. It
 also checks that `find_package(DocSmithCpp)` fails, naming the targets, when the
-consumer hasn't found the dependencies. It
-configures a project from scratch, so skip it with `ctest -LE consumer` when
-iterating.
+consumer hasn't found the dependencies. It configures a project from scratch, so
+skip it with `ctest -LE consumer` when iterating.
 
 ### 🤔 Examples
 
