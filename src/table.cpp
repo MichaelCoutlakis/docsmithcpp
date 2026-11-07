@@ -53,7 +53,7 @@ const table_cell &table::cell(size_t r, size_t c) const
     return m_cells[r * m_cols + c];
 }
 
-table &table::add_row(std::vector<table_cell> cells, row_style_name row_style)
+table &table::add_row(std::vector<table_cell> cells, row_style_name row_style) &
 {
     if(m_rows.empty() && m_cols == 0)
     {
@@ -78,13 +78,13 @@ void table::remove_row(size_t r)
         --m_header_rows;
 }
 
-table &table::set_row_style(size_t r, row_style_name sn)
+table &table::set_row_style(size_t r, row_style_name sn) &
 {
     m_rows.at(r).style = std::move(sn);
     return *this;
 }
 
-table &table::set_column_widths(const std::vector<double> &widths)
+table &table::set_column_widths(const std::vector<double> &widths) &
 {
     if(widths.size() != m_cols)
         throw std::invalid_argument("one width per column");
@@ -93,13 +93,13 @@ table &table::set_column_widths(const std::vector<double> &widths)
     return *this;
 }
 
-table &table::set_column_width(size_t c, std::optional<double> width)
+table &table::set_column_width(size_t c, std::optional<double> width) &
 {
     m_columns.at(c).width = width;
     return *this;
 }
 
-table &table::set_column_style(size_t c, cell_style_name sn)
+table &table::set_column_style(size_t c, cell_style_name sn) &
 {
     m_columns.at(c).style = std::move(sn);
     return *this;
@@ -234,22 +234,22 @@ void table::set_vert_line(const std::vector<size_t> &origins, size_t i, const bo
     }
 }
 
-table &table::apply_borders(const border &b)
+table &table::apply_borders(const border &b) &
 {
     apply_horiz_borders(lines::all, b);
     return apply_vert_borders(lines::all, b);
 }
 
-table &table::apply_outer_border(const border &b)
+table &table::apply_outer_border(const border &b) &
 {
     apply_horiz_borders(lines::outer, b);
     return apply_vert_borders(lines::outer, b);
 }
 
-table &table::apply_horiz_borders(lines which, const border &b)
+table &table::apply_horiz_borders(lines which, const border &b) &
 { return apply_horiz_borders(line_indices(which, num_rows()), b); }
 
-table &table::apply_horiz_borders(const std::vector<size_t> &which, const border &b)
+table &table::apply_horiz_borders(const std::vector<size_t> &which, const border &b) &
 {
     const auto o = origins();
     for(size_t i : which)
@@ -257,10 +257,10 @@ table &table::apply_horiz_borders(const std::vector<size_t> &which, const border
     return *this;
 }
 
-table &table::apply_vert_borders(lines which, const border &b)
+table &table::apply_vert_borders(lines which, const border &b) &
 { return apply_vert_borders(line_indices(which, num_cols()), b); }
 
-table &table::apply_vert_borders(const std::vector<size_t> &which, const border &b)
+table &table::apply_vert_borders(const std::vector<size_t> &which, const border &b) &
 {
     const auto o = origins();
     for(size_t i : which)
@@ -268,7 +268,7 @@ table &table::apply_vert_borders(const std::vector<size_t> &which, const border 
     return *this;
 }
 
-table &table::apply_row_borders(const std::vector<size_t> &rows, edge edges, const border &b)
+table &table::apply_row_borders(const std::vector<size_t> &rows, edge edges, const border &b) &
 {
     std::vector<size_t> which;
     for(size_t r : rows)
@@ -281,7 +281,7 @@ table &table::apply_row_borders(const std::vector<size_t> &rows, edge edges, con
     return apply_horiz_borders(which, b);
 }
 
-table &table::apply_column_borders(const std::vector<size_t> &cols, edge edges, const border &b)
+table &table::apply_column_borders(const std::vector<size_t> &cols, edge edges, const border &b) &
 {
     std::vector<size_t> which;
     for(size_t c : cols)

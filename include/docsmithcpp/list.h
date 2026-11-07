@@ -17,6 +17,7 @@
  *****************************************************************************/
 #pragma once
 #include <optional>
+#include <utility>
 #include <vector>
 
 #include "docsmithcpp/nodes_fwd.h"
@@ -63,11 +64,12 @@ public:
         (add(std::forward<Args>(items)), ...);
     }
 
-    list &add(list_item it)
+    list &add(list_item it) &
     {
         m_items.push_back(std::move(it));
         return *this;
     }
+    list &&add(list_item it) && { return std::move(add(std::move(it))); }
 
     std::vector<list_item> &items() { return m_items; }
     const std::vector<list_item> &items() const { return m_items; }

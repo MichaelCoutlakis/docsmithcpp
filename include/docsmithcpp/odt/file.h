@@ -59,9 +59,4 @@ private:
     box<impl> m_impl; // pimpl: copyable, and hides the archive / XML libraries
 };
 
-/// Saves doc as a new .odt, as odt::file(doc).save(p) does, without copying
-/// doc. To keep what a loaded file holds beyond the model, save the
-/// odt::file it was loaded into instead.
-void save(const text_doc &doc, const std::filesystem::path &p);
-
 } // namespace docsmith::odt

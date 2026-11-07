@@ -591,8 +591,5 @@ void write_package(const text_doc &doc, odf::package out, const std::filesystem:
 
 void file::save(const std::filesystem::path &p) const { write_package(doc, m_impl->pkg, p); }
 
-void save(const text_doc &doc, const std::filesystem::path &p)
-{ write_package(doc, odf::package(odt_mimetype), p); }
-
 } // namespace odt
 } // namespace docsmith

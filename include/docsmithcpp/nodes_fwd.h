@@ -26,6 +26,7 @@
 #include <concepts>
 #include <string>
 #include <type_traits>
+#include <utility>
 #include <vector>
 
 #include "docsmithcpp/box.h"
@@ -127,8 +128,9 @@ public:
     auto begin() const { return items().begin(); }
     auto end() const { return items().end(); }
 
+    /// On a temporary, add() returns an rvalue, as styled::set_style() does.
     template <content_for<Child> T>
-    Derived &add(T &&content)
+    Derived &add(T &&content) &
     {
         if constexpr(std::is_same_v<Child, inline_node>)
             items().push_back(to_inline(std::forward<T>(content)));
@@ -136,6 +138,9 @@ public:
             items().push_back(to_block(std::forward<T>(content)));
         return static_cast<Derived &>(*this);
     }
+    template <content_for<Child> T>
+    Derived &&add(T &&content) &&
+    { return std::move(add(std::forward<T>(content))); }
 
     bool operator==(const has_children &) const = default;
 

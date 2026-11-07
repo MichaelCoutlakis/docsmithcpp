@@ -233,8 +233,8 @@ int main() {
     auto &body = hello.styles()[builtin::para];
     body.text.set(font_name("Liberation Serif")).set(font_size(11));
     body.para.set(space_after{pt(6)});
-    odt::save(hello, "hello_world.odt");
-    docx::save(hello, "hello_world.docx");
+    odt::file(hello).save("hello_world.odt");
+    docx::file(hello).save("hello_world.docx");
     html::save(hello, "hello_world.html");
     md::save(hello, "hello_world.md");
 
@@ -275,7 +275,7 @@ int main() {
         return 1;
     report.doc.page.set_footer(paragraph("Page ", field{field_type::page_number}));
     report.save("report.odt");
-    docx::save(report.doc, "report.docx"); // the same report for Word
+    docx::file(report.doc).save("report.docx"); // the same report for Word
 }
 ```
 

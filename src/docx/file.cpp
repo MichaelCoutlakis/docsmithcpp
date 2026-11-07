@@ -66,11 +66,4 @@ void file::save(const std::filesystem::path &p) const
     st.pkg.write(p);
 }
 
-void save(const text_doc &doc, const std::filesystem::path &p)
-{
-    state st;
-    write_document(doc, st);
-    st.pkg.write(p);
-}
-
 } // namespace docsmith::docx

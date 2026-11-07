@@ -139,7 +139,7 @@ found_block find_placeholder(std::vector<block_node> &blocks, const placeholder 
 
 } // namespace
 
-text_doc &text_doc::append(const text_doc &other)
+text_doc &text_doc::append(const text_doc &other) &
 {
     if(&other == this)
         return append(text_doc(other));
@@ -221,7 +221,7 @@ const paragraph *text_doc::find_title() const
     return titles.empty() ? nullptr : titles.front();
 }
 
-text_doc &text_doc::set_title(std::string text)
+text_doc &text_doc::set_title(std::string text) &
 {
     paragraph p = paragraph(std::move(text)).set_style(builtin::title);
     if(paragraph *existing = find_title())

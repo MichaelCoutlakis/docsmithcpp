@@ -16,7 +16,74 @@ yardstick.
 Once the above is in, move `[Unreleased]` in `CHANGELOG.md` to `[0.1.0]` and
 tag it.
 
-## 2. After 0.1.0
+## 2. For 0.2.0: API review
+
+Usability points from a review of the public API. None loses content; each is
+a way a new user is likely to get surprised.
+
+### New styles don't inherit from the default
+
+`paragraph_style("Note", ...)` takes only properties, so `parent` is set after
+construction, and a style added in one line with `styles().insert(...)` has
+none. ODF and DOCX derive a style with no parent from the format's base
+properties, not from `Standard` / `Normal`, so a font set on `builtin::para`
+doesn't reach it (DESIGN.md, *Default styles*). Either take the parent in the
+constructor (a `based_on(name)` argument among the properties) or make
+`builtin::para` the default parent of a new paragraph style. The second
+changes what loaded styles with no parent mean, so it needs care in the
+readers. Start in `include/docsmithcpp/style.h`.
+
+### Placeholders within a paragraph, and every match
+
+`text_doc::replace()` and `insert_*()` fill a whole block, the first that
+matches. A report's usual placeholder is in a line of text ("Date: {{date}}",
+"Run {{id}} passed"), which can't be filled, and one used twice (in the header
+and the body) needs a loop. Add a fill for text within a paragraph (inline
+content in place of the placeholder's text, across spans), and a way to fill
+every match (`replace_all()`, or a count). Start in `src/text_doc.cpp`.
+
+### One way to reach a node's children
+
+`text_doc` has `body`, `page_style` `header` and `footer`; `paragraph`, `span`,
+`list_item` and `table_cell` have `items()` and range-for; `list` has `items()`
+but no `begin()` / `end()`; `table` has `cells()` and `cell(r, c)`. Code that
+works over nodes has to know which. At least give `list` iteration, and decide
+whether `text_doc` and `page_style` expose their blocks the same way.
+
+`cell_view` (`table::row()`, `col()`) can't be iterated, sets only the style
+and background (no `set_props()`, no borders), and `assign()` with more values
+than cells throws partway through, having changed some.
+
+### Traversal ergonomics
+
+`walk()` calls its callback with every node type, `image`, `list_item` and
+`table_cell` included, so a lambda for one type fails with a long template
+error, and callers write `overloaded{..., [](auto &) {}}` each time. Consider a
+typed `walk<T>(doc, f)`, and a `find_first<T>()` (there's no early exit). The
+pointers `collect()` and `find_all()` return are invalidated by `add()`,
+`replace()` and `insert_*()`, which is easy to trip over when finding a place
+and then filling it; say so in `visit.h` at least.
+
+### Reading properties back
+
+Setting a property reads well (`.set(font_size(11))`); reading it back shows
+the `m_` naming of the property value types (`style.text.m_font_size->m_points`,
+`cell_borders{.m_top = ...}`), next to bare names on nodes and styles
+(CONTRIBUTING.md, *Conventions*). Consider bare public names on the value
+types, or accessors (`font_size()->points()`).
+
+### Saving a document without copying it
+
+`odt::save(doc, p)` and `docx::save(doc, p)` were removed: next to
+`file::save()` they were an easy way to drop what a loaded file keeps beyond
+the model. (`html::save()` and `md::save()` stay: those files hold nothing
+loaded.) `odt::file(doc).save(p)` copies `doc` into the file (resources are
+shared, the tree and style sheet aren't). If the copy matters, add a way that
+can't be mistaken for saving a loaded file, e.g. a `file` that refers to a
+document rather than owning one, or a name that says the package is new
+(`save_new()`).
+
+## 3. After 0.1.0
 
 ### Tables
 
@@ -130,7 +197,7 @@ Roughly by how much a report or a loaded file would miss it:
   If it's ever wanted, an enum (`same_window`, `new_window`, ...) rather than
   frame names.
 
-## 3. Internal quality
+## 4. Internal quality
 
 ### Share the image resource plan
 

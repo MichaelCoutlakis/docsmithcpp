@@ -17,6 +17,7 @@
  *****************************************************************************/
 #pragma once
 
+#include <utility>
 #include <vector>
 
 #include "docsmithcpp/nodes.h"
@@ -35,17 +36,24 @@ struct page_style
     /// Replaces the header with content, e.g.
     /// set_header(paragraph(field{field_type::title})).
     template <block_content... Args>
-    page_style &set_header(Args &&...content)
+    page_style &set_header(Args &&...content) &
     {
         header = {to_block(std::forward<Args>(content))...};
         return *this;
     }
     template <block_content... Args>
-    page_style &set_footer(Args &&...content)
+    page_style &set_footer(Args &&...content) &
     {
         footer = {to_block(std::forward<Args>(content))...};
         return *this;
     }
+    /// On a temporary, the setters return an rvalue (see styled).
+    template <block_content... Args>
+    page_style &&set_header(Args &&...content) &&
+    { return std::move(set_header(std::forward<Args>(content)...)); }
+    template <block_content... Args>
+    page_style &&set_footer(Args &&...content) &&
+    { return std::move(set_footer(std::forward<Args>(content)...)); }
 
     bool operator==(const page_style &) const = default;
 };

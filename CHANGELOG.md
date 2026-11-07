@@ -11,6 +11,12 @@ The document model was rewritten from a polymorphic class hierarchy into value t
 held in `std::variant`. This is a breaking change to almost every public API.
 
 ### Changed
+- **Fluent setters on a temporary return an rvalue**: `set_style()`, `add()`, the
+  `table` and `table_cell` setters, `text_doc::add()` / `append()` / `set_title()`
+  and `page_style::set_header()` / `set_footer()`. A chain on a temporary
+  (`table::from_cells(...).set_header_rows(1)`) is moved where it goes instead of
+  copied, and `auto &p = paragraph().set_style("x");`, which dangled, no longer
+  compiles.
 - **Builtin styles have format-agnostic defaults** (`builtin::default_style()`):
   title, headings, preformatted, source text, link, emphasis and strong. A
   definition made with `styles()[builtin::...]` starts from the default, so
@@ -117,8 +123,9 @@ held in `std::variant`. This is a breaking change to almost every public API.
 - **Underline**: `text_props::set(underline::single)` (or `underline::none`), read
   and written in ODT (`style:text-underline-style`), DOCX (`w:u`) and HTML
   (`text-decoration`).
-- **`odt::save(doc, path)`**, and `docx::`, `html::` and `md::save()`: save a document
-  without copying it into a `file`.
+- **`html::save(doc, path)`** and `md::save()`: save a document without copying it
+  into a `file`. ODT and DOCX have no such function, as next to `file::save()` it
+  would be an easy way to drop what a loaded file keeps.
 - **Content concepts**: `inline_content`, `block_content` and `content_for` constrain
   `add()`, the variadic content constructors, `cell_view::assign()` and
   `page_style::set_header()` / `set_footer()`. Content of the wrong level, such as

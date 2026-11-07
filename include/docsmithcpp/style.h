@@ -1031,16 +1031,22 @@ private:
 /// CRTP mixin giving a node a style name of its family plus a fluent
 /// set_style(). A derived type's defaulted operator== compares this base
 /// subobject, so style equality composes automatically.
+///
+/// Like the other fluent setters on nodes, set_style() on a temporary returns
+/// an rvalue, so a chain on one (paragraph().set_style("Note").add("x")) is
+/// moved where it goes rather than copied, and can't be bound to an auto &.
 template <typename Derived, style_family F>
 struct styled
 {
     style_name<F> style;
 
-    Derived &set_style(style_name<F> sn)
+    Derived &set_style(style_name<F> sn) &
     {
         style = std::move(sn);
         return static_cast<Derived &>(*this);
     }
+    Derived &&set_style(style_name<F> sn) &&
+    { return std::move(set_style(std::move(sn))); }
 
     bool operator==(const styled &) const = default;
 };

@@ -21,6 +21,7 @@
 // traversal helpers.
 
 #include <filesystem>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -81,17 +82,22 @@ public:
     {
     }
 
-    text_doc &add(block_node b)
+    text_doc &add(block_node b) &
     {
         body.push_back(std::move(b));
         return *this;
     }
     template <block_content T>
-    text_doc &add(T &&content)
+    text_doc &add(T &&content) &
     {
         body.push_back(to_block(std::forward<T>(content)));
         return *this;
     }
+    /// On a temporary, the setters return an rvalue (see styled).
+    text_doc &&add(block_node b) && { return std::move(add(std::move(b))); }
+    template <block_content T>
+    text_doc &&add(T &&content) &&
+    { return std::move(add(std::forward<T>(content))); }
 
     /// Appends other's body, and adds its styles and resources. A name
     /// defined in both (in the same family) keeps one copy if the definitions
@@ -99,7 +105,8 @@ public:
     /// throws std::invalid_argument (leaving this document unchanged) if not.
     /// other.meta is not copied; a title paragraph in other's body is appended
     /// like any other paragraph.
-    text_doc &append(const text_doc &other);
+    text_doc &append(const text_doc &other) &;
+    text_doc &&append(const text_doc &other) && { return std::move(append(other)); }
 
     /// Filling in a template: puts content's body in place of, after or
     /// before the placeholder, and adds content's styles and resources as
@@ -141,7 +148,8 @@ public:
 
     /// Sets the title paragraph's text, adding one at the start of body if
     /// there is none. meta.title is separate and left as is.
-    text_doc &set_title(std::string text);
+    text_doc &set_title(std::string text) &;
+    text_doc &&set_title(std::string text) && { return std::move(set_title(std::move(text))); }
 
     /// Writes each resource an image in body refers to as dir / name. Pages or
     /// documents written to the same dir share these files, and a resource

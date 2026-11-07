@@ -595,13 +595,6 @@ TEST(DOCX_Write, DefaultStyles)
     EXPECT_NE(back.styles().find(builtin::list), nullptr);
 }
 
-TEST(DOCX_Write, SaveWithoutAFile)
-{
-    const text_doc doc{heading(1, "Saved"), paragraph("without a file")};
-    docx::save(doc, "docx/out/save_free.docx");
-    EXPECT_EQ(docx::file::load("docx/out/save_free.docx").doc.body, doc.body);
-}
-
 TEST(DOCX_Write, StyleIdsComeFromNames)
 {
     text_doc doc;
@@ -627,8 +620,8 @@ TEST(DOCX_Write, SameStyleNamesAsOdt)
     text_doc doc{heading(1, "H"), paragraph("p").set_style("Note")};
     doc.styles().insert(paragraph_style("Note", text_props(font_style::italic)));
     doc.styles()[builtin::heading(1)].text.set(font_size(20));
-    docx::save(doc, "docx/out/same_names.docx");
-    odt::save(doc, "docx/out/same_names.odt");
+    docx::file(doc).save("docx/out/same_names.docx");
+    odt::file(doc).save("docx/out/same_names.odt");
 
     const auto from_docx = docx::file::load("docx/out/same_names.docx").doc;
     const auto from_odt = odt::file::load("docx/out/same_names.odt").doc;

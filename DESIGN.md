@@ -15,7 +15,8 @@ content: `text`, `span`, `hyperlink`, `frame`, `bookmark`, `field`, `unknown`) a
 is deliberately a _generic_, format-agnostic model: which group may go where is
 encoded by the child sequence's type, so there is no separate per-format
 validation layer. Copy and `operator==` are compiler-generated, and traversal is
-`std::visit`. Shared behaviour lives in thin, non-polymorphic CRTP mixins:
+`std::visit`. Fluent setters (`set_style()`, `add()`, ...) return an lvalue on a
+named node and an rvalue on a temporary, so a chain on a temporary moves. Shared behaviour lives in thin, non-polymorphic CRTP mixins:
 `styled<Derived>` (a style name + `set_style`) and `has_children<…>`
 (`items()`/`add()`).
 

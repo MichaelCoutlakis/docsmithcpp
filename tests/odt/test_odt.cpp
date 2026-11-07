@@ -812,10 +812,3 @@ TEST(ODT, LoadReportTemplate)
     EXPECT_EQ(again.doc.body, f.doc.body);
     EXPECT_EQ(again.doc.page, f.doc.page);
 }
-
-TEST(ODT, SaveWithoutAFile)
-{
-    const text_doc doc{heading(1, "Saved"), paragraph("without a file")};
-    odt::save(doc, "odt/out/save_free.odt");
-    EXPECT_EQ(odt::file::load("odt/out/save_free.odt").doc.body, doc.body);
-}

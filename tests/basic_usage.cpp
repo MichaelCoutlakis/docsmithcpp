@@ -18,6 +18,7 @@
 
 #include <iostream>
 #include <sstream>
+#include <type_traits>
 
 #include <gtest/gtest.h>
 
@@ -364,4 +365,35 @@ TEST(BASIC_USAGE, BuiltinDefinitionStartsFromDefault)
     // An existing definition is returned as it is.
     doc.styles().insert_or_assign(paragraph_style(builtin::title));
     EXPECT_EQ(doc.styles()[builtin::title], paragraph_style(builtin::title));
+}
+
+// Fluent setters on a temporary return an rvalue, so the chain is moved where
+// it goes rather than copied, and can't be bound to an auto &. On a named node
+// they return an lvalue, as before.
+TEST(BASIC_USAGE, SettersOnTemporariesReturnRvalues)
+{
+    static_assert(std::is_same_v<decltype(paragraph().set_style("Note")), paragraph &&>);
+    static_assert(std::is_same_v<decltype(paragraph().set_style("Note").add("x")), paragraph &&>);
+    static_assert(std::is_same_v<decltype(span().add("x").set_style("S")), span &&>);
+    static_assert(std::is_same_v<decltype(list().add("a")), list &&>);
+    static_assert(std::is_same_v<decltype(table_cell().set_span(1, 2)), table_cell &&>);
+    static_assert(
+        std::is_same_v<decltype(table(1, 1).set_header_rows(1).apply_borders(border::solid())),
+            table &&>);
+    static_assert(std::is_same_v<decltype(text_doc().add("x").set_title("T")), text_doc &&>);
+    static_assert(std::is_same_v<decltype(page_style().set_footer("f")), page_style &&>);
+
+    paragraph p;
+    static_assert(std::is_same_v<decltype(p.set_style("Note").add("x")), paragraph &>);
+    text_doc doc;
+    static_assert(std::is_same_v<decltype(doc.add("x")), text_doc &>);
+
+    // A chain moves into its destination, contents intact.
+    table t = table::from_cells({{"a", "b"}}).set_header_rows(1).set_column_widths({3, 1});
+    EXPECT_EQ(t.header_rows(), 1U);
+    EXPECT_EQ(t.column_width(0), 3.0);
+    text_doc d{paragraph().set_style("Quote").add("q"), std::move(t)};
+    ASSERT_EQ(d.body.size(), 2U);
+    EXPECT_EQ(std::get<paragraph>(d.body[0].v).style, "Quote");
+    EXPECT_EQ(std::get<table>(d.body[1].v).num_cols(), 2U);
 }

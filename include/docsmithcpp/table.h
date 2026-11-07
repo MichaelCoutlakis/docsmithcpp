@@ -49,7 +49,7 @@ public:
     { (this->add(std::forward<Args>(content)), ...); }
 
     /// Throws std::invalid_argument unless rows and cols are at least 1.
-    table_cell &set_span(int rows, int cols)
+    table_cell &set_span(int rows, int cols) &
     {
         if(rows < 1 || cols < 1)
             throw std::invalid_argument("a cell spans at least one row and column");
@@ -57,11 +57,13 @@ public:
         colspan = cols;
         return *this;
     }
-    table_cell &set_props(cell_props p)
+    table_cell &&set_span(int rows, int cols) && { return std::move(set_span(rows, cols)); }
+    table_cell &set_props(cell_props p) &
     {
         props = std::move(p);
         return *this;
     }
+    table_cell &&set_props(cell_props p) && { return std::move(set_props(std::move(p))); }
 
     bool operator==(const table_cell &) const = default;
 };
@@ -178,33 +180,33 @@ public:
     /// Appends a row. The first row of a table with no columns sets
     /// num_cols(); after that, throws std::invalid_argument unless cells has
     /// num_cols() cells.
-    table &add_row(std::vector<table_cell> cells, row_style_name row_style = {});
+    table &add_row(std::vector<table_cell> cells, row_style_name row_style = {}) &;
     void remove_row(size_t r);
 
     /// The first header_rows() rows are header rows: they repeat on each page
     /// in ODT and DOCX, and are <thead> / <th> in HTML.
     size_t header_rows() const { return m_header_rows; }
-    table &set_header_rows(size_t n)
+    table &set_header_rows(size_t n) &
     {
         m_header_rows = n;
         return *this;
     }
 
     const row_style_name &row_style(size_t r) const { return m_rows.at(r).style; }
-    table &set_row_style(size_t r, row_style_name sn);
+    table &set_row_style(size_t r, row_style_name sn) &;
 
     /// A column's width relative to the others' (e.g. 1 and 3 for a quarter
     /// and three quarters), or nullopt for an equal share.
     std::optional<double> column_width(size_t c) const { return m_columns.at(c).width; }
     /// One width per column, as column_width(). Throws std::invalid_argument
     /// unless widths has num_cols() values.
-    table &set_column_widths(const std::vector<double> &widths);
-    table &set_column_width(size_t c, std::optional<double> width);
+    table &set_column_widths(const std::vector<double> &widths) &;
+    table &set_column_width(size_t c, std::optional<double> width) &;
     /// A cell style for the column's cells, under
     /// the header rows' formatting and each cell's own style. It applies by
     /// position when the document is written, so rows added later get it too.
     const cell_style_name &column_style(size_t c) const { return m_columns.at(c).style; }
-    table &set_column_style(size_t c, cell_style_name cell_style);
+    table &set_column_style(size_t c, cell_style_name cell_style) &;
 
     // Borders applied to the cells there are now, as their direct formatting
     // (table_cell::props): rows added later don't get them, so apply them once
@@ -212,17 +214,45 @@ public:
     // that follow the rows, use a table_style's lines instead.
 
     /// Every line, inside and out.
-    table &apply_borders(const border &b);
-    table &apply_outer_border(const border &b);
-    table &apply_horiz_borders(lines which, const border &b);
+    table &apply_borders(const border &b) &;
+    table &apply_outer_border(const border &b) &;
+    table &apply_horiz_borders(lines which, const border &b) &;
     /// The horizontal lines with these indices (line i is above row i).
-    table &apply_horiz_borders(const std::vector<size_t> &which, const border &b);
-    table &apply_vert_borders(lines which, const border &b);
-    table &apply_vert_borders(const std::vector<size_t> &which, const border &b);
+    table &apply_horiz_borders(const std::vector<size_t> &which, const border &b) &;
+    table &apply_vert_borders(lines which, const border &b) &;
+    table &apply_vert_borders(const std::vector<size_t> &which, const border &b) &;
     /// The top and/or bottom of these rows.
-    table &apply_row_borders(const std::vector<size_t> &rows, edge edges, const border &b);
+    table &apply_row_borders(const std::vector<size_t> &rows, edge edges, const border &b) &;
     /// The start and/or end of these columns.
-    table &apply_column_borders(const std::vector<size_t> &cols, edge edges, const border &b);
+    table &apply_column_borders(const std::vector<size_t> &cols, edge edges, const border &b) &;
+
+    // The setters on a temporary, so a chain on one moves rather than copies:
+    //     table t = table::from_cells(...).set_header_rows(1).set_column_widths({3, 1});
+    table &&add_row(std::vector<table_cell> cells, row_style_name row_style = {}) &&
+    { return std::move(add_row(std::move(cells), std::move(row_style))); }
+    table &&set_header_rows(size_t n) && { return std::move(set_header_rows(n)); }
+    table &&set_row_style(size_t r, row_style_name sn) &&
+    { return std::move(set_row_style(r, std::move(sn))); }
+    table &&set_column_widths(const std::vector<double> &widths) &&
+    { return std::move(set_column_widths(widths)); }
+    table &&set_column_width(size_t c, std::optional<double> width) &&
+    { return std::move(set_column_width(c, width)); }
+    table &&set_column_style(size_t c, cell_style_name cell_style) &&
+    { return std::move(set_column_style(c, std::move(cell_style))); }
+    table &&apply_borders(const border &b) && { return std::move(apply_borders(b)); }
+    table &&apply_outer_border(const border &b) && { return std::move(apply_outer_border(b)); }
+    table &&apply_horiz_borders(lines which, const border &b) &&
+    { return std::move(apply_horiz_borders(which, b)); }
+    table &&apply_horiz_borders(const std::vector<size_t> &which, const border &b) &&
+    { return std::move(apply_horiz_borders(which, b)); }
+    table &&apply_vert_borders(lines which, const border &b) &&
+    { return std::move(apply_vert_borders(which, b)); }
+    table &&apply_vert_borders(const std::vector<size_t> &which, const border &b) &&
+    { return std::move(apply_vert_borders(which, b)); }
+    table &&apply_row_borders(const std::vector<size_t> &rows, edge edges, const border &b) &&
+    { return std::move(apply_row_borders(rows, edges, b)); }
+    table &&apply_column_borders(const std::vector<size_t> &cols, edge edges, const border &b) &&
+    { return std::move(apply_column_borders(cols, edges, b)); }
 
     bool is_cell_covered(size_t row, size_t col) const;
     /// The row and column of the cell that covers a slot: the slot itself if
