@@ -36,6 +36,7 @@
 #include "odf/package.h"
 #include "odt/styles.h"
 #include "odt/writer.h"
+#include "titles.h"
 
 namespace docsmith
 {
@@ -546,6 +547,7 @@ file file::load(const std::filesystem::path &p)
         expand_page_breaks(f.doc.body, page_breaks);
     read_styles(f.m_impl->pkg, f.doc);
     f.doc.page = parse_page(f.m_impl->pkg);
+    detail::read_titles(f.doc);
     if(const auto *meta = f.m_impl->pkg.find("meta.xml"))
         f.doc.meta = odf::read_meta(meta->data);
 

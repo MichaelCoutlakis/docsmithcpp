@@ -64,6 +64,7 @@ struct field;
 struct unknown;
 class paragraph;
 class heading;
+class title;
 class list;
 class table;
 struct page_break;
@@ -72,7 +73,7 @@ struct table_of_contents;
 template <typename T, typename... Ts>
 concept one_of = (std::is_same_v<std::remove_cvref_t<T>, Ts> || ...);
 
-/// What a paragraph, heading, span or hyperlink takes as a child: an inline
+/// What a paragraph, heading, title, span or hyperlink takes as a child: an inline
 /// node, or a string, which is text.
 template <typename T>
 concept inline_content =
@@ -82,9 +83,8 @@ concept inline_content =
 /// What a document, list item or table cell takes as a child: a block node,
 /// or a string, which is a paragraph.
 template <typename T>
-concept block_content =
-    one_of<T, block_node, paragraph, heading, list, table, frame, page_break, table_of_contents,
-        unknown> ||
+concept block_content = one_of<T, block_node, paragraph, heading, title, list, table, frame,
+                            page_break, table_of_contents, unknown> ||
     std::convertible_to<T, std::string>;
 
 /// T is content for a sequence of Child (inline_node or block_node).

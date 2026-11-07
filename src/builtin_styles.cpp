@@ -18,6 +18,10 @@
 
 #include "builtin_styles.h"
 
+#include <type_traits>
+
+#include "docsmithcpp/visit.h"
+
 namespace docsmith
 {
 namespace
@@ -79,6 +83,40 @@ int detail::builtin_heading_level(const para_style_name &name)
         if(name == builtin::heading(level))
             return level;
     return 0;
+}
+
+detail::used_names detail::names_used(const text_doc &doc)
+{
+    used_names out;
+    walk(doc,
+        [&out](const auto &n)
+        {
+            using T = std::decay_t<decltype(n)>;
+            if constexpr(std::is_same_v<T, paragraph>)
+                out.para.insert((n.style.empty() ? builtin::para : n.style).str());
+            else if constexpr(std::is_same_v<T, heading>)
+                out.para.insert((n.style.empty() ? builtin::heading(n.level) : n.style).str());
+            else if constexpr(std::is_same_v<T, title>)
+                out.para.insert((n.style.empty() ? builtin::title : n.style).str());
+            else if constexpr(std::is_same_v<T, span>)
+                out.text.insert(n.style.str());
+            else if constexpr(std::is_same_v<T, hyperlink>)
+                out.text.insert((n.style.empty() ? builtin::link : n.style).str());
+        });
+    return out;
+}
+
+style_sheet detail::with_used_defaults(const style_sheet &styles, const text_doc &doc)
+{
+    style_sheet out = styles;
+    const auto used = names_used(doc);
+    for(const auto &[name, def] : builtin_defaults().para)
+        if(used.para.contains(name.str()) && !out.para.contains(name))
+            out.insert(def);
+    for(const auto &[name, def] : builtin_defaults().text)
+        if(used.text.contains(name.str()) && !out.text.contains(name))
+            out.insert(def);
+    return out;
 }
 
 std::optional<paragraph_style> builtin::default_style(const para_style_name &name)

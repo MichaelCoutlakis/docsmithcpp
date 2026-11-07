@@ -60,7 +60,7 @@ struct deep_visitor
         if constexpr(std::is_same_v<T, frame>)
             node(n.img);
         else if constexpr(std::is_same_v<T, span> || std::is_same_v<T, hyperlink> ||
-            std::is_same_v<T, paragraph> || std::is_same_v<T, heading>)
+            std::is_same_v<T, paragraph> || std::is_same_v<T, heading> || std::is_same_v<T, title>)
             for(auto &c : n.items()) // accessor hides any boxing
                 recurse(c.v);
         else if constexpr(std::is_same_v<T, list>)

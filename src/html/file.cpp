@@ -32,11 +32,13 @@
 #include <variant>
 #include <vector>
 
+#include "builtin_styles.h"
 #include "cell_text.h"
 #include "format.h"
 #include "lineage.h"
 #include "list_numbers.h"
 #include "outline.h"
+#include "titles.h"
 
 // The page is written directly rather than built as an XML tree: HTML is not
 // XML. An empty <p/> or <a id="x"/> is an *open* tag to an HTML parser, so
@@ -227,22 +229,7 @@ S resolved(const S &s, const style_sheet &styles)
     return out;
 }
 
-/// Whether sn is base, or a style defined (through its parents) from base.
-template <style_family F>
-bool based_on(const style_name<F> &sn, const style_name<F> &base, const style_sheet &styles)
-{
-    style_name<F> s = sn;
-    for(int depth = 0; !s.empty() && depth != 32; ++depth) // guards against a cycle
-    {
-        if(s == base)
-            return true;
-        const auto *def = styles.find(s);
-        if(!def)
-            return false;
-        s = def->parent;
-    }
-    return false;
-}
+using detail::based_on;
 
 std::string css_decls(const text_props &tp)
 {
@@ -334,11 +321,12 @@ std::string selector(const style_name<F> &sn, bool qualified)
     return out;
 }
 
-/// CSS rules for the style definitions in the document, by family and then
-/// name, so the output is stable.
+/// CSS rules for the style definitions in the document, and the defaults of
+/// the builtins it uses without defining, by family and then name, so the
+/// output is stable.
 std::string generated_css(const text_doc &doc)
 {
-    const style_sheet &styles = doc.styles();
+    const style_sheet styles = detail::with_used_defaults(doc.styles(), doc);
     // Names defined in more than one of the families written as classes.
     std::map<std::string, int> uses;
     for(const auto &[name, s] : styles.para)
@@ -372,13 +360,13 @@ std::string generated_css(const text_doc &doc)
 
 using detail::plain_text;
 
-/// The page title: the document's title, else the title paragraph's or the
+/// The page title: the document's title, else the first title's or the
 /// first heading's text.
 std::string default_title(const text_doc &doc)
 {
     if(!doc.meta.title.empty())
         return doc.meta.title;
-    if(const paragraph *p = doc.find_title())
+    if(const title *p = doc.find_title())
     {
         std::string t;
         plain_text(p->items(), t);
@@ -561,6 +549,7 @@ private:
         flow(p.items());
         m_os << "</p>\n";
     }
+    void emit_block(const title &t) { emit_block(detail::as_paragraph(t)); }
     void emit_block(const heading &h)
     {
         const std::string tag = "h" + std::to_string(std::clamp(h.level, 1, 6));

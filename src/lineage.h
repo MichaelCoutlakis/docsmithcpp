@@ -17,7 +17,7 @@
  *****************************************************************************/
 #pragma once
 
-// Private: a style's chain of parents.
+// Private: a style's chain of parents, and whether it derives from another.
 
 #include <type_traits>
 #include <vector>
@@ -44,6 +44,23 @@ auto lineage(const style_name<F> &sn, const style_sheet &styles)
             s = nullptr;
     }
     return out;
+}
+
+/// Whether sn is base, or a style defined (through its parents) from base.
+template <style_family F>
+bool based_on(const style_name<F> &sn, const style_name<F> &base, const style_sheet &styles)
+{
+    style_name<F> s = sn;
+    for(int depth = 0; !s.empty() && depth != 32; ++depth) // guards against a cycle
+    {
+        if(s == base)
+            return true;
+        const auto *def = styles.find(s);
+        if(!def)
+            return false;
+        s = def->parent;
+    }
+    return false;
 }
 
 } // namespace docsmith::detail

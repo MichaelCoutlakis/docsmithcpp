@@ -58,6 +58,11 @@ public:
         line("Heading: level ", h.level);
         kids(h.items());
     }
+    void operator()(const title &t)
+    {
+        line("Title: style=", t.style.str());
+        kids(t.items());
+    }
     void operator()(const span &s)
     {
         line("Span: style=", s.style.str());

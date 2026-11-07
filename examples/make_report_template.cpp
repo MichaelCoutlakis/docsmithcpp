@@ -89,7 +89,7 @@ int main(int argc, char **argv)
         field{field_type::page_count})
             .set_style(footer));
 
-    doc.add(paragraph(field{field_type::title}).set_style(builtin::title))
+    doc.add(title(field{field_type::title}))
         .add(paragraph("Generated on ", field{field_type::date}, ".").set_style(body))
         .add(table_of_contents("Contents", 2))
         .add(heading(1, "Summary").set_style(heading_1))

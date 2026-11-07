@@ -528,6 +528,22 @@ TEST(ODT, NewDocumentWithoutMetadata)
     EXPECT_EQ(odt::file::load("odt/out/no_metadata.odt").doc.meta, metadata{});
 }
 
+// A paragraph in the Title style, or a style based on it, reads back as a
+// title, so a title in a style of its own goes round.
+TEST(ODT, TitlesReadBack)
+{
+    paragraph_style cover("Cover", text_props(font_size(40)));
+    cover.parent = builtin::title;
+    text_doc doc{title("Report").set_style("Cover"), paragraph("Part").set_style(builtin::title)};
+    doc.styles().insert(cover);
+    odt::file(doc).save("odt/out/titles.odt");
+
+    const auto again = odt::file::load("odt/out/titles.odt");
+    EXPECT_EQ(again.doc.body,
+        (std::vector<block_node>{
+            to_block(title("Report").set_style("Cover")), to_block(title("Part"))}));
+}
+
 TEST(ODT, TitleStyleIsDefined)
 {
     text_doc doc;

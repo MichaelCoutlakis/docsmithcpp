@@ -27,7 +27,7 @@
   </Type>
 
   <!-- inline_node / block_node: the active alternative, without `.v`.
-       inline_node has seven alternatives and block_node eight (see
+       inline_node has seven alternatives and block_node nine (see
        inline_nodes.h and nodes.h). -->
   <Type Name="docsmith::inline_node" Priority="High">
     <DisplayString Condition="(int)v._Which == 0">{v._Head}</DisplayString>
@@ -57,6 +57,7 @@
     <DisplayString Condition="(int)v._Which == 5">{v._Tail._Tail._Tail._Tail._Tail._Head}</DisplayString>
     <DisplayString Condition="(int)v._Which == 6">{v._Tail._Tail._Tail._Tail._Tail._Tail._Head}</DisplayString>
     <DisplayString Condition="(int)v._Which == 7">{v._Tail._Tail._Tail._Tail._Tail._Tail._Tail._Head}</DisplayString>
+    <DisplayString Condition="(int)v._Which == 8">{v._Tail._Tail._Tail._Tail._Tail._Tail._Tail._Tail._Head}</DisplayString>
     <DisplayString>valueless</DisplayString>
     <Expand>
       <ExpandedItem Condition="(int)v._Which == 0">v._Head</ExpandedItem>
@@ -67,6 +68,7 @@
       <ExpandedItem Condition="(int)v._Which == 5">v._Tail._Tail._Tail._Tail._Tail._Head</ExpandedItem>
       <ExpandedItem Condition="(int)v._Which == 6">v._Tail._Tail._Tail._Tail._Tail._Tail._Head</ExpandedItem>
       <ExpandedItem Condition="(int)v._Which == 7">v._Tail._Tail._Tail._Tail._Tail._Tail._Tail._Head</ExpandedItem>
+      <ExpandedItem Condition="(int)v._Which == 8">v._Tail._Tail._Tail._Tail._Tail._Tail._Tail._Tail._Head</ExpandedItem>
     </Expand>
   </Type>
   <!-- Fallback for other standard libraries: skip one level, keep `.v`. -->
@@ -118,6 +120,19 @@
     <DisplayString Condition="style.m_name._Mypair._Myval2._Mysize != 0">paragraph [{style.m_name,sb}] {m_children}</DisplayString>
     <DisplayString Condition="m_children._Mypair._Myval2._Mylast - m_children._Mypair._Myval2._Myfirst == 1">paragraph {*m_children._Mypair._Myval2._Myfirst}</DisplayString>
     <DisplayString>paragraph {m_children}</DisplayString>
+    <Expand>
+      <Item Name="style" Condition="style.m_name._Mypair._Myval2._Mysize != 0">style</Item>
+      <ArrayItems>
+        <Size>m_children._Mypair._Myval2._Mylast - m_children._Mypair._Myval2._Myfirst</Size>
+        <ValuePointer>m_children._Mypair._Myval2._Myfirst</ValuePointer>
+      </ArrayItems>
+    </Expand>
+  </Type>
+  <Type Name="docsmith::title">
+    <DisplayString Condition="style.m_name._Mypair._Myval2._Mysize != 0 &amp;&amp; m_children._Mypair._Myval2._Mylast - m_children._Mypair._Myval2._Myfirst == 1">title [{style.m_name,sb}] {*m_children._Mypair._Myval2._Myfirst}</DisplayString>
+    <DisplayString Condition="style.m_name._Mypair._Myval2._Mysize != 0">title [{style.m_name,sb}] {m_children}</DisplayString>
+    <DisplayString Condition="m_children._Mypair._Myval2._Mylast - m_children._Mypair._Myval2._Myfirst == 1">title {*m_children._Mypair._Myval2._Myfirst}</DisplayString>
+    <DisplayString>title {m_children}</DisplayString>
     <Expand>
       <Item Name="style" Condition="style.m_name._Mypair._Myval2._Mysize != 0">style</Item>
       <ArrayItems>

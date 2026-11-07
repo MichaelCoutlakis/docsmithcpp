@@ -106,22 +106,40 @@ TEST(BASIC_USAGE, SetTitle)
 
     doc.set_title("First");
     ASSERT_NE(doc.find_title(), nullptr);
-    EXPECT_EQ(doc.body.front(), to_block(paragraph("First").set_style(builtin::title)));
+    EXPECT_EQ(doc.body.front(), to_block(title("First")));
 
     // A second call changes the title in place rather than adding another.
     doc.set_title("Second");
     EXPECT_EQ(doc.body.size(), 2U);
-    EXPECT_EQ(*doc.find_title(), paragraph("Second").set_style(builtin::title));
+    EXPECT_EQ(*doc.find_title(), title("Second"));
     EXPECT_TRUE(doc.meta.title.empty());
 }
 
 TEST(BASIC_USAGE, FindTitleAnywhere)
 {
-    // A title placed by hand, after a logo, is still the title.
-    text_doc doc{paragraph("Logo"), paragraph("Report").set_style(builtin::title)};
+    // A title placed by hand, after a logo, is still the title, and keeps its
+    // style.
+    text_doc doc{paragraph("Logo"), title("Report").set_style("Cover")};
     doc.set_title("Renamed");
     EXPECT_EQ(doc.body.size(), 2U);
-    EXPECT_EQ(doc.body.back(), to_block(paragraph("Renamed").set_style(builtin::title)));
+    EXPECT_EQ(doc.body.back(), to_block(title("Renamed").set_style("Cover")));
+}
+
+// A title is a node of its own: not a heading, so it isn't in the outline, and
+// a document can have several.
+TEST(BASIC_USAGE, Titles)
+{
+    const text_doc doc{
+        title("Report"),
+        table_of_contents("Contents"),
+        heading(1, "Intro"),
+        title("Part ", span("two").set_style(builtin::strong)),
+        heading(1, "Results"),
+    };
+    EXPECT_EQ(collect<title>(doc).size(), 2U);
+    EXPECT_EQ(collect<heading>(doc).size(), 2U);
+    EXPECT_EQ(collect<span>(doc).size(), 1U) << "walk() goes into a title";
+    EXPECT_TRUE(doc.find_title()->style.empty()) << "builtin::title when written";
 }
 
 TEST(BASIC_USAGE, InsertStyle)

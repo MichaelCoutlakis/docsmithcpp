@@ -142,12 +142,12 @@ public:
     /// and returns an image that refers to it.
     image add_image(std::string name, std::string data, std::string media_type);
 
-    /// The first paragraph with the builtin::title style, or nullptr.
-    [[nodiscard]] paragraph *find_title();
-    [[nodiscard]] const paragraph *find_title() const;
+    /// The first title node, in the body, header or footer, or nullptr.
+    [[nodiscard]] docsmith::title *find_title();
+    [[nodiscard]] const docsmith::title *find_title() const;
 
-    /// Sets the title paragraph's text, adding one at the start of body if
-    /// there is none. meta.title is separate and left as is.
+    /// Sets the first title's text, keeping its style, or adds a title at the
+    /// start of body if there is none. meta.title is separate and left as is.
     text_doc &set_title(std::string text) &;
     text_doc &&set_title(std::string text) && { return std::move(set_title(std::move(text))); }
 

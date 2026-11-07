@@ -302,15 +302,29 @@ TEST(HTML, NoMetadataNoMetaTags)
     EXPECT_EQ(count(html, "<meta "), 1U); // charset only
 }
 
-TEST(HTML, TitleParagraph)
+TEST(HTML, Title)
 {
     text_doc doc{heading(1, "Heading")};
     doc.set_title("Report");
     const auto html = html::file(doc).to_string();
 
-    EXPECT_TRUE(has(html, "<title>Report</title>")) << "the title paragraph before the heading";
+    EXPECT_TRUE(has(html, "<title>Report</title>")) << "the title before the heading";
     EXPECT_TRUE(has(html, R"(<p class="Title">Report</p>)"));
-    EXPECT_FALSE(has(html, ".Title {")) << "styling is left to html::file::css";
+    EXPECT_TRUE(has(html, ".Title { font-size: 28pt;")) << "the builtin's default";
+}
+
+// A builtin the body uses gets its default's rule, as ODT and DOCX define it,
+// unless the document defines it. Builtins it doesn't use get none.
+TEST(HTML, UsedBuiltinsGetTheirDefault)
+{
+    text_doc doc{heading(1, "Heading"), paragraph(span("code").set_style(builtin::source_text))};
+    doc.styles().insert(paragraph_style(builtin::heading(1), text_props(font_size(30))));
+    const auto html = html::file(doc).to_string();
+
+    EXPECT_TRUE(has(html, ".Heading_1, h1:not([class]) { font-size: 30pt; }"));
+    EXPECT_TRUE(has(html, R"(.Source_Text { font-family: "Courier New"; })"));
+    EXPECT_FALSE(has(html, ".Title")) << "not used";
+    EXPECT_FALSE(has(html, ".Heading_2")) << "not used";
 }
 
 TEST(HTML, UrlTargetsAreLeftAsIs)

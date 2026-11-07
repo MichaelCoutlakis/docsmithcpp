@@ -93,7 +93,7 @@ text_doc every_node()
     doc.meta.created = std::chrono::sys_days{std::chrono::year{2025} / 1 / 2};
     doc.meta.custom["Build"] = "7";
 
-    doc.add(paragraph("Title text").set_style(builtin::title));
+    doc.add(title("Title text"));
     doc.add(table_of_contents("Contents", 2));
     doc.add(heading(1, "Intro"));
     doc.add(paragraph(" lead  space\tand tab\nand break ",

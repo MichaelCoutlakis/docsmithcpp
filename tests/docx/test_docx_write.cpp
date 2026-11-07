@@ -111,6 +111,20 @@ TEST(DOCX_Write, ParagraphsAndHeadings)
     EXPECT_TRUE(def.child("w:rPr").child("w:i"));
 }
 
+// A title is a Title paragraph, and one in a style based on Title reads back
+// with that style.
+TEST(DOCX_Write, Titles)
+{
+    paragraph_style cover("Cover", text_props(font_size(40)));
+    cover.parent = builtin::title;
+    text_doc doc{title("Report").set_style("Cover"), title("Part"), paragraph("Body")};
+    doc.styles().insert(cover);
+    docx::file(doc).save("docx/out/titles.docx");
+
+    const auto again = docx::file::load("docx/out/titles.docx");
+    EXPECT_EQ(again.doc.body, doc.body);
+}
+
 TEST(DOCX_Write, WhiteSpaceTabsAndBreaks)
 {
     saved s(text_doc{paragraph(" a  b\tc\nd")}, "white_space");

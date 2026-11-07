@@ -119,7 +119,7 @@ inline const table_style_name table{"Default Table"};
 /// continues the enclosing list's style).
 inline const list_style_name list{"Default List"};
 
-/// A title paragraph (text_doc::set_title()).
+/// The style of a title node with none of its own.
 inline const para_style_name title{"Title"};
 /// A monospace paragraph for code and logs, with its lines separated by '\n':
 /// LibreOffice's Preformatted Text, and <pre> in HTML.

@@ -39,6 +39,7 @@
 #include "odf/package.h"
 #include "odt/styles.h"
 #include "outline.h"
+#include "titles.h"
 
 namespace docsmith::odt
 {
@@ -132,32 +133,6 @@ std::string contents_style(int level)
         R"~~(cm" fo:margin-right="0cm" fo:text-indent="0cm"><style:tab-stops><style:tab-stop style:position=")~~" +
         detail::to_string(17 - 0.5f * static_cast<float>(level - 1)) +
         R"~~(cm" style:type="right" style:leader-style="dotted" style:leader-text="."/></style:tab-stops></style:paragraph-properties></style:style>)~~";
-}
-
-/// The paragraph and text style names the body's nodes use, the defaults of
-/// unstyled ones included.
-struct used_names
-{
-    std::set<std::string> para;
-    std::set<std::string> text;
-};
-used_names names_used(const text_doc &doc)
-{
-    used_names out;
-    walk(doc,
-        [&out](const auto &n)
-        {
-            using T = std::decay_t<decltype(n)>;
-            if constexpr(std::is_same_v<T, paragraph>)
-                out.para.insert((n.style.empty() ? builtin::para : n.style).str());
-            else if constexpr(std::is_same_v<T, heading>)
-                out.para.insert((n.style.empty() ? builtin::heading(n.level) : n.style).str());
-            else if constexpr(std::is_same_v<T, span>)
-                out.text.insert(n.style.str());
-            else if constexpr(std::is_same_v<T, hyperlink>)
-                out.text.insert((n.style.empty() ? builtin::link : n.style).str());
-        });
-    return out;
 }
 
 /// Declares on dst the namespaces src declares and dst doesn't.
@@ -314,7 +289,7 @@ void writer::write_styles(const text_doc &doc)
     // defines get their default: LibreOffice applies a style only if the file
     // defines it, even one of its own.
     style_sheet sheet = doc.styles();
-    const auto used = names_used(doc);
+    const auto used = detail::names_used(doc);
     for(const auto &[name, def] : detail::builtin_defaults().para)
         if(used.para.contains(name.str()) && !sheet.para.contains(name) &&
             !find_style(m_styles, name.str(), style_family::para))
@@ -591,6 +566,8 @@ void writer::emit(pugi::xml_node parent, const paragraph &p)
     for(const auto &c : p.items())
         write_inline(n, c);
 }
+
+void writer::emit(pugi::xml_node parent, const title &t) { emit(parent, detail::as_paragraph(t)); }
 
 void writer::emit(pugi::xml_node parent, const heading &h)
 {

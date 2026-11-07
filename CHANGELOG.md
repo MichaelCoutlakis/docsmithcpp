@@ -7,6 +7,24 @@ breaking changes.
 
 ## [Unreleased]
 
+### Added
+- **Titles**: a `title` block node, `title("Report")`, for the title of a
+  document, chapter or part. Every format writes it as a paragraph in its
+  style, `builtin::title` when it has none, and a table of contents leaves it
+  out. ODT and DOCX read a paragraph in the Title style, or a style based on
+  it, back as a title. It is separate from `meta.title`.
+
+### Changed
+- **HTML gets the builtins' defaults**: a builtin the document uses without
+  defining it (Title, the headings, Preformatted Text, Source Text, the link,
+  emphasis and strong styles) gets its default's CSS rule, as ODT and DOCX
+  already define it. An undefined Title was plain text on a page, and unstyled
+  headings now have the default's font and size rather than the browser's.
+- **Breaking**: `block_node` has a `title` alternative, so a `std::visit` over
+  it needs a case for one. `text_doc::find_title()` returns a `title *`, and
+  `set_title()` sets the first title node. A paragraph in the Title style read
+  from a file is now a `title`.
+
 ### Fixed
 - **ODT list indents**: list styles written to ODT now indent each level
   (0.5in a level, with the bullet or number hanging 0.25in before the text),

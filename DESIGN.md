@@ -10,8 +10,8 @@ pass-through `unknown` node and the loaded file kept by a format's `file` class
 
 The document tree is a pair of value-type variants — `inline_node` (text-flow
 content: `text`, `span`, `hyperlink`, `frame`, `bookmark`, `field`, `unknown`) and
-`block_node` (`paragraph`, `heading`, `list`, `table`, `frame`, `page_break`,
-`table_of_contents`, `unknown`). It
+`block_node` (`paragraph`, `heading`, `title`, `list`, `table`, `frame`,
+`page_break`, `table_of_contents`, `unknown`). It
 is deliberately a _generic_, format-agnostic model: which group may go where is
 encoded by the child sequence's type, so there is no separate per-format
 validation layer. Copy and `operator==` are compiler-generated, and traversal is
@@ -51,6 +51,7 @@ What each node holds, independent of any one format. "Inline" is a sequence of
 | `page_style` | — | blocks (`header`, `footer`) | what each page repeats above and below the body |
 | `paragraph` | block | inline | styled |
 | `heading` | block | inline | styled; `level` |
+| `title` | block | inline | styled; written as a paragraph in its style, not in the outline (see *Titles*) |
 | `list` | block | `list_item`s | styled with a list style; `continue_numbering` |
 | `list_item` | — | blocks | `numbered`, `start_value` |
 | `table` | block | a grid of `table_cell`s | styled; always rectangular; per row a style, per column a width and a cell style; the first `header_rows()` rows are header rows; `accessibility_title`, `accessibility_description` |
@@ -321,10 +322,12 @@ reads back too, and is used again on the next save.
 ### Default styles
 
 A node with no style has its kind's default, and the default is a style like
-any other: `builtin::para`, `heading(level)`, `link`, `table`, and the list
-style `list`. Undefined, each format's own
-default applies; defined, in code or by a loaded template, it applies in every
-format. Reading maps each format's default back to the definition, with the
+any other: `builtin::para`, `heading(level)`, `title`, `link`, `table`, and the
+list style `list`. Defined, in code or by a loaded template, it applies in
+every format. Undefined, the one rule is the same for every builtin and every
+writer: a builtin with a default definition (see *Builtin defaults*) gets that
+default, and one without (`para`, `table`, `list`) gets each format's own
+look. Reading maps each format's default back to the definition, with the
 nodes that use it unstyled, so content added to a template gets the template's
 defaults and a round trip doesn't turn "no style" into a named one.
 `doc.styles()[name]` gives the definition to edit, the template's if there is
@@ -335,6 +338,7 @@ has one (see *Builtin defaults*).
 |---|---|---|---|
 | `para` (Default Paragraph Style) | `Standard` (an unstyled `text:p`) | the `w:default` paragraph style, `Normal` (no `w:pStyle`) | `p:not([class])` |
 | `heading(n)` (Heading n) | `Heading_20_n`, named on `text:h` | `Heading<n>` | `hn:not([class])` |
+| `title` (Title) | `Title`, named on `text:p` | `Title` | `.Title`, on `p` |
 | `link` (Hyperlink) | `Internet_20_link`, named on `text:a` | `Hyperlink` | `a:not([class])` |
 | `table` (Default Table) | `Default_20_Table`, named on tables | the `w:default` table style, `TableNormal` (no `w:tblStyle`) | `table:not([class])`, and the cells' layers |
 | `list` (Default List) | `Default_20_List`, named on lists | the list's numbering definition | the numbering of `<ol>` / `<ul>` |
@@ -354,12 +358,27 @@ set on each paragraph: ODF can't say that new paragraphs get Text Body, so a
 ### Builtin styles and code blocks
 
 The other names in `builtin` are styles writers know without a definition in
-`text_doc::styles()`: `title`, `preformatted` (a monospace paragraph for code
-and logs) and `source_text` (monospace text within a line), LibreOffice's own
-Title, Preformatted Text and Source Text. HTML writes the class and leaves an
-undefined one's look to `html::file::css`, except that a preformatted
-paragraph is `<pre>` and a source text span `<code>`, as is anything styled
-with a style based on them.
+`text_doc::styles()`: `preformatted` (a monospace paragraph for code and logs)
+and `source_text` (monospace text within a line), LibreOffice's own
+Preformatted Text and Source Text, and the Markdown ones (`emphasis`,
+`strong`, `quotations`, the two list styles). Like the node defaults, an
+undefined one gets its default if it has one. HTML writes a style as a class
+with a rule from its definition or default; `html::file::css` comes after the
+generated rules, so it can override them. A preformatted paragraph is `<pre>`
+and a source text span `<code>`, as is anything styled with a style based on
+them.
+
+### Titles
+
+A `title` is a title of the document, a chapter or a part: a document can
+have several, and it is separate from `meta.title`. Every format writes it as
+a paragraph in its style, `builtin::title` when it has none of its own, and a
+table of contents leaves it out, since it isn't a heading. Readers turn a
+paragraph in the Title style, or a style based on it, back into a title,
+unstyled if it was Title itself, so a title in a style of its own goes round
+too. A paragraph given the Title style by hand reads back as a title.
+`text_doc::find_title()` and `set_title()` work on the first one. Markdown has
+no title, so it writes a `#` heading, which reads back as a heading.
 
 ### Builtin defaults
 
@@ -392,7 +411,9 @@ The default is used in two places:
   LibreOffice applies a style only if the file defines it, even one of its
   own. On top of the model's properties, a writer adds what only its format
   holds: a heading style's outline level (ODT `style:default-outline-level`,
-  DOCX `w:outlineLvl`). HTML writes no rule for an undefined builtin.
+  DOCX `w:outlineLvl`). HTML writes the default's rule, so an undefined Title
+  looks the same on a page as in LibreOffice and Word. An unstyled heading
+  there gets the default's font and size instead of the browser's own.
 
 So a document built in code reads back with the defaults of the builtins it
 used defined, as `operator[]` would have made them: a round trip is equal
@@ -521,9 +542,9 @@ Core: title, author, language, subject, description, keywords, created and
 modified dates, plus `custom` name → value properties. It has no invariants, so
 its fields are public.
 
-Metadata is never drawn on the page. A visible title is a paragraph in the body
-with the `builtin::title` style, so the two are set separately
-(`doc.meta.title = …` and `doc.set_title(…)`). The title stays in the body,
+Metadata is never drawn on the page. A visible title is a `title` node in the
+body (see *Titles*), so the two are set separately (`doc.meta.title = …` and
+`doc.set_title(…)`). The title stays in the body,
 rather than in a member of its own, because formats don't limit a document to
 one title or put it first: a logo may come before it, and reading then saving a
 file must keep it where it was. `find_title()` returns the first one, wherever
@@ -639,7 +660,7 @@ looks right in an `.odt` and writes back to the same Markdown.
 | Model | Markdown | Read back as |
 |---|---|---|
 | `heading` | `#` to `######` (level clamped) | the same |
-| `builtin::title` paragraph | `# ` | a level 1 heading |
+| `title` | `# ` | a level 1 heading |
 | `paragraph` | a paragraph, its style dropped | the same, unstyled |
 | span with a bold style | `**strong**` | span styled `builtin::strong` (bold, defined in `styles()`) |
 | span with an italic or oblique style | `*emphasis*` | span styled `builtin::emphasis` (italic, defined) |
@@ -718,6 +739,7 @@ are kept, renamed only if they clash, and `mc:Ignorable` follows them.
 |---|---|---|
 | `paragraph` | `w:p`, its style as `w:pStyle` | the same; the default paragraph style reads as none |
 | `heading` | `w:p` with `w:outlineLvl` (level - 1) and `w:pStyle` `Heading<level>`, or its own style | a paragraph with an outline level, directly or from its style; `Heading<level>` reads as none |
+| `title` | `w:p` with `w:pStyle` `Title`, or its own style | a title, from a paragraph in `Title` or a style based on it; `Title` reads as none |
 | `span` | runs with `w:rStyle`; runs don't nest, so a span in a span gets the inner style | runs of one style in one span |
 | `text` | `w:t` (`xml:space="preserve"` where needed), `'\t'` `w:tab`, `'\n'` `w:br` | the same; `w:cr` is `'\n'` too |
 | `hyperlink` | `w:hyperlink`, a URL as an external relationship, a bookmark as `w:anchor`; unstyled text gets the link's style as its run style, else `Hyperlink` | the same, without the `Hyperlink` style; text all in one other style is the link's style, so a link holding one styled span reads back as a styled link |

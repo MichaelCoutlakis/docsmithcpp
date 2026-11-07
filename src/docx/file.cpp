@@ -24,6 +24,7 @@
 #include "docx/reader.h"
 #include "docx/state.h"
 #include "docx/writer.h"
+#include "titles.h"
 
 namespace docsmith::docx
 {
@@ -55,6 +56,7 @@ file file::load(const std::filesystem::path &p)
         throw error(error_code::not_a_document, "Not a Word document: " + p.string());
     st.main_part = opc::package::resolve("", main->target);
     read_document(st, f.doc);
+    detail::read_titles(f.doc);
     return f;
 }
 

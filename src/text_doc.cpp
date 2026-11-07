@@ -114,6 +114,10 @@ found_block find_placeholder(std::vector<block_node> &blocks, const placeholder 
                 {
                     return matches(p, n.items(), n.style) ? found_block{&blocks, i} : found_block{};
                 },
+                [&](title &n)
+                {
+                    return matches(p, n.items(), n.style) ? found_block{&blocks, i} : found_block{};
+                },
                 [&](list &l)
                 {
                     for(auto &it : l.items())
@@ -209,25 +213,20 @@ image text_doc::add_image(std::string name, std::string data, std::string media_
     return img;
 }
 
-paragraph *text_doc::find_title()
-{
-    return const_cast<paragraph *>(std::as_const(*this).find_title());
-}
+title *text_doc::find_title() { return const_cast<title *>(std::as_const(*this).find_title()); }
 
-const paragraph *text_doc::find_title() const
+const title *text_doc::find_title() const
 {
-    const auto titles =
-        find_all<paragraph>(*this, [](const paragraph &p) { return p.style == builtin::title; });
+    const auto titles = collect<title>(*this);
     return titles.empty() ? nullptr : titles.front();
 }
 
 text_doc &text_doc::set_title(std::string text) &
 {
-    paragraph p = paragraph(std::move(text)).set_style(builtin::title);
-    if(paragraph *existing = find_title())
-        *existing = std::move(p);
+    if(title *existing = find_title())
+        existing->items() = {inline_node{docsmith::text{std::move(text)}}};
     else
-        body.insert(body.begin(), block_node{std::move(p)});
+        body.insert(body.begin(), block_node{title(std::move(text))});
     return *this;
 }
 

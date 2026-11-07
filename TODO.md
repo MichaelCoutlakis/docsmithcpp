@@ -82,26 +82,6 @@ the `m_` naming of the property value types (`style.text.m_font_size->m_points`,
 (CONTRIBUTING.md, *Conventions*). Consider bare public names on the value
 types, or accessors (`font_size()->points()`).
 
-### Builtins in use get their default, in every format
-
-A builtin the body uses without defining it gets its default
-(`builtin::default_style()`) from the ODT and DOCX writers, but not from the
-HTML one, which writes no rule for it (DESIGN.md, *Builtin defaults*). So an
-undefined Title is 28pt bold in LibreOffice and Word and plain text on a
-page, and code has to write `doc.styles()[builtin::title];` to get the CSS, a
-line that does nothing visible. Give HTML the same rule: write the default's
-CSS for every builtin used and not defined. Headings would then lose the
-browser's own `h1` look for the default's, as they already do in ODT and DOCX.
-
-Review DESIGN.md's *Default styles*, *Builtin styles and code blocks* and
-*Builtin defaults* together while at it: the first says an undefined default
-gets each format's own look, the last that writers define one, and the
-middle that HTML leaves an undefined builtin to `html::file::css`. One rule,
-stated once, with the exceptions (`para`, `table` and `list` have no default)
-in one place. `list` would get one with level indents (*Model gaps*, *List
-level indents*). Start in `src/html/file.cpp`, where the style sheet is
-written.
-
 ### Saving a document without copying it
 
 `odt::save(doc, p)` and `docx::save(doc, p)` were removed: next to
@@ -216,25 +196,19 @@ Roughly by how much a report or a loaded file would miss it:
   `language`) would make them first class. ODT would still write it as a
   Preformatted Text paragraph, keeping the language in a derived style or an
   attribute, and HTML as `<pre><code class="language-…">`.
-- **A title node**. A title is a paragraph styled `builtin::title`, found by
-  searching the body (`find_title()`, `set_title()`), next to a separate
-  `meta.title`. Nearly every document has one, and each writer treats it
-  specially: HTML's `<title>`, Markdown's `#` (or front matter, below), and a
-  table of contents leaves it out. A node of its own (a `title` block holding
-  inline content, styled, with `builtin::title` as its default) would make it
-  first class, and writers would still write it as a paragraph in that style.
-  To decide: a block node anywhere in the body, or a field on `text_doc` that
-  is always first; whether readers turn every Title paragraph into one or only
-  the first; whether it fills `meta.title` when that's empty; and whether a
-  subtitle goes the same way (LibreOffice and Word both have Subtitle).
-- **Markdown titles**. Markdown has no title: the writer writes a
-  `builtin::title` paragraph as `# ...`, and `md::parse` reads every `#` as
-  `heading(1)`, so a title written to Markdown and read back becomes a heading,
-  and appears in the table of contents. YAML front matter (`title: ...`), which
-  Pandoc and many renderers read, would keep it: the writer writes it for the
-  title paragraph or `meta.title`, and the parser (md4c doesn't read front
-  matter) takes it off the start and sets both. Start in `src/md/file.cpp`
-  and `src/md/parser.cpp`.
+- **Subtitles**. LibreOffice and Word both have a Subtitle style. It could go
+  the way `title` did (DESIGN.md, *Titles*): a node written as a paragraph in
+  `builtin::subtitle`, with a default, read back from that style.
+- **Markdown titles**. Markdown has no title, and `#` is HTML's `h1`, so
+  `md::parse` reads every `#` as `heading(1)` and that stays. The writer
+  writes a `title` as `# ...` too, so it looks like one where the output is
+  shown (GitHub job summaries and PR comments), but reads back as a heading
+  and appears in the table of contents. Extensions put the title elsewhere:
+  YAML front matter (`title: ...`, Pandoc and many static site tools) or
+  Pandoc's `% Title` block. Reading front matter into a title (md4c doesn't
+  read it), and optionally writing it, would let a title round-trip. Writing
+  it by default wouldn't suit GitHub, which shows front matter in a comment as
+  a rule and a heading. Start in `src/md/parser.cpp`.
 - **Frame placement**. Frames are always in the line of text. A portable subset
   all of ODT, DOCX and HTML can hold: in the line; a block on its own line,
   left, centred or right, text above and below; floating left or right with

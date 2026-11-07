@@ -30,6 +30,7 @@ add_library(docsmithcpp
     "format.h"
     "list_numbers.h"
     "outline.h"
+    "titles.h"
     "zip/archive.h"
     "zip/archive.cpp"
     "odf/package.h"

@@ -70,6 +70,7 @@ private:
 
     void emit(pugi::xml_node parent, const paragraph &p);
     void emit(pugi::xml_node parent, const heading &h);
+    void emit(pugi::xml_node parent, const title &t);
     void emit(pugi::xml_node parent, const span &s);
     void emit(pugi::xml_node parent, const hyperlink &h);
     void emit(pugi::xml_node parent, const text &t);

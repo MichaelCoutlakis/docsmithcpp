@@ -20,6 +20,7 @@ PREVIEW_LEN = 60
 CONTAINERS = {
     "paragraph": [],
     "heading": ["level"],
+    "title": [],
     "span": [],
     "hyperlink": ["target"],
     "list_item": ["numbered", "start_value"],

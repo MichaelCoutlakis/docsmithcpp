@@ -37,6 +37,7 @@
 #include "format.h"
 #include "image_size.h"
 #include "outline.h"
+#include "titles.h"
 
 namespace docsmith::docx
 {
@@ -927,6 +928,8 @@ private:
         write_inlines(n, p.items(), {});
     }
 
+    void emit(pugi::xml_node parent, const title &t) { emit(parent, detail::as_paragraph(t)); }
+
     void emit(pugi::xml_node parent, const heading &h)
     {
         auto n = parent.append_child("w:p");
@@ -973,8 +976,8 @@ private:
             bool first = item.numbered;
             for(const auto &b : item.items())
             {
-                const bool para =
-                    std::holds_alternative<paragraph>(b.v) || std::holds_alternative<heading>(b.v);
+                const bool para = std::holds_alternative<paragraph>(b.v) ||
+                    std::holds_alternative<heading>(b.v) || std::holds_alternative<title>(b.v);
                 if(para && in_list)
                     m_list = list_context{m_list_depth - 1, first ? num_id : 0};
                 std::visit([&](const auto &n) { emit(parent, n); }, b.v);

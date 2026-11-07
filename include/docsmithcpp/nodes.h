@@ -18,7 +18,7 @@
 #pragma once
 
 // ============================================================================
-//  The block-level glue: the paragraph/heading text nodes and the block_node
+//  The block-level glue: the paragraph/heading/title text nodes and the block_node
 //  variant that ties the block-level alternatives together. Including this
 //  header pulls in the whole node model.
 //
@@ -33,7 +33,7 @@
 //  (style.h) and has_children<> (nodes_fwd.h) mixins.
 //
 //  File map: nodes_fwd.h (fwd + mixins), inline_nodes.h (inline content),
-//  list.h / table.h (list and table nodes), this header (paragraph/heading +
+//  list.h / table.h (list and table nodes), this header (paragraph/heading/title +
 //  block_node), text_doc.h (the document root).
 // ============================================================================
 
@@ -84,6 +84,24 @@ public:
     bool operator==(const heading &) const = default;
 };
 
+/// A title: of the document, a chapter or a part. Writers write it as a
+/// paragraph in its style (builtin::title when it has none of its own), and a
+/// table of contents leaves it out: unlike a heading it has no level and isn't
+/// in the outline. It's separate from meta.title, and a document can have
+/// several.
+class title : public styled<title, style_family::para>,
+              public has_children<inline_node, title, false>
+{
+public:
+    title() = default;
+    template <typename... Args>
+        requires content_args<title, inline_node, Args...>
+    title(Args &&...content)
+    { (this->add(std::forward<Args>(content)), ...); }
+
+    bool operator==(const title &) const = default;
+};
+
 /// Starts a new page. Writers fold it into the next paragraph or heading where
 /// their format puts page breaks on paragraphs (ODT).
 struct page_break
@@ -109,7 +127,9 @@ struct table_of_contents
 
 struct block_node
 {
-    std::variant<paragraph, heading, list, table, frame, page_break, table_of_contents, unknown> v;
+    std::variant<paragraph, heading, title, list, table, frame, page_break, table_of_contents,
+        unknown>
+        v;
     bool operator==(const block_node &) const = default;
 };
 

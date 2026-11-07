@@ -31,6 +31,7 @@
 #include "md/names.h"
 #include "outline.h"
 #include "resource_plan.h"
+#include "titles.h"
 
 // Each block is rendered to a string without a trailing newline, so that a
 // container (list item, block quote) can indent or prefix its lines, and blocks
@@ -43,22 +44,7 @@ namespace fs = std::filesystem;
 namespace
 {
 
-/// Whether sn is base, or a style defined (through its parents) from base.
-template <style_family F>
-bool based_on(const style_name<F> &sn, const style_name<F> &base, const style_sheet &styles)
-{
-    style_name<F> s = sn;
-    for(int depth = 0; !s.empty() && depth != 32; ++depth) // guards against a cycle
-    {
-        if(s == base)
-            return true;
-        const auto *def = styles.find(s);
-        if(!def)
-            return false;
-        s = def->parent;
-    }
-    return false;
-}
+using detail::based_on;
 
 /// What a span's style comes to in Markdown.
 struct span_format
@@ -259,6 +245,9 @@ private:
         return inline_block(p.items());
     }
 
+    // Markdown has no title: the nearest is a top level heading.
+    std::string emit(const title &t) { return emit(detail::as_paragraph(t)); }
+
     std::string emit(const heading &h)
     {
         const int level = std::clamp(h.level, 1, 6);
@@ -418,6 +407,7 @@ private:
             overloaded{
                 [&](const paragraph &p) { part(inlines(p.items(), context::cell)); },
                 [&](const heading &h) { part(inlines(h.items(), context::cell)); },
+                [&](const title &t) { part(inlines(t.items(), context::cell)); },
                 [&](const frame &f) { part(image(f)); },
                 [&](const list &l)
                 {
