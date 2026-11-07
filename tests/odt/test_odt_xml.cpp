@@ -549,3 +549,43 @@ TEST(ODT_XML, BuiltinHeadingAndLinkStylesAreDefined)
     EXPECT_FALSE(styles.xml.select_node("//style:style[@style:name='Heading_20_1']"))
         << "only the levels used";
 }
+
+// A template's defaults are loaded as the builtin styles. Replacing one in
+// the registry (add_style() refuses a different definition of a name), or
+// editing the one find() gives, is what is saved, in place.
+TEST(ODT_XML, TemplateDefaultStylesCanBeReplacedOrEdited)
+{
+    auto f = odt::file::load("odt/moderate.odt");
+    style *h1 = f.doc.styles().find(builtin::heading(1).get_name());
+    ASSERT_NE(h1, nullptr);
+    EXPECT_EQ(h1->m_parent_style, style_name("Heading")) << "as LibreOffice defines it";
+    ASSERT_NE(f.doc.styles().find(builtin::default_paragraph.get_name()), nullptr);
+    ASSERT_NE(f.doc.styles().find(builtin::link.get_name()), nullptr);
+
+    // Edited in place: the rest of its definition stays.
+    h1->m_text_props = h1->m_text_props.value_or(text_props{});
+    h1->m_text_props->set(font_size(20));
+    // Replaced.
+    f.doc.styles().add(style(builtin::default_paragraph,
+        style_family::paragraph,
+        text_props(font_name("Liberation Sans"), font_size(11))));
+    f.doc.add(paragraph("added"));
+    f.save("odt/out/template_defaults.odt");
+
+    const part styles("odt/out/template_defaults.odt", "styles.xml");
+    EXPECT_EQ(
+        styles.xml.select_nodes("//office:styles/style:style[@style:name='Standard']").size(), 1U);
+    EXPECT_EQ(
+        styles.xml.select_nodes("//office:styles/style:style[@style:name='Heading_20_1']").size(),
+        1U);
+
+    const auto back = odt::file::load("odt/out/template_defaults.odt").doc;
+    const style *h1_back = back.styles().find(builtin::heading(1).get_name());
+    ASSERT_NE(h1_back, nullptr);
+    EXPECT_EQ(h1_back->m_parent_style, style_name("Heading"));
+    EXPECT_EQ(h1_back->m_text_props->m_font_size, font_size(20));
+    const style *standard = back.styles().find(builtin::default_paragraph.get_name());
+    ASSERT_NE(standard, nullptr);
+    EXPECT_EQ(standard->m_text_props, text_props(font_name("Liberation Sans"), font_size(11)));
+    EXPECT_TRUE(std::get<paragraph>(back.body.back().v).style.is_empty());
+}
