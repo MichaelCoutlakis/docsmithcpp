@@ -40,7 +40,9 @@ void check_no_clash(const Registry &to, const Registry &from, const char *what)
         if(const auto *existing = to.find(name); existing && !(*existing == value))
         {
             std::string shown;
-            if constexpr(requires { name.str(); })
+            // On the key type, not the binding: Clang before 16 can't name a
+            // structured binding in a requires expression.
+            if constexpr(requires(const typename Registry::key_type &k) { k.str(); })
                 shown = name.str();
             else
                 shown = name;
