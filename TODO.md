@@ -3,20 +3,7 @@
 Outstanding work, roughly in priority order. Each item says why it matters and
 where to start. Done work goes in `CHANGELOG.md` and leaves this file.
 
-## 1. Before 0.1.0
-
-The library builds, installs and passes CI on Linux and MSVC. What's left for a
-usable first release is that it doesn't lose content and that the headline use
-case, a generated test report, looks like a report.
-`write_example_test_report()` in `examples/create_document.cpp` is the
-yardstick.
-
-### Tag 0.1.0
-
-Once the above is in, move `[Unreleased]` in `CHANGELOG.md` to `[0.1.0]` and
-tag it.
-
-## 2. For 0.2.0
+## 1. For 0.2.0
 
 Reading documents from someone else safely, then usability points from a
 review of the public API: none of those loses content, but each is a way a new
@@ -106,7 +93,7 @@ can't be mistaken for saving a loaded file, e.g. a `file` that refers to a
 document rather than owning one, or a name that says the package is new
 (`save_new()`).
 
-## 3. After 0.1.0
+## 2. Later
 
 ### Tables
 
@@ -220,7 +207,7 @@ Roughly by how much a report or a loaded file would miss it:
   If it's ever wanted, an enum (`same_window`, `new_window`, ...) rather than
   frame names.
 
-## 4. Internal quality
+## 3. Internal quality
 
 ### Share the image resource plan
 

@@ -7,498 +7,89 @@ breaking changes.
 
 ## [Unreleased]
 
-The document model was rewritten from a polymorphic class hierarchy into value types
-held in `std::variant`. This is a breaking change to almost every public API.
+## [0.1.0] - 2026-11-07
 
-### Changed
-- **Fluent setters on a temporary return an rvalue**: `set_style()`, `add()`, the
-  `table` and `table_cell` setters, `text_doc::add()` / `append()` / `set_title()`
-  and `page_style::set_header()` / `set_footer()`. A chain on a temporary
-  (`table::from_cells(...).set_header_rows(1)`) is moved where it goes instead of
-  copied, and `auto &p = paragraph().set_style("x");`, which dangled, no longer
-  compiles.
-- **Builtin styles have format-agnostic defaults** (`builtin::default_style()`):
-  title, headings, preformatted, source text, link, emphasis and strong. A
-  definition made with `styles()[builtin::...]` starts from the default, so
-  setting one property (a heading's colour) no longer drops the rest of its look
-  (bold, size, keep with next). The ODT and DOCX writers define an undefined
-  builtin from the same default instead of their own, so the two formats now
-  agree: headings and the title in Arial, code in Courier New, links `#0563C1` and
-  underlined. Emphasis and strong are now bold and italic in ODT and DOCX too.
-- **Style names are format-agnostic**: a style is named as it is shown ("Text body",
-  "Heading 1"), and readers and writers translate to the format's own spelling (ODF's
-  `Text_20_body`, a DOCX `w:styleId` made from the name). The builtins are renamed to
-  match: `builtin::para` is "Default Paragraph Style", `heading(n)` "Heading n",
-  `link` "Hyperlink", `table` "Default Table", `list` "Default List",
-  `preformatted` "Preformatted Text" and `source_text` "Source Text". The styles
-  Markdown reads into are builtins too: `builtin::emphasis`, `strong`, `quotations`,
-  `numbered_list` and `bullet_list`.
-- **`docsmith::error`** (`error.h`) is what reading and writing throw, in place of
-  `std::runtime_error`: a `std::exception` with an `error_code` (`io`,
-  `not_a_document`, `malformed`, `missing_image`, `unsafe_path`) and a message.
-- **Child sequences are `items()`**, as on `list`: `paragraph::children()` and the
-  others are renamed.
-- **Table border setters are `apply_*`** (`apply_borders`, `apply_row_borders`, ...),
-  as they apply to the cells there are now, not to rows added later.
-- **Properties name what they are**: a text colour is `font_colour(c)`
-  (`text_props::m_font_colour`), a cell's background `background(c)`, and a table's
-  width `table_width(percent(100))` or `table_width(cm(15))`, in place of a bare
-  `colour`, `percent` or `length`. The props constructors and `paragraph_style` /
-  `cell_style` are constrained, so a property they don't take fails at the call.
-- **`[[nodiscard]]`** on `text_doc::replace()` / `insert_after()` / `insert_before()`
-  (false when the placeholder isn't found), `load()`, `to_string()`, the `find()`
-  functions, `collect()` and `find_all()`.
-- **Value types take parentheses as well as braces**: the property tags
-  (`space_after(pt(6))`, `keep_with_next()`, `outer_border(...)`, `percent(50)`,
-  `cell_padding(...)`, `header_cells(...)`) have constructors, as an aggregate takes
-  parentheses only from Clang 16. `font_size` also takes a `length`
-  (`font_size(pt(11))`), and `font_name::get_name()` is `str()`, as on `style_name`.
-- **Dependencies are the consumer's to find.** The project using DocSmith++ defines
-  `pugixml::pugixml` and `miniz::miniz` (and `md4c::md4c` with Markdown input) before
-  `find_package(DocSmithCpp)`, `add_subdirectory` or FetchContent; DocSmith++ checks
-  they exist and stops with a message naming any that are missing. So every library
-  in a build is one its project chose, and a package manager's own target names can
-  be aliased to these. Built on its own, DocSmith++ still finds them.
-- **`table`** keeps its cells private, row by row, and is always rectangular. Read
-  them with `cell()`, `row()`, `col()` and `cells()`; add rows with
-  `add_row(cells, row_style)`. `header_rows` is now `header_rows()` /
-  `set_header_rows()`. `add_row()` with no cells, `add_cell()` and
-  `is_rectangular()` are gone. A table also has a style, a name, a style per row,
-  and a width and style per column.
-- **ODT tables** keep their name, style, row styles and column widths through
-  load and save, and the columns and repeated cells and rows LibreOffice writes
-  are read.
-- **Document model**: nodes are plain value types grouped into two variants,
-  `inline_node` (`text`, `span`, `hyperlink`, `frame`, `bookmark`, `unknown`) and
-  `block_node` (`paragraph`, `heading`, `list`, `table`, `frame`, `unknown`). What may
-  contain what is set by each child sequence's type. Copy and `operator==` are
-  compiler-generated (`= default`), so deep copy and structural equality need no
-  `clone()` / `is_equal()`.
-- **Construction**: each node has constructors for its own scalar attributes
-  (`heading(1)`, `hyperlink("url")`, `table_cell().set_span(2, 2)`), variadic content
-  constructors (`paragraph("a", hyperlink(...))`) and a chainable `.add()`. A single
-  argument of the node's own type always copies; nesting a same-type node (a span in
-  a span) uses `.add()`. This removes the copy-vs-child ambiguity.
-- **Traversal and search**: `std::visit` plus the helpers in `visit.h`: `walk`,
-  `collect<T>`, `find_all<T>`, `strip_styles` and the `overloaded` idiom. These replace
-  `element_base::find_all` / `get_elem_of` and the `element_visitor` base class.
-- **Writers**: `io_writer` and the ODT `writer` are recursive `std::visit` emitters with
-  no visitor base class.
-- **ODT parser** rewritten as recursive descent returning variants, replacing the
-  `unique_ptr<element>` factory and stack.
-- **ODT API**: `docsmith::odt::file` replaces `docsmith::odt_file`. Use
-  `odt::file::load(path)` and `file.save(path)`; the document is the public `doc`
-  member. The file keeps the whole package in memory (`styles.xml`, `meta.xml`,
-  settings, thumbnail, embedded images). Load → edit → save writes those parts back
-  unchanged, along with the original fonts and automatic styles from `content.xml`.
-  `content.xml` itself is regenerated from the model.
-- **`text_doc::operator==` compares everything**, the style, list style and resource
-  registries included. Compare `a.body == b.body` for content only.
-- **Dependencies are private**: `odt/writer.h` moved out of the public headers, so
-  pugixml and the zip library are no longer exposed to users.
-- **miniz replaces libzippp and libzip** (and with them zlib and the compression and
-  crypto backends vcpkg pulled in). Archives are read and written in memory by a
-  private, format-neutral layer in `src/zip/`, which DOCX can share.
-- **fmt is no longer a dependency.** The writers format their few numbers with
-  `std::to_chars` and string concatenation.
-- `io_writer` streams its output instead of using `std::format`, so the public
-  headers don't need `<format>` (GCC 13, libc++ 17).
-- ODT entries other than `mimetype` are now deflated. Previously everything was
-  stored uncompressed.
-- **Headers** split by concept: `nodes_fwd.h` (forward declarations and mixins),
-  `inline_nodes.h`, `list.h`, `table.h`, `nodes.h` (`paragraph`, `heading`,
-  `block_node`) and `text_doc.h` (document root and umbrella include).
-- **C++20 is required.** `target_compile_features` is now `cxx_std_20` (it was
-  `cxx_std_17`, which never matched the code).
-- Build: CMake presets restructured into `dev` / `ci` / `release`, with an msys2
-  clang64 user preset using the `x64-mingw-static` vcpkg triplet. The presets now set
-  the project's real options. They used to set `BUILD_TESTING` / `BUILD_EXAMPLES`,
-  which the project never read, so `dev` built neither tests nor examples.
-- `DOCSMITHCPP_BUILD_TESTS` and `DOCSMITHCPP_BUILD_EXAMPLES` default to ON only when
-  DocSmith++ is the top-level project.
-- The test executable changes into `tests/` at startup, so it can be run from any
-  directory. Generated test files go to `tests/odt/out/`.
+First release: a C++20 library for building, reading, editing and writing rich-text
+documents through one format-agnostic model. See [DESIGN.md](DESIGN.md) for how
+each format maps to it.
 
 ### Added
-- **Underline**: `text_props::set(underline::single)` (or `underline::none`), read
-  and written in ODT (`style:text-underline-style`), DOCX (`w:u`) and HTML
-  (`text-decoration`).
-- **`html::save(doc, path)`** and `md::save()`: save a document without copying it
-  into a `file`. ODT and DOCX have no such function, as next to `file::save()` it
-  would be an easy way to drop what a loaded file keeps.
-- **Content concepts**: `inline_content`, `block_content` and `content_for` constrain
-  `add()`, the variadic content constructors, `cell_view::assign()` and
-  `page_style::set_header()` / `set_footer()`. Content of the wrong level, such as
-  a paragraph in a span, fails at the call with "no matching constructor" rather
-  than deep inside `std::variant`. They replace `content_ctor_t`.
-- **Default styles**: `builtin::para`, `builtin::heading(level)`,
-  `builtin::link`, `builtin::table` and the list style `builtin::list` are the
-  styles of nodes with none of their own. Define
-  one to style every unstyled paragraph, heading, link, table or list in every
-  format; a loaded template's defaults (LibreOffice's Default Paragraph Style,
-  Heading 1, Internet Link; Word's Normal, Heading 1, Hyperlink, Normal Table)
-  read as these definitions, with the nodes using them unstyled. ODT headings
-  and links now have LibreOffice's Heading n and Internet Link, defined when the
-  file doesn't (LibreOffice applies only defined styles), so a document built in
-  code no longer opens with plain headings.
-- **Paragraph spacing and alignment**: `paragraph_props` holds space above and below
-  (`space_before`, `space_after`), indents (`indent_start`, `indent_end`,
-  `first_line_indent`, negative for hanging), alignment (`text_align`) and
-  `keep_with_next` / `keep_together`. ODT (`fo:margin-*`, `fo:text-indent`,
-  `fo:text-align`, `fo:keep-*`) and DOCX (`w:spacing`, `w:ind`, `w:jc`, `w:keepNext`,
-  `w:keepLines`) read and write them, and HTML writes them as CSS. So LibreOffice's
-  heading spacing now shows in HTML from a loaded `.odt`, and a style defined in code
-  can set its own. DOCX writes start and end alignment as left and right.
-- **Link styles**: `hyperlink` is styled (a text style), read and written as ODT's
-  `text:style-name` on `text:a` (a loaded LibreOffice link keeps "Internet link"), as
-  the DOCX run style of the link's text in place of `Hyperlink`, and as an HTML class.
-- **Alternative text** for images and tables: `accessibility_title` and
-  `accessibility_description` on `frame` and `table`. ODT (`svg:title`, `svg:desc`,
-  `table:title`, `table:desc`) and DOCX (`wp:docPr` `title` / `descr`, `w:tblCaption`,
-  `w:tblDescription`) read and write them; HTML writes `alt` and `aria-label`, and
-  Markdown reads and writes an image's alt text. HTML wrote `alt=""` before.
-- **List numbering**: `list::continue_numbering` carries a list's count on from
-  the last list of its style, `list_item::start_value` restarts the count at an
-  item, and `list_item::numbered` (false) is an item with no number or bullet,
-  ODF's list header. ODT reads and writes them (`text:continue-numbering`,
-  `text:continue-list`, `text:start-value`, `text:list-header`), DOCX through
-  `w:num` instances and `w:startOverride`, and HTML and Markdown write the
-  numbers they make. A loaded LibreOffice list that continues after a paragraph
-  no longer starts again at 1.
-- **Image size**: `frame::width` and `height`, read and written by ODT
-  (`svg:width`, `svg:height`) and DOCX (`wp:extent`, also replacing a loaded
-  drawing's size), and written by HTML. Before, a loaded `.odt` image was saved
-  with no size.
-- **Table formatting** in every format (see DESIGN.md, *Tables*). A table style
-  (`table_props`) gives the table's width and alignment, its outer and inside
-  lines, cell padding and how its header rows' cells look (`header_cells`). How a
-  cell looks is `cell_props` (borders, background, vertical alignment, padding and
-  a paragraph style for its unstyled paragraphs), in a cell style, a column's
-  style (`set_column_style`, applied to rows added later too, read from and written
-  to ODT's `table:default-cell-style-name`), the header's, or a cell's direct
-  formatting (`table_cell::props`), the later winning.
-  `apply_borders`, `apply_outer_border`, `apply_horiz_borders`, `apply_vert_borders`,
-  `apply_row_borders` and `apply_column_borders` set lines after the content is in;
-  `set_column_widths` sets relative column widths. `effective_cell_props()` says
-  how a cell will look. ODT, DOCX and HTML write all of it; ODT and DOCX read it
-  back.
-- `length` (`pt()`, `mm()`, `cm()`, `inch()`) and `percent`, replacing the unused
-  `dim`.
-- **DOCX output**: `docx::file(doc).save()` writes a `.docx` with no new
-  dependency, on the same private zip layer as ODT. Paragraphs and headings
-  (`Heading1`-`9` with `w:outlineLvl`), spans as runs with `w:rStyle`, tabs and
-  line breaks, links to URLs and bookmarks, bookmarks, lists through
-  `numbering.xml` (each list restarts its numbering), tables with spans and
-  repeated header rows, images as inline drawings sized from the PNG, JPEG or GIF
-  header, page breaks, `styles.xml` from `styles()` with the builtin code styles
-  in Courier New, the page header and footer, `PAGE` / `NUMPAGES` / `DATE` /
-  `TITLE` fields, a table of contents field with its entries (and
-  `w:updateFields`, so Word offers to add the page numbers), and `meta` in
-  `docProps/core.xml` and `custom.xml`. See DESIGN.md, *DOCX*.
-- **DOCX input**: `docx::file::load()` reads the same back, from files Word or
-  LibreOffice wrote, whatever namespace prefixes they use. Load, edit and save
-  keeps the parts the model doesn't represent (theme, footnotes, settings, other
-  headers, section settings), elements it doesn't model (as `unknown` nodes), and
-  formatting set directly on runs and paragraphs, which is read as styles `T1`,
-  `P1`, ... (like ODF's automatic styles) and written back as it was while
-  unchanged. A loaded image keeps its size and placement.
-- `unknown::source` (`markup::odf` or `markup::ooxml`) says whose markup the node
-  holds; each writer writes only its own. `unknown{xml}` is ODF, as before.
-- `example_docx_to_html`, and `example_create_document` also writes `.docx`.
-- A `libreoffice_opens_output` test (label `libreoffice`) has LibreOffice open
-  every `.odt` and `.docx` the tests write, when `soffice` is found.
-- **Template-driven test report**: `examples/report_template.odt` (built by
-  `example_make_report_template`, then saved by LibreOffice) has heading, body,
-  header, footer and pass / fail styles, a header with the title, a footer with
-  page numbers, a table of contents and placeholders. `example_create_document`
-  fills it in and writes `.odt` and `.html`; `example_fill_template` shows
-  replace and insert on their own.
-- **Filling in a template**: `text_doc::replace()`, `insert_after()` and
-  `insert_before()` put a document's body in place of, after or before a
-  `placeholder`: the first paragraph or heading holding a `bookmark`, with a
-  `style_name`, or with a given `text`. They search the body (lists and table
-  cells included), then the header and footer, and merge styles and resources as
-  `append()` does.
-- **Table of contents**: a `table_of_contents` block node (`title`, `levels`).
-  The ODT writer writes `text:table-of-content` with entries made from the
-  headings, linked to them (LibreOffice doesn't regenerate them on load); HTML
-  writes a `<nav>` of nested lists, and gives the headings ids to link to.
-- **Headers and footers**: `text_doc::page` (`page_style`) holds the header and
-  footer as blocks, with `set_header()` / `set_footer()`. ODT reads and writes
-  them on the body's master page in `styles.xml`, creating one for a new document
-  that has them; HTML writes `<header>` and `<footer>`. `walk()`, `collect()` and
-  `find_all()` visit them after the body.
-- **Fields**: an inline `field` node for the page number, page count, date and
-  document title. ODT writes and reads `text:page-number`, `text:page-count`,
-  `text:date` and `text:title`; HTML writes the title and date, and leaves page
-  numbers out.
-- **Markdown output**: `md::file(doc).to_string()` / `save()` write GitHub Flavored
-  Markdown, with no dependency. Bold and italic styles become `**strong**` and
-  `*emphasis*`, `builtin::source_text` code spans, `builtin::preformatted` fenced
-  code blocks and `Quotations` block quotes. Lists are ordered or not from their list
-  style, tables are GFM tables (an empty header row without `header_rows`), bookmarks
-  are `<a id>` anchors, `'\n'` is a hard break and `page_break` a thematic break.
-  A `table_of_contents` is a nested list of links to the headings, with the same ids
-  as in HTML; `field` writes the title or date, and the page header and footer are
-  left out. Markdown's special characters are escaped. Images are written next to the
-  file, as for HTML. See DESIGN.md, *Markdown*.
-- **Markdown input** (CMake option `DOCSMITHCPP_MARKDOWN`, off by default and on in
-  the `dev` preset): `md::parse(std::string_view)` and `md::file::load()` read
-  CommonMark with GFM tables, strikethrough and autolinks, using md4c. md4c is linked
-  privately, and the package config requires it only when the option is on. Parsed
-  emphasis, strong, code and quotes get LibreOffice's style names, so the result
-  writes back to the same Markdown and looks right as `.odt`; it can be added to a
-  document with `text_doc::append()`. Raw HTML is dropped, apart from bookmark
-  anchors and `<br>`.
-- `example_md`: builds a test report as Markdown, converts `.odt` to `.md`, and `.md`
-  to `.odt` and `.html`.
-- **Code blocks**: `builtin::preformatted` (LibreOffice's Preformatted Text) styles a
-  monospace paragraph for code and logs, with lines separated by `'\n'`, and
-  `builtin::source_text` (Source Text) monospace text in a line. ODT defines them as
-  LibreOffice does when the document uses them and doesn't define them; HTML writes
-  `<pre>` and `<code>`, also for styles based on them. The example test report has a
-  log excerpt.
-- **White space, tabs and line breaks** are kept in `text`: spaces as they are,
-  `'\t'` for a tab and `'\n'` for a line break, so `paragraph("line 1\nline 2")`
-  is two lines. ODT writes them as `text:s`, `text:tab` and `text:line-break` where
-  ODF would otherwise collapse them, and reads them back into the text; they used to
-  become `unknown`. HTML writes `<br>`, `&nbsp;` and a `white-space: pre` tab.
-- **`page_break`** block node: `doc.add(page_break{})` starts a new page. ODT folds it
-  into the next paragraph or heading through an automatic style with
-  `fo:break-before="page"` (or an empty paragraph if none follows), and reads it back.
-  HTML writes `<div style="break-after: page"></div>`.
-- **Table header rows**: `table::header_rows` (and `set_header_rows(n)`) counts the
-  rows at the top that are header rows. ODT reads and writes them as
-  `table:table-header-rows`, so they repeat on each page; the parser used to flatten
-  them into ordinary rows. HTML writes them in `<thead>` with `<th>` cells, and the
-  other rows in `<tbody>`. The example test report's summary table has one.
-- `DESIGN.md` lists the nodes and what each may contain.
-- **Loading style definitions**: `odt::file::load()` reads the styles and list styles
-  of `styles.xml` and `content.xml` (common and automatic) into `text_doc::styles()`,
-  as far as the model holds their properties. HTML from a parsed
-  `.odt` now gets numbered lists and CSS for its classes.
-- The HTML CSS rule for a style includes the properties it inherits from its parent
-  styles.
-- **A style type per family**: `paragraph_style` (`para` and `text` properties),
-  `text_style`, `table_style`, `cell_style` (`cell`, and `para` and `text` for its
-  unstyled paragraphs), `row_style`, `frame_style` and `list_style` (`levels` of
-  `number_level` / `bullet_level`, aggregates for designated initializers). Each
-  family has its own names (`style_family`: `para`, `text`, `table`, `cell`, `row`,
-  `frame`, `list`), so a paragraph style and a text style may share one, as in ODF;
-  DOCX writes the text one as `<id>Char`, and HTML limits each rule to its family's
-  elements. A node's `style` is a `style_name<F>` of its family
-  (`para_style_name`, `text_style_name`, ...), so a text style's name can't be set
-  on a paragraph; a string converts to any. A style's name is read-only
-  (`name()`), and `parent` is of its family. Styled spans now work in ODT; the
-  writer used to write every style as a paragraph style.
-- **Cell styles' paragraph and text properties** are written on the cell's
-  unstyled paragraphs, as a paragraph style made from them
-  (`<cell style>_20_Text`, based on the cell's paragraph style): LibreOffice
-  ignores them in a cell style and DOCX has none. `effective_cell_text()` gives
-  a cell's, from its column's and its own cell style.
-- `hyperlink::target` is a `link_target` variant: `url_target` (used as is) or
-  `bookmark_target` (a bookmark in the same document). `hyperlink(bookmark{"x"}, ...)`
-  links to a bookmark; writers add the `#`, and the ODT parser turns `#x` back into a
-  bookmark target. This replaces `hyperlink::url`.
-- **`text_doc::styles()` is a `style_sheet`**, a registry per family (`para`,
-  `text`, `table`, `cell`, `row`, `frame`, `list`), each like a `std::map`:
-  `insert()` keeps an existing definition and gives its name and whether it was
-  added, `insert_or_assign()` replaces it, `operator[]` gives a definition to edit,
-  adding an empty one, and `erase()` removes one. The sheet's `insert()` and
-  `operator[]` pick the registry from the style or the typed name:
-  `doc.styles()[builtin::para].text.set(font_size(11))`,
-  `auto [name, added] = doc.styles().insert(text_style("Strong", ...))`.
-  `text_doc::append()` appends another document's body, styles and resources and
-  throws on a name defined differently in both.
-- Text properties `font_weight` and `colour` (`fo:font-weight` / `fo:color` in ODT,
-  `font-weight` / `color` in CSS).
-- `table::add_row(cells)` checks the row width; `table::is_rectangular()`.
-- `unknown` pass-through node. The parser stores verbatim XML for elements it does not
-  model and the writer re-emits it.
-- `box<T>`: a value-semantic heap holder with type-erased destroy / clone / compare. It
-  breaks the recursion between the node variants, so the model compiles on libc++ as
-  well as the MSVC STL and libstdc++. It holds a typed `T *`, so debuggers can follow
-  it to the held value.
-- `styled<Derived>` and `has_children<Child, Derived, Boxed>`: thin non-polymorphic
-  CRTP mixins for the style name and the child sequence. `items()` hides the boxing.
-- The ODT writer emits `text:outline-level` on headings and `xlink:type` on hyperlinks.
-  Empty style names are no longer written.
-- Tests: `ValueSemantics`, `ChainedAdd`, `UnknownPassThrough`, `ResaveLoadedFile`,
-  `ResaveLoadedImage`, `EditLoadedFile`, `MissingImageThrows`, and an HTML suite
-  (escaping, no self-closing tags, CSS, lists, tables, bookmarks, image paths, ODT
-  conversion).
-- **HTML output**: `docsmith::html::file` writes an HTML5 page (`save(path)` or
-  `to_string()`). Style names become CSS classes, and definitions in `doc.styles()`
-  become embedded rules (font size, style and family; page and column breaks). Extra
-  CSS goes in `css`. A list becomes `<ol>` (with `type` and `start`) or `<ul>`,
-  according to its list style at each nesting level. Covered table cells are left out
-  and spans become `rowspan` / `colspan`. Bookmarks become ids that `#` links
-  resolve to.
-- `docsmith.h`: a convenience header for the whole public API.
-- `DOCSMITHCPP_DEBUG_FILES` CMake option (ON in the `dev` preset). When set, saving an
-  `.odt` also writes `<name>.content.xml` next to it.
-- Examples `create_document` (build a document, save it as `.odt` and `.html`, plus
-  a test report with a title and metadata), `read_odt` (parse, print the tree, list
-  the links) and `odt_to_html`.
-- **Document resources**: `text_doc::resources()` holds the bytes and media type of
-  each image, by name (`resource`, `resource_registry`; the bytes are shared and
-  read-only, so copying a document stays cheap). `add_image(name, data, media_type)`
-  adds one and returns the `image`; `write_resources(dir)` writes the ones the body
-  refers to. An image `uri` is looked up in the resources, then on disk, then left as
-  is. `odt::file::load()` moves referenced images from the package into the
-  resources, and `save()` embeds them from there.
-- `html::file::resource_dir`: `save()` writes the page's images there (relative to
-  the page; empty means next to it). Images from an `.odt` land at
-  `resource_dir/Pictures/…`; image files from disk are copied to
-  `resource_dir/Pictures/` unless already inside `resource_dir`. `to_string()` writes
-  the same `src` values without writing files. Converting a parsed `.odt` to HTML now
-  shows its images.
-- **Document metadata**: `text_doc::meta` (`metadata`, in `metadata.h`) holds the
-  title, author, language, subject, description, keywords, created and modified
-  dates, and custom properties. `odt::file` reads it from `meta.xml` and writes it
-  back in place, keeping the generator, statistics and unchanged values as they
-  were. HTML writes `<html lang>`, `<title>` and `author` / `description` /
-  `keywords` meta tags. `html::file::title` now defaults to `doc.meta.title`, then
-  the first heading.
-- **Title paragraph**: `builtin::title` names the Title paragraph style, which writers
-  know without a definition in `text_doc::styles()`. `text_doc::find_title()` returns
-  the first paragraph with it, and `set_title(text)` sets that paragraph's text or
-  adds one at the start of the body. The ODT writer defines the style as LibreOffice's
-  Title (centred, 28pt bold) unless the document or the loaded file already does.
-  HTML gives it `class="Title"` and no CSS, and uses its text for `<title>` when
-  `meta.title` is empty.
-- `named_registry` is in `namespace docsmith`, ordered by name, and takes its key from
-  the value's `name()`: `insert()`, `insert_or_assign()`, `operator[]`, `find()`,
-  `contains()` and `erase()`, as `std::map`. Registries compare with `==`.
-- `docsmith::docsmithcpp` alias target, so in-tree and installed builds use the same
-  target name. The package now installs a version file.
-- A `consumer` ctest that installs the library into the build directory and builds
-  `tests/consumer/` against it with `find_package(DocSmithCpp)`, with the same
-  toolchain. The README shows the `find_package`, `add_subdirectory` and
-  FetchContent routes.
-- Debugger visualisers in `tools/debug/`: `docsmith_lldb.py` (CodeLLDB, lldb-dap, lldb)
-  and `docsmith.natvis` (Visual Studio, VS Code `cppvsdbg`). They show each node's
-  summary, fields and children without the variant, `has_children` and `box`
-  plumbing. Setup is in CONTRIBUTING.md.
-
-### Removed
-- `graphics_props`, `align_horiz` and `align_vert`, and `style::set(graphics_props)`.
-  Frames are always in the line of text, so a graphic style's position had nothing to
-  apply to.
-- `element.h` (`element`, `element_base`, `elem_tagged`, `elem_t`, `element_visitor`),
-  `valid_relations.h`, `parser.h`, `text.h`, `forward_decl.h`, `src/nodes.cpp`,
-  `src/list.cpp`.
-- `kids` / `kids_tag`, `styled_base`, and the short-lived free builder functions.
-- The `DOCSMITHCPP_BUILD_MINIMAL_USAGE` option, which replaced the library with a demo
-  executable and was ON by default. `src/odt/basic_main.cpp` became an example.
-- The empty placeholder tests in `test_main.cpp`, and the `architecture/` sketches.
-
-### Fixed
-- `table::row()` and `col()` give the cells that start in that row or column,
-  leaving out slots another cell's span covers. They included those placeholders,
-  so `row(r).assign(...)` could put content where no writer writes it, and a span
-  of 0 made them loop forever. `set_span()` throws for a span under 1, and
-  `cell()`'s documentation says a covered slot isn't written.
-- A non-const `text_props` or `paragraph_props` can be copied. Its variadic
-  constructor took the copy and failed to compile.
-- A moved-from `span`, `hyperlink`, `list_item` or `table_cell` is empty. Its
-  children were a null pointer, so reading or adding to it, or writing a document
-  that still held it, crashed.
-- A string placeholder (`doc.replace("{{summary}}", ...)`) is the paragraph's text.
-  It converted to a `style_name`, so it looked for a style of that name and
-  matched nothing. `placeholder` is now a struct holding the variant (`v`).
-- A style whose name spells characters as `_xx_` (`Text_20_body`) gets a
-  `style:display-name` ("Text body"). Without it, LibreOffice took a code-built
-  `Heading_20_1` for a new style rather than its own Heading 1.
-- A font set on a style from code (`font_name`) is declared in `office:font-face-decls`,
-  which `style:font-name` refers to. It wasn't declared before.
-- `content.xml` and `styles.xml` are written without indentation. Indentation between
-  two inline elements (e.g. two spans) reads as a space in LibreOffice. The
-  `DOCSMITHCPP_DEBUG_FILES` copies are still indented.
-- The ODT parser dropped a space between two inline elements
-  (`<text:span>a</text:span> <text:span>b</text:span>`), and kept white space that
-  ODF collapses (a run of spaces, a newline in the XML).
-- The ODT writer now owns `styles.xml`. Common styles go there, as ODF requires,
-  instead of into `content.xml`; a loaded `styles.xml` is updated in place, so its
-  page layouts and master pages survive. Saving a loaded file writes each style
-  once: a definition that is unchanged since loading keeps its original XML, one
-  that was edited replaces it, and a new one is added.
-- Common styles in a file saved by an earlier version (in `content.xml`) were lost
-  when it was saved again.
-- List levels' `text:style-name` was written on the list style instead of the level,
-  and `loext:num-list-format` ignored the number's prefix and suffix.
-- The parser now reads heading outline levels and style names.
-- `odt/file.h` was missing `#pragma once`.
-- `.odt` files with non-ASCII names can be loaded and saved on Windows. Files are
-  opened through `std::filesystem::path`, not `path::string()` (the ANSI code page).
-- The ODT `mimetype` entry has its CRC and sizes in its local header, with no data
-  descriptor or extra field, as ODF requires of the first entry.
-- `gtest_discover_tests` is used with `include(GoogleTest)`. The duplicate catch-all
-  `add_test` is gone.
-- A parsed document with images couldn't be saved again: the image path pointed
-  inside the original archive and the writer looked for it on disk.
-- Table cell style names were parsed but never written.
-- The writer used the `loext:` namespace without declaring it.
-- Frames are anchored as characters. The ODT writer writes `text:anchor-type="as-char"`
-  and puts a block frame in an unstyled paragraph of its own, which reads back as a
-  block frame; it wrote neither before. A loaded frame's anchor and position (ODT
-  `text:anchor-type`, `svg:x`, `svg:y`; DOCX `wp:anchor`) are dropped, so a floating
-  picture comes back in the line.
-- A loaded `.odt` style's font is its font family, read from the font declaration
-  `style:font-name` refers to. It was the declaration's name, which HTML wrote as the
-  CSS font family: LibreOffice names a second declaration of a font "Liberation
-  Sans1".
-- DOCX lists read back as written in three cases: a nested styled list continuing an
-  earlier one (`continue_numbering`), a nested list starting with an unnumbered item
-  (it read as more of the parent item), and two lists of one style next to each
-  other (they read as one list restarting at 1).
-- ODT soft page breaks (`text:soft-page-break`) between blocks or in a paragraph, and
-  list labels as last laid out (`text:number`), are dropped when read. They were kept
-  as `unknown` and written back, so they went stale once the document was edited.
+- **Document model**: plain value types in two variants, `inline_node` (`text`,
+  `span`, `hyperlink`, `frame`, `bookmark`, `field`, `unknown`) and `block_node`
+  (`paragraph`, `heading`, `list`, `table`, `frame`, `page_break`,
+  `table_of_contents`, `unknown`). What may contain what is set by the types, and
+  content of the wrong level fails to compile at the call. Copy and `==` are
+  compiler-generated; fluent setters chain, and move when called on a temporary.
+- **Traversal and search**: `walk()`, `collect<T>()`, `find_all<T>()` and
+  `strip_styles()` over the body, header and footer; `std::visit` with `overloaded`
+  for one level; `io_writer` to print a tree, and debugger visualisers for LLDB and
+  Visual Studio in `tools/debug/`.
+- **Text**: white space kept as written, `'\t'` for a tab and `'\n'` for a line
+  break; spans, links to URLs or bookmarks, bookmarks, page breaks, and fields for
+  the page number, page count, date and title.
+- **Lists** with list styles (numbered and bulleted levels), continued numbering,
+  restarts and unnumbered items.
+- **Tables**: always rectangular, with row and column spans, header rows, relative
+  column widths, and formatting in layers (table style, column style, header cells,
+  cell style, direct formatting), set after the content is in.
+- **Images** in frames, with a size and alternative text, held in the document's
+  `resources()` so any format can write them; alternative text for tables too.
+- **Styles**: a type and a registry per family (`paragraph_style`, `text_style`,
+  `table_style`, `cell_style`, `row_style`, `frame_style`, `list_style`), named as
+  they are shown in every format, with inheritance. Text properties (font, size,
+  weight, italic, colour, underline), paragraph properties (spacing, indents,
+  alignment, breaks, keep with next / together) and cell and table properties.
+- **Default and builtin styles**: `builtin::para`, `heading(n)`, `link`, `table`
+  and `list` style nodes that have none of their own, and `title`, `preformatted`,
+  `source_text` and others are known to every writer. The builtins have
+  format-agnostic defaults (`builtin::default_style()`), which writers use when a
+  document doesn't define them and `styles()[...]` starts from.
+- **Page header and footer**, and a **table of contents** whose entries writers
+  make from the headings.
+- **Metadata**: title, author, language, subject, description, keywords, dates and
+  custom properties.
+- **Templates**: `text_doc::replace()`, `insert_after()` and `insert_before()` put
+  content in place of a placeholder paragraph, found by its text, a bookmark or a
+  style; `append()` merges another document.
+- **ODT** read and write (`odt::file`). Load, edit and save keeps what the model
+  doesn't hold: the rest of the package, unchanged style definitions as they were,
+  and unmodelled block and inline content as `unknown`.
+- **DOCX** read and write (`docx::file`), with no extra dependency. Load, edit and
+  save keeps the rest of the package, and direct formatting (read as styles `T1`,
+  `P1`, ...) while it is unchanged.
+- **HTML** output (`html::file`): styles as CSS classes, lists as `<ol>` / `<ul>`,
+  images written next to the page.
+- **Markdown** output (`md::file`), GitHub Flavored, with no dependency; Markdown
+  input (`md::parse()`, `md::file::load()`) with md4c, behind the
+  `DOCSMITHCPP_MARKDOWN` option.
+- **Errors**: reading and writing throw `docsmith::error` with an `error_code`.
+- **CMake package** `DocSmithCpp` with the target `docsmith::docsmithcpp`, by
+  `find_package`, `add_subdirectory` or FetchContent. Dependencies (pugixml, miniz,
+  optionally md4c) are the consumer's to provide.
+- **Examples** in `examples/`, the headline one a test report filled in from
+  `examples/report_template.odt`.
 
 ### Known limitations
-- HTML from a *parsed* `.odt` is plainer than the original: the CSS covers only the
-  properties the style model holds (font, weight, size, colour, paragraph spacing,
-  indents, alignment and breaks), not line spacing, tabs or paragraph borders.
-- HTML leaves out `unknown` nodes, which hold another format's markup. List number
-  prefixes and suffixes aren't reflected in the CSS.
-- Font sizes in units other than points (e.g. `130%`) aren't read into the model.
+- **Untrusted documents** aren't safe to read yet: an image path a document names is
+  read from disk when it is saved (and by `md::file::load()`), and archive entries
+  are unpacked without a size limit. See the README.
+- Frames are always in the line of text: a floating image's position and wrap are
+  dropped, and it comes back at its anchor.
+- Table cells are text: an ODT cell's value and formula are dropped, so a formula
+  cell keeps its last result.
+- `unknown` keeps only block- and inline-level content. Unrecognised children inside
+  tables and lists, and unknown attributes on known elements, are dropped;
+  `tests/odt/test_odt_loss.cpp` lists the cases.
+- Editing a loaded style rewrites its definition from the model, so properties the
+  model doesn't hold (line spacing, tabs, borders, ...) are dropped from that style.
 - ODT can't hold a table style's lines or header in the style, so the writer puts
-  them on the cells. Reading a file back finds them there, not in the table style,
-  so a template saved as `.odt` loses them; define the table style in code.
-- Editing a loaded style rewrites its definition from the model, so the properties
-  the model doesn't hold (margins, display name, ...) are dropped from that style.
-- `unknown` round-trips only block- and inline-level content. Unrecognized children
-  inside tables and lists, and unknown attributes on known elements, are dropped;
-  `tests/odt/test_odt_loss.cpp` lists the cases (cell values, frame anchoring,
-  alt text, ...).
-- ODT lengths are read to the thousandth of a point, as they are written.
-- Table cells are text: an ODT cell's value and formula (`office:value-type`,
-  `office:value`, `table:formula`) are dropped, so a formula cell keeps only its
-  last result.
-- Images that are no longer referenced stay in the package when a loaded file is
-  saved.
-- `set_style(style)` keeps only the name. The definition must also be added to
-  `text_doc::styles()`.
+  them on the cells, and a template saved as `.odt` loses them from the style.
+- HTML from a loaded document is plainer than the original, as its CSS covers only
+  the properties the model holds. Font sizes in units other than points (e.g.
+  `130%`) aren't read.
+- One page style per document: no landscape sections or different first pages.
+- `set_style()` keeps only the name: the definition goes in `text_doc::styles()`,
+  and nothing checks that it is there.
 
-## Pre-release history (untagged)
-
-Development before the changelog existed, summarised from the commit history.
-
-- **2025-11-16**: ODT output of table row and column spans; tables built concisely
-  from rows of cells.
-- **2025-11-09**: Started tables.
-- **2025-09-14**: Bookmarks; paragraph properties with page breaks.
-- **2025-08-16**: Search helpers on `element_base`, type tags, `styled_base`; added the
-  `architecture/` sketches.
-- **2025-08-09**: List styles; `text_doc.h` split into separate files.
-- **2025-07-30 to 2025-08-02**: Constructors limited to required data and children,
-  with `kids_tag` to disambiguate; groundwork for styles.
-- **2025-07-11 to 2025-07-14**: ODT writing, including embedded PNG images.
-- **2025-06-26**: Lists and list items; parsing ODT lists; UTF-8 source encoding.
-- **2025-06-22**: Moved to conventional polymorphism with mixins; first ODT file
-  parsed.
-- **2025-06-21**: `.clang-format` / `.clang-tidy`. A first `std::variant` model was
-  dropped because of the recursive element relationships. The current model solves
-  this with `box<T>`.
-- **2025-06-16**: Initial commit.
+[Unreleased]: https://github.com/MichaelCoutlakis/docsmithcpp/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/MichaelCoutlakis/docsmithcpp/releases/tag/v0.1.0
