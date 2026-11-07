@@ -422,3 +422,37 @@ TEST(DOCX_Read, TableFormattingRoundTrip)
                 effective_cell_props(t, doc.styles(), r, c))
                 << r << ", " << c;
 }
+
+// Lists the reader used to get wrong: a nested styled list that continues
+// the one before it, a nested list starting with an unnumbered item, and two
+// lists of one style next to each other.
+TEST(DOCX_Read, NestedAndAdjacentLists)
+{
+    text_doc doc;
+    auto steps = doc.add_style(list_style("Steps",
+        {list_style_num(style{}, 1, list_enum::arabic, ".", 1),
+            list_style_num(style{}, 2, list_enum::lower_roman, ")", 1, "(")}));
+    auto sub = doc.add_style(list_style("Sub",
+        {list_style_num(style{}, 1, list_enum::upper_alpha, ".", 1),
+            list_style_num(style{}, 2, list_enum::lower_alpha, ".", 1)}));
+    list nested1(list_item("x"), list_item("y"));
+    nested1.set_style(sub);
+    list nested2(list_item("z"));
+    nested2.set_style(sub);
+    nested2.continue_numbering = true;
+    doc.add(list(list_item(paragraph("a"), nested1), list_item(paragraph("b"), nested2))
+                .set_style(steps));
+    doc.add(list(list_item("one")).set_style(steps));
+    list inner(list_item("inner header"), list_item("i1"));
+    inner.items()[0].numbered = false;
+    inner.set_style(sub);
+    doc.add(list(list_item(paragraph("p"), inner)).set_style(steps));
+    docx::file(doc).save("docx/out/nested_lists.docx");
+
+    const auto back = docx::file::load("docx/out/nested_lists.docx").doc;
+    ASSERT_EQ(back.body.size(), doc.body.size());
+    for(size_t i = 0; i != doc.body.size(); ++i)
+        EXPECT_EQ(back.body[i], doc.body[i]) << "block " << i << "\n"
+                                             << tree(back.body[i]) << "expected\n"
+                                             << tree(doc.body[i]);
+}

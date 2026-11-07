@@ -735,6 +735,19 @@ private:
             const int ilvl = std::atoi(val(ppr.child("w:numPr"), "w:ilvl").c_str());
             while(stack.size() > 1 && stack.back().ilvl > ilvl)
                 close_list(stack, out);
+            // Deeper than any open list: an unnumbered item at the start of
+            // a nested list, as the writer writes one. The list takes its
+            // numbering from its first numbered item.
+            if(stack.back().ilvl < ilvl)
+            {
+                open_list pending{list(), ilvl, {}};
+                list_item item;
+                item.numbered = false;
+                item.children() = std::move(blocks);
+                pending.l.add(std::move(item));
+                stack.push_back(std::move(pending));
+                return;
+            }
             auto &items = stack.back().l.items();
             if(items.empty())
                 items.emplace_back();
@@ -763,10 +776,21 @@ private:
         list_item item;
         while(!stack.empty() && stack.back().ilvl > num.ilvl)
             close_list(stack, out);
+        // A list opened by unnumbered items, waiting for its numbering.
+        std::vector<list_item> unnumbered;
+        if(!stack.empty() && stack.back().ilvl == num.ilvl && stack.back().num_id.empty())
+        {
+            unnumbered = std::move(stack.back().l.items());
+            stack.pop_back();
+        }
+        const auto own_start = [&] { return lvl.child("w:start").attribute("w:val").as_int(1); };
         if(!stack.empty() && stack.back().ilvl == num.ilvl && stack.back().num_id != num.num_id)
         {
-            // Another instance of the same numbering carries on the list.
-            if(same_numbering(stack.back().num_id, num.num_id))
+            // Another instance of the same numbering carries on the list,
+            // unless it starts again from the numbering's start: then it's a
+            // new list of the same style, as the writer writes one.
+            if(same_numbering(stack.back().num_id, num.num_id) &&
+                !(lvl && restart && *restart == own_start()))
             {
                 stack.back().num_id = num.num_id;
                 if(lvl)
@@ -783,16 +807,23 @@ private:
             if(!same)
             {
                 l.l.set_style(list_style_of(num.num_id));
-                // Nested levels also restart after each item of the level
-                // above, so only lists that aren't nested continue.
-                l.l.continue_numbering =
-                    stack.empty() && lvl && (first_use ? counted_before && !restart : true);
+                // A level restarts after each item of a level above in the
+                // same numbering, so a nested list continues only when its
+                // numbering isn't its parent's.
+                l.l.continue_numbering = lvl &&
+                    (stack.empty() || !same_numbering(stack.back().num_id, num.num_id)) &&
+                    (first_use ? counted_before && !restart : true);
                 // A restart at the numbering's own start is just a new list.
-                if(lvl && restart && *restart != lvl.child("w:start").attribute("w:val").as_int(1))
+                if(lvl && restart && *restart != own_start())
                     item.start_value = restart;
             }
+            for(auto &u : unnumbered)
+                l.l.add(std::move(u));
             stack.push_back(std::move(l));
         }
+        else
+            for(auto &u : unnumbered) // the numbering's list was open already
+                stack.back().l.add(std::move(u));
         item.children() = std::move(blocks);
         stack.back().l.add(std::move(item));
     }

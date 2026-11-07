@@ -11,11 +11,6 @@ case, a generated test report, looks like a report.
 `write_example_test_report()` in `examples/create_document.cpp` is the
 yardstick.
 
-### DOCX lists
-
-The reader doesn't see a nested styled list continue, and an unnumbered item
-reads back as more of the item before it.
-
 ### Tag 0.1.0
 
 Once the above is in, move `[Unreleased]` in `CHANGELOG.md` to `[0.1.0]` and

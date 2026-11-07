@@ -95,7 +95,10 @@ on.
   shows no number or bullet and isn't counted. Only ODF has such an item (as
   `text:list-header`), and only first, so writers write a later one as more of
   the item before it, as LibreOffice saves one, and Markdown and DOCX write one
-  at the start as paragraphs before the list. HTML writes each as it is.
+  at the start of a top-level list as paragraphs before the list. DOCX writes
+  one at the start of a nested list as an unnumbered list paragraph one level
+  down, which reads back as that list's unnumbered item. HTML writes each as
+  it is.
 - **Tables are rectangular.** Every row has `num_cols()` cells. A cell with a
   `rowspan` or `colspan` covers the slots to its right and below, which still
   hold placeholder cells that writers skip (`is_cell_covered()`).

@@ -348,6 +348,10 @@ held in `std::variant`. This is a breaking change to almost every public API.
   `style:font-name` refers to. It was the declaration's name, which HTML wrote as the
   CSS font family: LibreOffice names a second declaration of a font "Liberation
   Sans1".
+- DOCX lists read back as written in three cases: a nested styled list continuing an
+  earlier one (`continue_numbering`), a nested list starting with an unnumbered item
+  (it read as more of the parent item), and two lists of one style next to each
+  other (they read as one list restarting at 1).
 - ODT soft page breaks (`text:soft-page-break`) between blocks or in a paragraph, and
   list labels as last laid out (`text:number`), are dropped when read. They were kept
   as `unknown` and written back, so they went stale once the document was edited.
