@@ -344,6 +344,10 @@ held in `std::variant`. This is a breaking change to almost every public API.
   block frame; it wrote neither before. A loaded frame's anchor and position (ODT
   `text:anchor-type`, `svg:x`, `svg:y`; DOCX `wp:anchor`) are dropped, so a floating
   picture comes back in the line.
+- A loaded `.odt` style's font is its font family, read from the font declaration
+  `style:font-name` refers to. It was the declaration's name, which HTML wrote as the
+  CSS font family: LibreOffice names a second declaration of a font "Liberation
+  Sans1".
 - ODT soft page breaks (`text:soft-page-break`) between blocks or in a paragraph, and
   list labels as last laid out (`text:number`), are dropped when read. They were kept
   as `unknown` and written back, so they went stale once the document was edited.

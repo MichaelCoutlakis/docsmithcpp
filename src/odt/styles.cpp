@@ -161,6 +161,30 @@ std::optional<list_enum> list_enum_from(std::string_view odf)
     return std::nullopt;
 }
 
+/// The first family in an svg:font-family or fo:font-family list, unquoted.
+std::string first_family(std::string_view list)
+{
+    list = list.substr(0, list.find(','));
+    auto trim = [](char c) { return c == ' ' || c == '\'' || c == '"'; };
+    while(!list.empty() && trim(list.front()))
+        list.remove_prefix(1);
+    while(!list.empty() && trim(list.back()))
+        list.remove_suffix(1);
+    return std::string(list);
+}
+
+/// The font family a style:font-name declaration (in n's own document) names:
+/// LibreOffice declares "Liberation Sans1" for a second "Liberation Sans".
+/// The name itself if there is no declaration.
+std::string font_family(const pugi::xml_node &n, const std::string &name)
+{
+    const auto decls = n.root().first_child().child("office:font-face-decls");
+    const auto face = decls.find_child_by_attribute("style:font-face", "style:name", name.c_str());
+    if(auto family = first_family(face.attribute("svg:font-family").as_string()); !family.empty())
+        return family;
+    return name;
+}
+
 std::optional<text_props> read_text_props(const pugi::xml_node &n)
 {
     if(!n)
@@ -170,8 +194,11 @@ std::optional<text_props> read_text_props(const pugi::xml_node &n)
         tp.set(*fs);
     if(auto fs = from_odf(font_style_names, n.attribute("fo:font-style").as_string()))
         tp.set(*fs);
+    // font_name is the family, as in DOCX and CSS.
     if(auto a = n.attribute("style:font-name"))
-        tp.set(font_name(a.as_string()));
+        tp.set(font_name(font_family(n, a.as_string())));
+    else if(auto f = first_family(n.attribute("fo:font-family").as_string()); !f.empty())
+        tp.set(font_name(f));
     if(auto fw = font_weight_from(n.attribute("fo:font-weight").as_string()))
         tp.set(*fw);
     if(auto c = colour_from(n.attribute("fo:color").as_string()))

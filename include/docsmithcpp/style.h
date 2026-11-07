@@ -61,6 +61,8 @@ inline const style_name preformatted{"Preformatted_20_Text"};
 inline const style_name source_text{"Source_20_Text"};
 } // namespace builtin
 
+/// A font family, e.g. "Liberation Sans". ODT writes it as a font declaration
+/// of the same name, and reads a declaration's family.
 struct font_name
 {
 public:

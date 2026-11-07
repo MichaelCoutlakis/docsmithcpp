@@ -16,13 +16,6 @@ yardstick.
 The reader doesn't see a nested styled list continue, and an unnumbered item
 reads back as more of the item before it.
 
-### Fonts in HTML
-
-A style's `font_name` is ODF's `style:font-name`, the name of a font
-declaration, not the font family: LibreOffice declares "Liberation Sans1" for a
-second "Liberation Sans". HTML writes the name as the CSS font family. Read the
-declaration's `svg:font-family` instead.
-
 ### Tag 0.1.0
 
 Once the above is in, move `[Unreleased]` in `CHANGELOG.md` to `[0.1.0]` and

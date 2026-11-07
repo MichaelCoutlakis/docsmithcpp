@@ -28,6 +28,7 @@
 #include <gtest/gtest.h>
 #include <pugixml.hpp>
 
+#include "docsmithcpp/html/file.h"
 #include "docsmithcpp/odt/file.h"
 #include "odf/package.h"
 
@@ -392,6 +393,49 @@ TEST(ODT_XML, ColumnStyle)
         EXPECT_STREQ(cells[i].node().child("text:p").attribute("text:style-name").as_string(), "Key");
     }
     EXPECT_FALSE(cells[1].node().child("text:p").attribute("text:style-name"));
+}
+
+// style:font-name names a font declaration, not the family: LibreOffice
+// declares "Liberation Sans1" for a second "Liberation Sans". The model's
+// font_name is the family, so HTML gets a real font.
+TEST(ODT_XML, FontNameIsTheFamily)
+{
+    text_doc doc;
+    doc.add_style(style("Sans", style_family::paragraph, text_props(font_name("Liberation Sans"))));
+    doc.add(paragraph("x").set_style("Sans"));
+    odt::file(doc).save("odt/out/font_family.odt");
+
+    // Rename the declaration as LibreOffice might.
+    auto pkg = odf::package::read("odt/out/font_family.odt");
+    const auto *e = pkg.find("styles.xml");
+    pugi::xml_document xml;
+    xml.load_buffer(e->data.data(), e->data.size());
+    auto face = xml.select_node("//style:font-face[@style:name='Liberation Sans']").node();
+    ASSERT_TRUE(face);
+    face.attribute("style:name").set_value("Liberation Sans1");
+    face.attribute("svg:font-family").set_value("'Liberation Sans', sans-serif");
+    xml.select_node("//style:style[@style:name='Sans']/style:text-properties")
+        .node()
+        .attribute("style:font-name")
+        .set_value("Liberation Sans1");
+    std::ostringstream ss;
+    xml.save(ss, "", pugi::format_raw);
+    pkg.set("styles.xml", ss.str(), "text/xml");
+    pkg.write("odt/out/font_family_renamed.odt");
+
+    const auto f = odt::file::load("odt/out/font_family_renamed.odt");
+    EXPECT_EQ(f.doc.styles().find("Sans")->m_text_props->m_font_name, font_name("Liberation Sans"));
+    EXPECT_NE(html::file(f.doc).to_string().find(R"(font-family: "Liberation Sans";)"),
+        std::string::npos);
+
+    // Unchanged, the definition is written back as it was.
+    f.save("odt/out/font_family_resaved.odt");
+    const part styles("odt/out/font_family_resaved.odt", "styles.xml");
+    EXPECT_STREQ(styles.xml.select_node("//style:style[@style:name='Sans']/style:text-properties")
+                     .node()
+                     .attribute("style:font-name")
+                     .as_string(),
+        "Liberation Sans1");
 }
 
 TEST(ODT_XML, FrameSize)
