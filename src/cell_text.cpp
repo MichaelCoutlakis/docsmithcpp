@@ -35,7 +35,7 @@ void set_unstyled(std::vector<block_node> &blocks, const para_style_name &sn)
             p->set_style(sn);
         else if(auto *l = std::get_if<list>(&b.v))
             for(auto &item : l->items())
-                set_unstyled(item.children(), sn);
+                set_unstyled(item.items(), sn);
 }
 
 bool any_cell_text(const style_sheet &styles)
@@ -66,12 +66,12 @@ std::optional<text_doc> with_cell_text(const text_doc &doc)
                 return name;
         // A loaded file has it already if it was saved before: one with the
         // same definition is used again.
-        std::string name = base + "_20_Text";
+        std::string name = base + " Text";
         paragraph_style s(name, ct.para, ct.text);
         s.parent = parent;
         for(int i = 2; styles.para.contains(name) && *styles.para.find(name) != s; ++i)
         {
-            name = base + "_20_Text_20_" + std::to_string(i);
+            name = base + " Text " + std::to_string(i);
             s = paragraph_style(name, ct.para, ct.text);
             s.parent = parent;
         }
@@ -99,7 +99,7 @@ std::optional<text_doc> with_cell_text(const text_doc &doc)
                             parent = builtin::para;
                         const std::string &base =
                             (cell.style.empty() ? n.column_style(c) : cell.style).str();
-                        set_unstyled(cell.children(), style_for(base, parent, ct));
+                        set_unstyled(cell.items(), style_for(base, parent, ct));
                     }
         });
     return out;

@@ -17,25 +17,16 @@
  *****************************************************************************/
 #pragma once
 
-// Private: the style names Markdown reads into and writes from. They are
-// LibreOffice's own, so a parsed document looks right in an .odt too.
+// Private: names Markdown reads and writes. Its styles are builtins (see
+// builtin::emphasis and the others).
 
 #include <algorithm>
 #include <cctype>
 #include <string>
 #include <string_view>
 
-#include "docsmithcpp/style.h"
-
 namespace docsmith::md::names
 {
-
-inline const text_style_name emphasis{"Emphasis"};
-inline const text_style_name strong{"Strong_20_Emphasis"};
-/// A paragraph in a block quote.
-inline const para_style_name quotations{"Quotations"};
-inline const std::string numbered_list{"Numbering_20_123"};
-inline const std::string bullet_list{"List_20_1"};
 
 /// A bookmark name as an HTML id (an anchor's id and a link's #fragment); ids
 /// can't contain white space. HTML output does the same.

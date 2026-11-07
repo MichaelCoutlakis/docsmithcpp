@@ -55,7 +55,7 @@ TEST(BASIC_USAGE, MovedFromNodeIsEmpty)
     span a("x");
     const span b = std::move(a);
     EXPECT_EQ(b, span("x"));
-    EXPECT_TRUE(std::as_const(a).children().empty());
+    EXPECT_TRUE(std::as_const(a).items().empty());
     EXPECT_EQ(a, span{});
     a.add("y");
     EXPECT_EQ(a, span("y"));
@@ -63,7 +63,7 @@ TEST(BASIC_USAGE, MovedFromNodeIsEmpty)
     // A moved-from node left in a document can still be written.
     text_doc doc{paragraph(span("z"))};
     auto &p = std::get<paragraph>(doc.body.front().v);
-    const auto moved = std::move(p.children().front());
+    const auto moved = std::move(p.items().front());
     std::ostringstream os;
     io_writer{os}(doc);
     EXPECT_NE(os.str().find("Span"), std::string::npos);
@@ -94,8 +94,8 @@ TEST(BASIC_USAGE, ChainedAdd)
     auto nested = span("outer ").add(span("inner"));
 
     EXPECT_EQ(h.level, 2);
-    EXPECT_EQ(h.children().size(), 2U);
-    EXPECT_EQ(nested.children().size(), 2U);
+    EXPECT_EQ(h.items().size(), 2U);
+    EXPECT_EQ(nested.items().size(), 2U);
 }
 
 TEST(BASIC_USAGE, SetTitle)
@@ -263,8 +263,8 @@ TEST(BASIC_USAGE, PlaceholderInCellsAndHeader)
 
     EXPECT_TRUE(doc.replace(text{"{{cell}}"}, paragraph("in a cell")));
     EXPECT_TRUE(doc.replace(text{"{{footer}}"}, paragraph("in the footer")));
-    EXPECT_EQ(collect<table>(doc).front()->cell(0, 0).children().front(),
-        to_block(paragraph("in a cell")));
+    EXPECT_EQ(
+        collect<table>(doc).front()->cell(0, 0).items().front(), to_block(paragraph("in a cell")));
     EXPECT_EQ(doc.page.footer.front(), to_block(paragraph("in the footer")));
 }
 
@@ -282,7 +282,7 @@ TEST(BASIC_USAGE, FillMergesRegistries)
     text_doc clash{paragraph("y")};
     clash.styles().insert(paragraph_style("Bold", text_props(font_style::italic)));
     const text_doc before = doc;
-    EXPECT_THROW(doc.insert_after(text{"bold"}, clash), std::invalid_argument);
+    EXPECT_THROW((void)doc.insert_after(text{"bold"}, clash), std::invalid_argument);
     EXPECT_EQ(doc, before);
 }
 
@@ -292,9 +292,9 @@ TEST(BASIC_USAGE, PropsCopyFromNonConst)
     text_props tp_copy(tp);
     paragraph_props pp(space_after{pt(6)});
     paragraph_props pp_copy(pp);
-    cell_props cp(colour::rgb(1, 2, 3));
+    cell_props cp(background(colour::rgb(1, 2, 3)));
     cell_props cp_copy(cp);
-    table_props tbp(percent{100});
+    table_props tbp(table_width(percent{100}));
     table_props tbp_copy(tbp);
     EXPECT_EQ(tp_copy, tp);
     EXPECT_EQ(pp_copy, pp);
@@ -316,12 +316,27 @@ static_assert(can_add<paragraph, text>);
 static_assert(!can_add<paragraph, table>);
 static_assert(!can_add<text_doc, span>);
 
+// A property names what it is: a bare colour or percent says neither which
+// colour nor what width.
+static_assert(std::is_constructible_v<text_props, font_colour, font_size>);
+static_assert(!std::is_constructible_v<text_props, colour>);
+static_assert(!std::is_constructible_v<cell_props, colour>);
+static_assert(std::is_constructible_v<cell_props, background>);
+static_assert(!std::is_constructible_v<table_props, percent>);
+static_assert(std::is_constructible_v<table_props, table_width>);
+// A style takes its family's property sets, not single properties.
+static_assert(std::is_constructible_v<paragraph_style, std::string, text_props, paragraph_props>);
+static_assert(!std::is_constructible_v<paragraph_style, std::string, font_size>);
+static_assert(!std::is_constructible_v<paragraph_style, std::string, cell_props>);
+static_assert(std::is_constructible_v<cell_style, std::string, cell_props, text_props>);
+
 TEST(BASIC_USAGE, ValueTypesTakeParenthesesOrBraces)
 {
     EXPECT_EQ(font_size(pt(11)), font_size(11));
     EXPECT_EQ(font_name("Liberation Sans").str(), "Liberation Sans");
     EXPECT_EQ(paragraph_props(space_after(pt(6)), keep_with_next()),
         paragraph_props(space_after{pt(6)}, keep_with_next{}));
-    EXPECT_EQ(table_props(percent(50), outer_border(border::solid()), cell_padding(pt(2))),
-        table_props(percent{50}, outer_border{border::solid()}, cell_padding{pt(2)}));
+    EXPECT_EQ(
+        table_props(table_width(percent(50)), outer_border(border::solid()), cell_padding(pt(2))),
+        table_props(table_width(percent{50}), outer_border{border::solid()}, cell_padding{pt(2)}));
 }

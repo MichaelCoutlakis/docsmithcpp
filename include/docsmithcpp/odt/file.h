@@ -30,7 +30,7 @@ namespace docsmith::odt
 /// represent are kept from load() and written back by save(), so load, edit,
 /// save doesn't lose them. doc.meta is read from meta.xml and written back
 /// into it, keeping the properties the model doesn't hold. Style definitions
-/// are read into doc.styles() / list_styles(); unchanged ones are written back
+/// are read into doc.styles(); unchanged ones are written back
 /// as they were.
 ///
 ///     auto f = odt::file::load("in.odt");
@@ -46,7 +46,7 @@ public:
 
     /// Images the document refers to are moved from the package into
     /// doc.resources().
-    static file load(const std::filesystem::path &p);
+    [[nodiscard]] static file load(const std::filesystem::path &p);
 
     /// Images whose uri names one of doc.resources() are embedded from it;
     /// other image uris are read from disk and embedded under Pictures/.
@@ -58,5 +58,10 @@ private:
     struct impl;
     box<impl> m_impl; // pimpl: copyable, and hides the archive / XML libraries
 };
+
+/// Saves doc as a new .odt, as odt::file(doc).save(p) does, without copying
+/// doc. To keep what a loaded file holds beyond the model, save the
+/// odt::file it was loaded into instead.
+void save(const text_doc &doc, const std::filesystem::path &p);
 
 } // namespace docsmith::odt

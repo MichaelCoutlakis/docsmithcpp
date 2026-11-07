@@ -17,7 +17,7 @@ encoded by the child sequence's type, so there is no separate per-format
 validation layer. Copy and `operator==` are compiler-generated, and traversal is
 `std::visit`. Shared behaviour lives in thin, non-polymorphic CRTP mixins:
 `styled<Derived>` (a style name + `set_style`) and `has_children<…>`
-(`children()`/`add()`).
+(`items()`/`add()`).
 
 An `unknown` node stores verbatim XML for anything the parser does not model, so
 foreign content survives a parse → write round trip. Only block- and inline-level
@@ -171,8 +171,13 @@ filled in from code. `text_doc::replace()`, `insert_after()` and
 `insert_before()` find one and put another document's body there:
 
     auto f = odt::file::load("report_template.odt");
-    f.doc.replace(text{"{{summary}}"}, {heading(1, "Summary"), results});
-    f.doc.insert_after(bookmark{"details"}, details);
+    if(!f.doc.replace(text{"{{summary}}"}, {heading(1, "Summary"), results}) ||
+        !f.doc.insert_after(bookmark{"details"}, details))
+        throw std::runtime_error("not the template expected");
+
+Each returns false, leaving the document unchanged, when nothing matches, and
+is `[[nodiscard]]`: a placeholder that isn't there is the usual way a template
+fill goes wrong, so it shouldn't pass silently.
 
 A `placeholder` is one of the node types it is made of, so there is nothing new
 to learn: a `bookmark` (a paragraph or heading holding it), a `para_style_name`
@@ -278,6 +283,16 @@ sheet's `operator[]` takes a typed name and picks the registry from it:
     auto [strong, added] = doc.styles().insert(text_style("Strong", text_props(font_weight::bold)));
 
 A style's name is fixed once it is made, since it's the key it is found by.
+
+A style is named as it is shown, "Text body" or "Heading 1", in every format,
+so code names a template's styles the same way whichever format the template
+is in. Each reader and writer translates the name to its format's own: ODT
+spells the characters an XML name can't hold as `_xx_` in hex
+(`Text_20_body`) and has its own names for two builtins (`Standard`,
+`Internet_20_link`); DOCX keeps the name as `w:name` and makes a `w:styleId`
+of it without spaces and punctuation (`Text body` is `Textbody`, numbered if
+taken), keeping a loaded style's own id. Names a format writes differently
+still differ: LibreOffice exports its Text Body to DOCX as Word's Body Text.
 Styles inherit from a `parent` of their own family, as ODF requires; list, row
 and frame styles have none (ODF list styles don't inherit, and the model holds
 no row or frame properties to inherit). Each property is optional; an unset one
@@ -286,7 +301,7 @@ comes from the parent style, or the format's default.
 A cell style's `para` and `text` are for the cell's paragraphs that have no
 style of their own. No format applies them from a cell style: LibreOffice
 ignores them there, and DOCX has no cell styles. So writers give those
-paragraphs a paragraph style made from them, `<cell style>_20_Text`, based on
+paragraphs a paragraph style made from them, `<cell style> Text`, based on
 the cell's paragraph style (`cell_props::m_paragraph_style`) or `builtin::para`
 (`detail::with_cell_text()`). A paragraph with a style of its own keeps it. ODT
 also keeps them in the cell style, so they read back; the made paragraph style
@@ -313,13 +328,13 @@ defaults and a round trip doesn't turn "no style" into a named one.
 `doc.styles()[name]` gives the definition to edit, the template's if there is
 one, else a new empty one, of the builtin's family.
 
-| Default | ODT | DOCX | HTML |
+| Default (its name) | ODT | DOCX | HTML |
 |---|---|---|---|
-| `para` | `Standard` (an unstyled `text:p`) | the `w:default` paragraph style, `Normal` (no `w:pStyle`) | `p:not([class])` |
-| `heading(n)` | `Heading_20_n`, named on `text:h` | `Heading<n>` | `hn:not([class])` |
-| `link` | `Internet_20_link`, named on `text:a` | `Hyperlink` | `a:not([class])` |
-| `table` | `Default_20_Table`, named on tables | the `w:default` table style, `TableNormal` (no `w:tblStyle`) | `table:not([class])`, and the cells' layers |
-| `list` | `Default_20_List`, named on lists | the list's numbering definition | the numbering of `<ol>` / `<ul>` |
+| `para` (Default Paragraph Style) | `Standard` (an unstyled `text:p`) | the `w:default` paragraph style, `Normal` (no `w:pStyle`) | `p:not([class])` |
+| `heading(n)` (Heading n) | `Heading_20_n`, named on `text:h` | `Heading<n>` | `hn:not([class])` |
+| `link` (Hyperlink) | `Internet_20_link`, named on `text:a` | `Hyperlink` | `a:not([class])` |
+| `table` (Default Table) | `Default_20_Table`, named on tables | the `w:default` table style, `TableNormal` (no `w:tblStyle`) | `table:not([class])`, and the cells' layers |
+| `list` (Default List) | `Default_20_List`, named on lists | the list's numbering definition | the numbering of `<ol>` / `<ul>` |
 
 Only a list that isn't nested has `builtin::list`: a nested unstyled list
 continues the enclosing list's style, as ODF and DOCX have it.
@@ -363,7 +378,7 @@ cell style per column. Content comes first and formatting after:
     t.add_row({"save", "fail"});
     t.set_header_rows(1).set_style("Results").set_column_widths({3, 1});
     t.set_column_style(0, "Key"); // a cell_style
-    t.set_row_borders({0}, edge::bottom, border::solid(pt(1)));
+    t.apply_row_borders({0}, edge::bottom, border::solid(pt(1)));
 
 Borders, shading, vertical alignment, padding and the paragraph style for the
 cell's unstyled paragraphs are properties of a cell (`cell_props`). It is the
@@ -393,9 +408,9 @@ copied into the cells. Word and LibreOffice also have conditional table styles
 across applications. Rules like those would be further position layers here,
 written per cell.
 
-The table's border setters (`set_borders`, `set_outer_border`,
-`set_horiz_borders`, `set_vert_borders`, `set_row_borders`,
-`set_column_borders`) and the `row()` / `col()` views write to the cells
+The table's border setters (`apply_borders`, `apply_outer_border`,
+`apply_horiz_borders`, `apply_vert_borders`, `apply_row_borders`,
+`apply_column_borders`) and the `row()` / `col()` views write to the cells
 instead (layers 4 and 5). They act once, on the cells there are: a row added
 afterwards doesn't get them. A line between two cells is set on both, so
 neighbours agree.
@@ -589,16 +604,16 @@ looks right in an `.odt` and writes back to the same Markdown.
 | `heading` | `#` to `######` (level clamped) | the same |
 | `builtin::title` paragraph | `# ` | a level 1 heading |
 | `paragraph` | a paragraph, its style dropped | the same, unstyled |
-| span with a bold style | `**strong**` | span styled `Strong_20_Emphasis` (bold, defined in `styles()`) |
-| span with an italic or oblique style | `*emphasis*` | span styled `Emphasis` (italic, defined) |
+| span with a bold style | `**strong**` | span styled `builtin::strong` (bold, defined in `styles()`) |
+| span with an italic or oblique style | `*emphasis*` | span styled `builtin::emphasis` (italic, defined) |
 | span based on `builtin::source_text` | `` `code` `` | span styled `builtin::source_text` |
 | other spans | their content | text |
 | `builtin::preformatted` paragraph | fenced code block | the same; the info string is dropped |
-| paragraph based on `Quotations` | `>` block quote | `Quotations` paragraphs |
+| paragraph based on `builtin::quotations` | `>` block quote | `builtin::quotations` paragraphs |
 | `'\n'` in text | hard break, `\` at the end of the line | `'\n'`; a soft break is a space |
 | `hyperlink` | `[text](url)`, `<url>` when the text is the URL, `(#id)` for a bookmark; its style dropped | the same |
 | `bookmark` | `<a id="name"></a>` | a bookmark |
-| `list` | `-` or `1.` from its list style at that level, each item with its number (renderers take only the first item's) | list styled `List_20_1` or `Numbering_20_123[_start_N]` |
+| `list` | `-` or `1.` from its list style at that level, each item with its number (renderers take only the first item's) | list styled `builtin::bullet_list` or `builtin::numbered_list` (`Numbering 123 start N` when it starts at N) |
 | `table` | GFM table | the same, see below |
 | `frame` | `![alt](uri)`, the alt its accessibility title (else description), its size dropped; a block frame is a paragraph of its own | the alt as its accessibility title; a paragraph holding only an image is a block frame |
 | `page_break` | thematic break `---` | `page_break` |
@@ -608,7 +623,7 @@ looks right in an `.odt` and writes back to the same Markdown.
 | `unknown` | left out (it holds another format's markup) | — |
 
 - **Styles**: a span's style counts as bold or italic if it, or a style it is
-  based on, says so. The names `Emphasis` and `Strong_20_Emphasis` count even
+  based on, says so. `builtin::emphasis` and `builtin::strong` count even
   without a definition, as builtin styles do. Other text properties (font, size,
   colour) have no Markdown form. Emphasis next to punctuation inside a word
   (`a**"b"**c`) doesn't open under CommonMark's flanking rules; that case isn't
@@ -679,8 +694,9 @@ are kept, renamed only if they clash, and `mc:Ignorable` follows them.
 | `text_doc::page` | header and footer parts, the default ones of the body's `w:sectPr` | the same |
 | `unknown` | written verbatim if it holds OOXML (`markup::ooxml`); ODF is left out | elements the reader doesn't model |
 
-- **Styles**: a style's name is its `w:styleId` as is, so names round-trip
-  exactly; `w:name` is the name with ODF's escapes decoded (`_20_` is a space).
+- **Styles**: a style's name is its `w:name`, with the first letter
+  capitalised as Word shows its own (`footer` is Footer); the writer makes the
+  `w:styleId` from it (see *Styles*).
   Paragraph styles are `w:type="paragraph"`, text styles `character`, table
   styles `table`; frame, row and cell styles have no DOCX form (a cell style's
   `para` and `text` go on its paragraphs, see *Styles*). Ids are unique across

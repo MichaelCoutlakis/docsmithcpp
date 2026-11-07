@@ -29,7 +29,7 @@ namespace docsmith::html
 ///
 /// Style names on nodes become CSS classes, and the definitions in
 /// doc.styles() become rules in an embedded style sheet. A list is written as
-/// <ol> or <ul> according to its style in doc.list_styles(). A paragraph styled
+/// <ol> or <ul> according to its style in doc.styles().list. A paragraph styled
 /// builtin::preformatted (or a style based on it) is <pre>, and a span styled
 /// builtin::source_text is <code>. unknown
 /// (pass-through) nodes hold another format's markup and are left out.
@@ -48,7 +48,7 @@ public:
 
     /// The page as save() would write it, image srcs included. No files are
     /// written.
-    std::string to_string() const;
+    [[nodiscard]] std::string to_string() const;
 
     /// Writes the page, and the images it needs under resource_dir: document
     /// resources as resource_dir / name, and image files from disk copied to
@@ -66,5 +66,9 @@ public:
     /// next to it, e.g. an image from an .odt lands in Pictures/ there.
     std::filesystem::path resource_dir;
 };
+
+/// Saves doc as a page, as html::file(doc).save(p) does with no title, css
+/// or resource_dir, without copying doc.
+void save(const text_doc &doc, const std::filesystem::path &p);
 
 } // namespace docsmith::html

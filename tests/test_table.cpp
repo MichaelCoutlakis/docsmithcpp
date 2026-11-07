@@ -60,7 +60,7 @@ TEST(Table, BuildThenFormat)
     table t = table::from_cells({{"Test", "Result"}, {"open", "pass"}});
     t.add_row({"save", "fail"});
     t.set_header_rows(1).set_style("Results").set_column_widths({3, 1});
-    t.set_row_borders({0}, edge::bottom, thick);
+    t.apply_row_borders({0}, edge::bottom, thick);
 
     // The line below the header is on both sides of it.
     for(size_t c = 0; c != 2; ++c)
@@ -87,7 +87,7 @@ TEST(Table, BordersSkipSpannedCells)
     // D E F
     table t(3, 3);
     t.cell(0, 0).set_span(2, 2);
-    t.set_horiz_borders(lines::inner, thin);
+    t.apply_horiz_borders(lines::inner, thin);
 
     // Line 1 runs through A, so only C gets it.
     EXPECT_FALSE(t.cell(0, 0).props.m_borders.m_top);
@@ -98,7 +98,7 @@ TEST(Table, BordersSkipSpannedCells)
     EXPECT_EQ(t.cell(2, 1).props.m_borders.m_top, thin);
     EXPECT_FALSE(t.cell(2, 1).props.m_borders.m_bottom) << "the outer line isn't inner";
 
-    t.set_vert_borders(lines::outer, thick);
+    t.apply_vert_borders(lines::outer, thick);
     EXPECT_EQ(t.cell(0, 0).props.m_borders.m_start, thick);
     EXPECT_FALSE(t.cell(0, 0).props.m_borders.m_end);
     EXPECT_EQ(t.cell(1, 2).props.m_borders.m_end, thick);
@@ -108,7 +108,7 @@ TEST(Table, BordersSkipSpannedCells)
 TEST(Table, SetBordersDrawsAGrid)
 {
     table t(2, 2);
-    t.set_borders(thin);
+    t.apply_borders(thin);
     for(const auto &c : t.cells())
         EXPECT_EQ(c.props.m_borders, (cell_borders{thin, thin, thin, thin}));
 }
@@ -121,11 +121,11 @@ TEST(Table, EffectivePropsLayers)
             inside_h{thin},
             inside_v{thin},
             cell_padding{pt(2)},
-            header_cells{cell_props(colour::rgb(0xdd, 0xdd, 0xdd),
+            header_cells{cell_props(background(colour::rgb(0xdd, 0xdd, 0xdd)),
                 cell_borders{.m_bottom = thick},
                 para_style_name("Table Heading"))})));
     doc.styles().insert(cell_style("Base cell", cell_props(cell_valign::middle)));
-    cell_style highlight("Highlight", cell_props(colour::rgb(0xff, 0xff, 0)));
+    cell_style highlight("Highlight", cell_props(background(colour::rgb(0xff, 0xff, 0))));
     highlight.parent = "Base cell";
     doc.styles().insert(highlight);
 
@@ -162,12 +162,14 @@ TEST(Table, ColumnStyleIsLive)
 {
     text_doc doc;
     doc.styles().insert(table_style("Grid",
-        table_props(header_cells{
-            cell_props(colour::rgb(0xdd, 0xdd, 0xdd), para_style_name("Table Heading"))})));
+        table_props(header_cells{cell_props(
+            background(colour::rgb(0xdd, 0xdd, 0xdd)), para_style_name("Table Heading"))})));
     doc.styles().insert(cell_style("Key",
-        cell_props(
-            colour::rgb(0xee, 0xee, 0xee), cell_valign::middle, para_style_name("Key text"))));
-    doc.styles().insert(cell_style("Highlight", cell_props(colour::rgb(0xff, 0xff, 0))));
+        cell_props(background(colour::rgb(0xee, 0xee, 0xee)),
+            cell_valign::middle,
+            para_style_name("Key text"))));
+    doc.styles().insert(
+        cell_style("Highlight", cell_props(background(colour::rgb(0xff, 0xff, 0)))));
 
     table t = table::from_cells({{"h", "h"}, {"a", "b"}});
     t.set_header_rows(1).set_style("Grid").set_column_style(0, "Key");
@@ -213,9 +215,9 @@ TEST(Table, CellTextFromColumnAndCellStyles)
 
 TEST(Table, PropsCopy)
 {
-    cell_props a(colour::rgb(1, 2, 3));
+    cell_props a(background(colour::rgb(1, 2, 3)));
     cell_props b(a);
-    table_props c(percent{50});
+    table_props c(table_width(percent{50}));
     table_props d(c);
     EXPECT_EQ(a, b);
     EXPECT_EQ(c, d);

@@ -61,13 +61,13 @@ struct deep_visitor
             node(n.img);
         else if constexpr(std::is_same_v<T, span> || std::is_same_v<T, hyperlink> ||
             std::is_same_v<T, paragraph> || std::is_same_v<T, heading>)
-            for(auto &c : n.children()) // accessor hides any boxing
+            for(auto &c : n.items()) // accessor hides any boxing
                 recurse(c.v);
         else if constexpr(std::is_same_v<T, list>)
             for(auto &it : n.items())
                 node(it);
         else if constexpr(std::is_same_v<T, list_item> || std::is_same_v<T, table_cell>)
-            for(auto &b : n.children())
+            for(auto &b : n.items())
                 recurse(b.v);
         else if constexpr(std::is_same_v<T, table>)
             for(auto &c : n.cells())
@@ -90,7 +90,7 @@ void walk(Doc &doc, F f)
 
 /// Collect pointers to every node of type T in the document.
 template <typename T, typename Doc>
-auto collect(Doc &doc)
+[[nodiscard]] auto collect(Doc &doc)
 {
     using ptr = std::conditional_t<std::is_const_v<Doc>, const T *, T *>;
     std::vector<ptr> out;
@@ -105,7 +105,7 @@ auto collect(Doc &doc)
 
 /// Collect pointers to every node of type T satisfying pred.
 template <typename T, typename Doc, typename Pred>
-auto find_all(Doc &doc, Pred pred)
+[[nodiscard]] auto find_all(Doc &doc, Pred pred)
 {
     using ptr = std::conditional_t<std::is_const_v<Doc>, const T *, T *>;
     std::vector<ptr> out;

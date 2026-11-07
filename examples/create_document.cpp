@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include <iostream>
+#include <stdexcept>
 
 #include "docsmithcpp/docsmith.h"
 
@@ -56,19 +57,18 @@ void write_example_test_report()
     // The results table's look: lines, a shaded header and padding. ODT can't
     // keep a table style's lines in a template, so it is defined here.
     const auto heading_style =
-        doc.styles()
-            .insert(paragraph_style("Table_20_Heading", text_props(font_weight::bold)))
-            .first;
+        doc.styles().insert(paragraph_style("Table Heading", text_props(font_weight::bold))).first;
     const border rule = border::solid(pt(1), colour::rgb(0x40, 0x40, 0x40));
     const border black = border::solid(pt(1), colour::rgb(0, 0, 0));
     const auto results_style = doc.styles().insert_or_assign(table_style("Results",
-        table_props(percent{100},
+        table_props(table_width(percent{100}),
             cell_borders{rule, rule, black, black},
             inside_h{border::solid(pt(0.5), colour::rgb(0xa0, 0xa0, 0xa0))},
             inside_v{black},
             cell_padding{pt(3)},
-            header_cells{cell_props(
-                colour::rgb(0xe8, 0xe8, 0xe8), cell_borders{.m_bottom = rule}, heading_style)})));
+            header_cells{cell_props(background(colour::rgb(0xe8, 0xe8, 0xe8)),
+                cell_borders{.m_bottom = rule},
+                heading_style)})));
 
     auto summary_table = table::from_cells({{{"Test Case"}, {"Result"}}}).set_header_rows(1);
     summary_table.set_style(results_style).set_column_widths({3, 1});
@@ -84,11 +84,13 @@ void write_example_test_report()
 
     const auto passed =
         std::count_if(records.begin(), records.end(), [](auto &r) { return r.passed; });
-    doc.replace(text{"{{summary}}"},
-        {paragraph(std::to_string(passed) + " of " + std::to_string(records.size()) +
-             " test cases passed.")
-                .set_style("Text_20_body"),
-            summary_table});
+    // replace() returns false if the template has no such placeholder.
+    if(!doc.replace(text{"{{summary}}"},
+           {paragraph(std::to_string(passed) + " of " + std::to_string(records.size()) +
+                " test cases passed.")
+                   .set_style("Text body"),
+               summary_table}))
+        throw std::runtime_error("The template has no {{summary}} placeholder");
 
     text_doc details;
     for(auto &r : records)
@@ -98,7 +100,8 @@ void write_example_test_report()
         details.add(heading(2, span(r.name, bookmark{r.name})));
         details.append(r.detail);
     }
-    doc.replace(bookmark{"details"}, details);
+    if(!doc.replace(bookmark{"details"}, details))
+        throw std::runtime_error("The template has no details bookmark");
 
     f.save("Example DocSmith++ Test Report.odt");
     // The same document, its styles and page included, as Word has it.

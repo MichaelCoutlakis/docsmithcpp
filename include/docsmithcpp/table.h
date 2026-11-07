@@ -86,8 +86,8 @@ public:
         auto assign_cell = [this, &idx](auto &&value)
         {
             auto &c = *m_cells.at(idx++);
-            c.children().clear();
-            c.children().push_back(to_block(std::forward<decltype(value)>(value)));
+            c.items().clear();
+            c.items().push_back(to_block(std::forward<decltype(value)>(value)));
         };
         (assign_cell(std::forward<Args>(args)), ...);
         return *this;
@@ -102,7 +102,7 @@ public:
     cell_view &set_background(const colour &c)
     {
         for(auto *cell : m_cells)
-            cell->props.set(c);
+            cell->props.set(background(c));
         return *this;
     }
 
@@ -206,21 +206,23 @@ public:
     const cell_style_name &column_style(size_t c) const { return m_columns.at(c).style; }
     table &set_column_style(size_t c, cell_style_name cell_style);
 
-    // Borders as the cells' direct formatting (table_cell::props). They act on
-    // the cells there are now; a line between two cells is set on both.
+    // Borders applied to the cells there are now, as their direct formatting
+    // (table_cell::props): rows added later don't get them, so apply them once
+    // the content is in. A line between two cells is set on both. For lines
+    // that follow the rows, use a table_style's lines instead.
 
     /// Every line, inside and out.
-    table &set_borders(const border &b);
-    table &set_outer_border(const border &b);
-    table &set_horiz_borders(lines which, const border &b);
+    table &apply_borders(const border &b);
+    table &apply_outer_border(const border &b);
+    table &apply_horiz_borders(lines which, const border &b);
     /// The horizontal lines with these indices (line i is above row i).
-    table &set_horiz_borders(const std::vector<size_t> &which, const border &b);
-    table &set_vert_borders(lines which, const border &b);
-    table &set_vert_borders(const std::vector<size_t> &which, const border &b);
+    table &apply_horiz_borders(const std::vector<size_t> &which, const border &b);
+    table &apply_vert_borders(lines which, const border &b);
+    table &apply_vert_borders(const std::vector<size_t> &which, const border &b);
     /// The top and/or bottom of these rows.
-    table &set_row_borders(const std::vector<size_t> &rows, edge edges, const border &b);
+    table &apply_row_borders(const std::vector<size_t> &rows, edge edges, const border &b);
     /// The start and/or end of these columns.
-    table &set_column_borders(const std::vector<size_t> &cols, edge edges, const border &b);
+    table &apply_column_borders(const std::vector<size_t> &cols, edge edges, const border &b);
 
     bool is_cell_covered(size_t row, size_t col) const;
     /// The row and column of the cell that covers a slot: the slot itself if

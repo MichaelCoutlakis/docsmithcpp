@@ -170,7 +170,7 @@ TEST(ODT, ParseParagraphStyle)
 {
     text_doc actual = odt::file::load("odt/paragraph_with_style.odt").doc;
     drop_unknown(actual);
-    const text_doc expected{paragraph("Paragraph with style.").set_style("Text_20_body")};
+    const text_doc expected{paragraph("Paragraph with style.").set_style("Text body")};
 
     print_compare(expected, actual);
     EXPECT_EQ(expected.body, actual.body);
@@ -216,8 +216,8 @@ TEST(ODT, ColumnStyleRoundTrips)
 {
     text_doc doc;
     doc.styles().insert(paragraph_style("Key text", text_props(font_weight::bold)));
-    doc.styles().insert(
-        cell_style("Key", cell_props(colour::rgb(0xee, 0xee, 0xee), para_style_name("Key text"))));
+    doc.styles().insert(cell_style(
+        "Key", cell_props(background(colour::rgb(0xee, 0xee, 0xee)), para_style_name("Key text"))));
     table t = table::from_cells({{"a", "1"}, {"b", "2"}});
     t.set_column_style(0, "Key");
     doc.add(t);
@@ -245,17 +245,16 @@ TEST(ODT, CellStyleTextGoesOnItsParagraphs)
 
     const auto again = odt::file::load("odt/out/cell_text.odt");
     const table &back = *collect<table>(again.doc).front();
-    const auto &a = std::get<paragraph>(back.cell(0, 0).children().front().v);
-    EXPECT_EQ(a.style, para_style_name("Key_20_Text"));
+    const auto &a = std::get<paragraph>(back.cell(0, 0).items().front().v);
+    EXPECT_EQ(a.style, para_style_name("Key Text"));
     const paragraph_style *made = again.doc.styles().find(a.style);
     ASSERT_NE(made, nullptr);
     EXPECT_EQ(made->text, text_props(font_weight::bold));
     EXPECT_EQ(made->para, paragraph_props(text_align::centre));
     EXPECT_EQ(made->parent, builtin::para);
-    EXPECT_EQ(
-        std::get<paragraph>(back.cell(1, 0).children().front().v).style, para_style_name("Own"))
+    EXPECT_EQ(std::get<paragraph>(back.cell(1, 0).items().front().v).style, para_style_name("Own"))
         << "a styled paragraph keeps its style";
-    EXPECT_TRUE(std::get<paragraph>(back.cell(0, 1).children().front().v).style.empty());
+    EXPECT_TRUE(std::get<paragraph>(back.cell(0, 1).items().front().v).style.empty());
     EXPECT_EQ(again.doc.styles().cell.find("Key")->text, text_props(font_weight::bold))
         << "kept in the cell style too";
 
@@ -267,7 +266,7 @@ TEST(ODT, CellStyleTextGoesOnItsParagraphs)
 TEST(ODT, StyledLinkRoundTrips)
 {
     text_doc doc;
-    doc.styles().insert(text_style("Quiet link", text_props(colour::rgb(80, 80, 80))));
+    doc.styles().insert(text_style("Quiet link", text_props(font_colour(colour::rgb(80, 80, 80)))));
     doc.add(paragraph("see ", hyperlink("https://example.com", "site").set_style("Quiet link")));
     odt::file(doc).save("odt/out/styled_link.odt");
     EXPECT_EQ(odt::file::load("odt/out/styled_link.odt").doc.body, doc.body);
@@ -320,7 +319,7 @@ TEST(ODT, EditLoadedFile)
 TEST(ODT, MissingImageThrows)
 {
     text_doc doc{paragraph(frame(image{"no/such/image.png"}))};
-    EXPECT_THROW(odt::file(doc).save("odt/out/missing_image.odt"), std::runtime_error);
+    EXPECT_THROW(odt::file(doc).save("odt/out/missing_image.odt"), docsmith::error);
 }
 
 TEST(ODT, WriteLists)
@@ -403,15 +402,15 @@ TEST(ODT, TableFormattingRoundTrip)
     const border thick = border::solid(pt(1.5), colour::rgb(0x20, 0x40, 0x60));
     const border thin = border::solid(pt(0.5));
     doc.styles().insert(table_style("Grid",
-        table_props(percent{80},
+        table_props(table_width(percent{80}),
             table_align::centre,
             outer_border{thick},
             inside_h{thin},
-            header_cells{
-                cell_props(colour::rgb(0xdd, 0xdd, 0xdd), cell_borders{.m_bottom = thick})})));
+            header_cells{cell_props(
+                background(colour::rgb(0xdd, 0xdd, 0xdd)), cell_borders{.m_bottom = thick})})));
     table t = table::from_cells({{"Test", "Result"}, {"open", "pass"}, {"save", "fail"}});
     t.set_header_rows(1).set_style("Grid").set_column_widths({3, 1});
-    t.cell(2, 1).props.set(colour::rgb(0xff, 0xcc, 0xcc));
+    t.cell(2, 1).props.set(background(colour::rgb(0xff, 0xcc, 0xcc)));
     doc.add(t);
     odt::file(doc).save("odt/out/table_formatting.odt");
 
@@ -560,7 +559,9 @@ TEST(ODT, LinkTargetsRoundTrip)
 TEST(ODT, StyleFamilies)
 {
     text_doc doc;
-    auto red = doc.styles().insert(text_style("Red", text_props(colour::rgb(255, 0, 0)))).first;
+    auto red = doc.styles()
+                   .insert(text_style("Red", text_props(font_colour(colour::rgb(255, 0, 0)))))
+                   .first;
     auto note = doc.styles().insert(paragraph_style("Note", text_props(font_style::italic))).first;
     // The same name in two families: two styles.
     auto both = doc.styles().insert(text_style("Both", text_props(font_weight::bold))).first;
@@ -589,7 +590,7 @@ TEST(ODT, LoadStyleDefinitions)
     EXPECT_EQ(h1->text.m_font_size, font_size(18));
     EXPECT_EQ(h1->text.m_font_weight, font_weight::bold);
     EXPECT_NE(doc.styles().find(builtin::source_text), nullptr);
-    EXPECT_EQ(doc.styles().find(builtin::link)->text.m_colour, colour::rgb(0, 0, 0x80));
+    EXPECT_EQ(doc.styles().find(builtin::link)->text.m_font_colour, colour::rgb(0, 0, 0x80));
 
     // Automatic styles from content.xml.
     EXPECT_EQ(doc.styles().para.find("P3")->parent, builtin::heading(1));
@@ -602,7 +603,7 @@ TEST(ODT, LoadStyleDefinitions)
     EXPECT_EQ(first.format, list_enum::arabic);
     EXPECT_EQ(first.start_from, 7);
     EXPECT_EQ(first.suffix, ".");
-    EXPECT_EQ(first.style, text_style_name("Numbering_20_Symbols"));
+    EXPECT_EQ(first.style, text_style_name("Numbering Symbols"));
     EXPECT_TRUE(std::holds_alternative<bullet_level>(doc.styles().list.find("L2")->levels.front()));
     EXPECT_EQ(std::get<number_level>(doc.styles().list.find("L3")->levels.front()).format,
         list_enum::lower_alpha);
@@ -617,7 +618,7 @@ TEST(ODT, CodeBuiltStylesRoundTrip)
                 text_props(font_size(20.5f),
                     font_name("Liberation Mono"),
                     font_style::italic,
-                    colour::rgb(1, 2, 3)),
+                    font_colour(colour::rgb(1, 2, 3))),
                 paragraph_props(break_before{break_type::page}, break_after{break_type::column})))
             .first;
     auto pic = doc.styles().insert(frame_style("Pic")).first;
@@ -630,7 +631,7 @@ TEST(ODT, CodeBuiltStylesRoundTrip)
                               .start_from = 2},
                              bullet_level{.level = 2,
                                  .bullet = bullet_type::right_arrow(),
-                                 .style = "Bullet_20_Symbols"}}))
+                                 .style = "Bullet Symbols"}}))
                      .first;
     doc.add(paragraph("Big").set_style(big));
     doc.add(list(list_item("one")).set_style(steps));
@@ -798,7 +799,7 @@ TEST(ODT, LoadReportTemplate)
     auto f = odt::file::load("../examples/report_template.odt");
     const paragraph header(field{field_type::title});
     ASSERT_EQ(f.doc.page.header.size(), 1U);
-    EXPECT_EQ(std::get<paragraph>(f.doc.page.header.front().v).children(), header.children());
+    EXPECT_EQ(std::get<paragraph>(f.doc.page.header.front().v).items(), header.items());
     EXPECT_FALSE(collect<field>(f.doc).empty());
     EXPECT_EQ(collect<table_of_contents>(f.doc).size(), 1U);
     EXPECT_EQ(collect<table_of_contents>(f.doc).front()->title, "Contents");
@@ -810,4 +811,11 @@ TEST(ODT, LoadReportTemplate)
     const auto again = odt::file::load("odt/out/report_template_filled.odt");
     EXPECT_EQ(again.doc.body, f.doc.body);
     EXPECT_EQ(again.doc.page, f.doc.page);
+}
+
+TEST(ODT, SaveWithoutAFile)
+{
+    const text_doc doc{heading(1, "Saved"), paragraph("without a file")};
+    odt::save(doc, "odt/out/save_free.odt");
+    EXPECT_EQ(odt::file::load("odt/out/save_free.odt").doc.body, doc.body);
 }

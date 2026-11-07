@@ -16,6 +16,7 @@
  * limitations under the License.
  *****************************************************************************/
 #include "zip/archive.h"
+#include "docsmithcpp/error.h"
 
 #include <algorithm>
 #include <cstring>
@@ -31,8 +32,9 @@ namespace docsmith::zip
 namespace
 {
 
-[[noreturn]] void fail(mz_zip_archive &zip, const std::string &what)
-{ throw std::runtime_error(what + ": " + mz_zip_get_error_string(mz_zip_get_last_error(&zip))); }
+[[noreturn]] void fail(
+    mz_zip_archive &zip, const std::string &what, error_code code = error_code::malformed)
+{ throw error(code, what + ": " + mz_zip_get_error_string(mz_zip_get_last_error(&zip))); }
 
 } // namespace
 
@@ -40,7 +42,7 @@ std::vector<entry> read(std::string_view bytes)
 {
     mz_zip_archive zip{};
     if(!mz_zip_reader_init_mem(&zip, bytes.data(), bytes.size(), 0))
-        fail(zip, "Could not open archive");
+        fail(zip, "Could not open archive", error_code::not_a_document);
 
     struct closer
     {

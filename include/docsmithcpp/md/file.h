@@ -32,7 +32,7 @@ namespace docsmith::md
 /// Styles have no Markdown form. A span whose style is bold is **strong**, one
 /// that is italic is *emphasis*, and one based on builtin::source_text is a
 /// `code span`. A paragraph based on builtin::preformatted is a fenced code
-/// block, and one based on "Quotations" a block quote. Other styles are left
+/// block, and one based on builtin::quotations a block quote. Other styles are left
 /// out, keeping the content. Lists are ordered or not as their list style
 /// says, tables are GFM tables, bookmarks are <a id> anchors, and a
 /// page_break is a thematic break. unknown (pass-through) nodes are left out.
@@ -54,7 +54,7 @@ public:
 
     /// The Markdown as save() would write it, image paths included. No files
     /// are written.
-    std::string to_string() const;
+    [[nodiscard]] std::string to_string() const;
 
     /// Writes the file, and the images it needs under resource_dir, as
     /// html::file::save() does.
@@ -64,7 +64,7 @@ public:
     /// Parses the file (see parse()). Images given by a relative path to a file
     /// that exists are read into doc.resources() under that path, so the
     /// document can be saved elsewhere without them.
-    static file load(const std::filesystem::path &p);
+    [[nodiscard]] static file load(const std::filesystem::path &p);
 #endif
 
     text_doc doc;
@@ -72,15 +72,18 @@ public:
     std::filesystem::path resource_dir;
 };
 
+/// Saves doc as Markdown, as md::file(doc).save(p) does, without copying doc.
+void save(const text_doc &doc, const std::filesystem::path &p);
+
 #ifdef DOCSMITHCPP_MARKDOWN
 /// Parses CommonMark with the GFM tables, strikethrough and autolink
-/// extensions. Emphasis and strong are spans with the styles "Emphasis" and
-/// "Strong_20_Emphasis" (defined in the result's styles()), code spans have
-/// builtin::source_text, code blocks are builtin::preformatted paragraphs, and
-/// block quotes "Quotations" paragraphs. Lists get the list styles
-/// "Numbering_20_123" or "List_20_1". Raw HTML is dropped, apart from <a id>
-/// anchors (bookmarks) and <br> in table cells. Strikethrough keeps its text;
-/// the model has no strikethrough. Image uris are left as written.
+/// extensions. Emphasis and strong are spans with the styles
+/// builtin::emphasis and builtin::strong (defined in the result's styles()),
+/// code spans have builtin::source_text, code blocks are builtin::preformatted
+/// paragraphs, and block quotes builtin::quotations paragraphs. Lists get the
+/// list styles builtin::numbered_list or builtin::bullet_list. Raw HTML is dropped, apart from <a
+/// id> anchors (bookmarks) and <br> in table cells. Strikethrough keeps its text; the model has no
+/// strikethrough. Image uris are left as written.
 ///
 /// The result can be added to another document with text_doc::append().
 text_doc parse(std::string_view markdown);

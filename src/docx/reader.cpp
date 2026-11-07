@@ -16,6 +16,7 @@
  * limitations under the License.
  *****************************************************************************/
 #include "docx/reader.h"
+#include "docsmithcpp/error.h"
 
 #include <algorithm>
 #include <cctype>
@@ -151,7 +152,7 @@ std::vector<inline_node> group(const pieces &ps)
                 current = &std::get<span>(out.back().v);
                 current_style = p.style;
             }
-            target = &current->children();
+            target = &current->items();
         }
         else
             current = nullptr;
@@ -191,7 +192,7 @@ public:
     {
         const auto *main = m_pkg.find(m_st.main_part);
         if(!main || !load(m_document, main->data) || !m_document.child("w:document"))
-            throw std::runtime_error("Could not read " + m_st.main_part);
+            throw error(error_code::malformed, "Could not read " + m_st.main_part);
         read_styles();
         read_numbering();
 
@@ -234,13 +235,19 @@ private:
         auto root = m_styles.child("w:styles");
         m_defaults_ppr = root.child("w:docDefaults").child("w:pPrDefault").child("w:pPr");
         m_defaults_rpr = root.child("w:docDefaults").child("w:rPrDefault").child("w:rPr");
-        std::set<std::string> ids;
+        // The model names a style as Word shows it, so the same name finds a
+        // template's style in every format.
+        std::set<std::string> names;
         for(auto s : root.children("w:style"))
-            ids.insert(s.attribute("w:styleId").as_string());
+        {
+            const std::string id = s.attribute("w:styleId").as_string();
+            m_names[id] = shown_name(id, val(s, "w:name"));
+            names.insert(m_names[id]);
+        }
         auto alias = [&](const std::string &id, const std::string &builtin)
         {
-            if(id != builtin && !ids.contains(builtin) && !m_alias_used.contains(builtin) &&
-                !m_alias.contains(id))
+            if(m_names[id] != builtin && !names.contains(builtin) &&
+                !m_alias_used.contains(builtin) && !m_alias.contains(id))
             {
                 m_alias[id] = builtin;
                 m_alias_used.insert(builtin);
@@ -288,6 +295,8 @@ private:
     std::string name_of(const std::string &id) const
     {
         if(auto it = m_alias.find(id); it != m_alias.end())
+            return it->second;
+        if(auto it = m_names.find(id); it != m_names.end())
             return it->second;
         // Word's own ids, used without a definition.
         if(!m_style_nodes.contains(id))
@@ -570,7 +579,7 @@ private:
             auto &items = stack.back().l.items();
             if(items.empty())
                 items.emplace_back();
-            items.back().children().push_back(block_node{std::move(top.l)});
+            items.back().items().push_back(block_node{std::move(top.l)});
         }
     }
 
@@ -743,7 +752,7 @@ private:
             {
                 heading h(level);
                 h.style = own_style;
-                h.children() = std::move(kids);
+                h.items() = std::move(kids);
                 blocks.push_back(block_node{std::move(h)});
             }
             else if(own_style.empty() && kids.size() == 1 &&
@@ -753,7 +762,7 @@ private:
             {
                 paragraph para;
                 para.style = own_style;
-                para.children() = std::move(kids);
+                para.items() = std::move(kids);
                 blocks.push_back(block_node{std::move(para)});
             }
         }
@@ -776,7 +785,7 @@ private:
                 open_list pending{list(), ilvl, {}};
                 list_item item;
                 item.numbered = false;
-                item.children() = std::move(blocks);
+                item.items() = std::move(blocks);
                 pending.l.add(std::move(item));
                 stack.push_back(std::move(pending));
                 return;
@@ -785,7 +794,7 @@ private:
             if(items.empty())
                 items.emplace_back();
             for(auto &b : blocks)
-                items.back().children().push_back(std::move(b));
+                items.back().items().push_back(std::move(b));
             return;
         }
         close_lists(stack, out);
@@ -857,7 +866,7 @@ private:
         else
             for(auto &u : unnumbered) // the numbering's list was open already
                 stack.back().l.add(std::move(u));
-        item.children() = std::move(blocks);
+        item.items() = std::move(blocks);
         stack.back().l.add(std::move(item));
     }
 
@@ -929,10 +938,10 @@ private:
             link.target = bookmark_target{anchor};
         pieces inner;
         read_content(h, inner, true);
-        link.children() = group(inner);
+        link.items() = group(inner);
         // Text all in one style (other than Hyperlink, read as none) is the
         // link's style, as the writer writes it.
-        auto &kids = link.children();
+        auto &kids = link.items();
         const auto *first = kids.empty() ? nullptr : std::get_if<span>(&kids.front().v);
         if(first && !first->style.empty() &&
             std::all_of(kids.begin(),
@@ -946,7 +955,7 @@ private:
             link.style = first->style;
             std::vector<inline_node> unwrapped;
             for(auto &k : kids)
-                for(auto &c : std::get<span>(k.v).children())
+                for(auto &c : std::get<span>(k.v).items())
                     unwrapped.push_back(std::move(c));
             kids = std::move(unwrapped);
         }
@@ -1170,13 +1179,13 @@ private:
                 table_cell cell;
                 cell.colspan = span;
                 cell.props = read_tcpr(tc_pr);
-                cell.children() = read_blocks(tc);
+                cell.items() = read_blocks(tc);
                 // The writer ends every cell with a paragraph.
-                auto &kids = cell.children();
+                auto &kids = cell.items();
                 auto empty_paragraph = [](const block_node &b)
                 {
                     const auto *p = std::get_if<paragraph>(&b.v);
-                    return p && p->style.empty() && p->children().empty();
+                    return p && p->style.empty() && p->items().empty();
                 };
                 if(!kids.empty() && empty_paragraph(kids.back()) &&
                     (kids.size() == 1 || std::holds_alternative<table>(kids[kids.size() - 2].v)))
@@ -1262,7 +1271,7 @@ private:
             if(const auto *title = std::get_if<paragraph>(&out.back().v);
                 title && title->style.str() == "TOCHeading")
             {
-                toc.title = trim(detail::plain_text(title->children()));
+                toc.title = trim(detail::plain_text(title->items()));
                 out.pop_back();
             }
         int depth = 0;
@@ -1306,6 +1315,7 @@ private:
     pugi::xml_document m_document, m_styles, m_numbering;
 
     std::map<std::string, std::string> m_alias; //!< style id -> builtin name
+    std::map<std::string, std::string> m_names; //!< style id -> its shown name
     std::set<std::string> m_alias_used;
     std::map<std::string, std::string> m_parent; //!< style id -> w:basedOn
     std::map<std::string, pugi::xml_node> m_style_nodes;

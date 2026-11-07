@@ -59,12 +59,12 @@ public:
     { return m_data.try_emplace(name, name).first->second; }
 
     /// The definition of that name, or nullptr.
-    T *find(const Key &name)
+    [[nodiscard]] T *find(const Key &name)
     {
         auto it = m_data.find(name);
         return it != m_data.end() ? &it->second : nullptr;
     }
-    const T *find(const Key &name) const
+    [[nodiscard]] const T *find(const Key &name) const
     {
         auto it = m_data.find(name);
         return it != m_data.end() ? &it->second : nullptr;

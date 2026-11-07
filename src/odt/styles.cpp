@@ -25,6 +25,7 @@
 #include <utility>
 
 #include "format.h"
+#include "odf/names.h"
 #include "odf/package.h"
 
 namespace docsmith::odt
@@ -201,7 +202,7 @@ std::optional<text_props> read_text_props(const pugi::xml_node &n)
     if(auto fw = font_weight_from(n.attribute("fo:font-weight").as_string()))
         tp.set(*fw);
     if(auto c = colour_from(n.attribute("fo:color").as_string()))
-        tp.set(*c);
+        tp.set(font_colour(*c));
     return tp == text_props{} ? std::nullopt : std::optional(std::move(tp));
 }
 
@@ -288,9 +289,9 @@ std::optional<table_props> read_table_props(const pugi::xml_node &n)
         double pc{};
         if(rel.ends_with('%') &&
             std::from_chars(rel.data(), rel.data() + rel.size() - 1, pc).ec == std::errc{})
-            tp.set(percent{pc});
+            tp.set(table_width(percent(pc)));
         else if(auto w = length_from(n.attribute("style:width").as_string()))
-            tp.set(*w);
+            tp.set(table_width(*w));
     }
     return tp == table_props{} ? std::nullopt : std::optional(std::move(tp));
 }
@@ -310,7 +311,7 @@ std::optional<cell_props> read_cell_props(const pugi::xml_node &n)
         if(auto one = border_from(n.attribute(attr).as_string()))
             *side = one;
     if(auto c = colour_from(n.attribute("fo:background-color").as_string()))
-        cp.set(*c);
+        cp.set(background(*c));
     if(auto v = from_odf(valign_names, n.attribute("style:vertical-align").as_string()))
         cp.set(*v);
     if(auto p = length_from(n.attribute("fo:padding").as_string()))
@@ -342,34 +343,13 @@ void read_into(const pugi::xml_node &container, text_doc &doc)
 }
 } // namespace
 
-namespace
-{
-/// The name shown to users: LibreOffice spells characters a name can't hold
-/// as _xx_ in hex (Text_20_body is "Text body"). It finds its own styles by
-/// that name, so a style named Heading_20_1 without it would be a new style.
-std::string display_name(const std::string &name)
-{
-    auto hex = [](char c) { return std::isxdigit(static_cast<unsigned char>(c)) != 0; };
-    std::string out;
-    for(size_t i = 0; i != name.size(); ++i)
-    {
-        if(name[i] == '_' && i + 3 < name.size() && hex(name[i + 1]) && hex(name[i + 2]) &&
-            name[i + 3] == '_')
-        {
-            out += static_cast<char>(std::stoi(name.substr(i + 1, 2), nullptr, 16));
-            i += 3;
-        }
-        else
-            out += name[i];
-    }
-    return out;
-}
-} // namespace
-
 void write_name(pugi::xml_node &n, const std::string &name)
 {
-    n.append_attribute("style:name").set_value(name.c_str());
-    if(const std::string shown = display_name(name); shown != name)
+    const std::string odf = odf::odf_name(name);
+    n.append_attribute("style:name").set_value(odf.c_str());
+    // LibreOffice finds its own styles by style:name, so a style named
+    // Heading_20_1 with another display name would be a new style.
+    if(const std::string shown = odf::decode_name(odf); shown != odf)
         n.append_attribute("style:display-name").set_value(shown.c_str());
 }
 
@@ -386,7 +366,8 @@ pugi::xml_node style_node(pugi::xml_node &n, const S &s)
     node.append_attribute("style:family") = family_name(S::family);
     if constexpr(requires { s.parent; })
         if(!s.parent.empty())
-            node.append_attribute("style:parent-style-name") = s.parent.str().c_str();
+            node.append_attribute("style:parent-style-name") =
+                odf::odf_name(s.parent.str()).c_str();
     return node;
 }
 } // namespace
@@ -445,7 +426,7 @@ void write_xml(pugi::xml_node &n, const bullet_level &b)
     auto bullet_node = n.append_child("text:list-level-style-bullet");
     bullet_node.append_attribute("text:level") = b.level;
     if(!b.style.empty())
-        bullet_node.append_attribute("text:style-name") = b.style.str().c_str();
+        bullet_node.append_attribute("text:style-name") = odf::odf_name(b.style.str()).c_str();
     bullet_node.append_attribute("text:bullet-char") = b.bullet.c_str();
 }
 
@@ -454,7 +435,7 @@ void write_xml(pugi::xml_node &n, const number_level &s)
     auto num_node = n.append_child("text:list-level-style-number");
     num_node.append_attribute("text:level") = s.level;
     if(!s.style.empty())
-        num_node.append_attribute("text:style-name") = s.style.str().c_str();
+        num_node.append_attribute("text:style-name") = odf::odf_name(s.style.str()).c_str();
 
     num_node.append_attribute("loext:num-list-format") =
         (s.prefix + "%" + std::to_string(s.level) + "%" + s.suffix).c_str();
@@ -483,8 +464,8 @@ void write_xml(pugi::xml_node &n, const text_props &tp)
     if(tp.m_font_weight)
         text_props_node.append_attribute("fo:font-weight") = to_odf(tp.m_font_weight.value());
 
-    if(tp.m_colour)
-        text_props_node.append_attribute("fo:color") = detail::to_hex(*tp.m_colour).c_str();
+    if(tp.m_font_colour)
+        text_props_node.append_attribute("fo:color") = detail::to_hex(*tp.m_font_colour).c_str();
 }
 
 void write_xml(pugi::xml_node &n, const paragraph_props &props)
@@ -584,7 +565,8 @@ std::optional<para_style_name> page_break_base(const pugi::xml_node &n)
     if(name == page_break_only || name == page_break_suffix.substr(1))
         base = para_style_name{};
     else if(name.size() > page_break_suffix.size() && name.ends_with(page_break_suffix))
-        base = para_style_name(std::string(name.substr(0, name.size() - page_break_suffix.size())));
+        base = para_style_name(
+            odf::model_name(name.substr(0, name.size() - page_break_suffix.size())));
     if(!base || std::string_view(n.name()) != "style:style")
         return std::nullopt;
 
@@ -601,8 +583,8 @@ std::optional<odf_style> read_style(const pugi::xml_node &n)
     if(!family)
         return std::nullopt;
 
-    const std::string name = n.attribute("style:name").as_string();
-    const std::string parent = n.attribute("style:parent-style-name").as_string();
+    const std::string name = odf::model_name(n.attribute("style:name").as_string());
+    const std::string parent = odf::model_name(n.attribute("style:parent-style-name").as_string());
     auto para = [&]
     {
         return read_paragraph_props(n.child("style:paragraph-properties"))
@@ -649,12 +631,12 @@ std::optional<odf_style> read_style(const pugi::xml_node &n)
 
 list_style read_list_style(const pugi::xml_node &n)
 {
-    list_style ls(n.attribute("style:name").as_string());
+    list_style ls(odf::model_name(n.attribute("style:name").as_string()));
     for(auto level : n.children())
     {
         const std::string_view tag = level.name();
         const int lvl = level.attribute("text:level").as_int(1);
-        const text_style_name sn(level.attribute("text:style-name").as_string());
+        const text_style_name sn(odf::model_name(level.attribute("text:style-name").as_string()));
         if(tag == "text:list-level-style-number")
         {
             const auto fmt = list_enum_from(level.attribute("style:num-format").as_string());

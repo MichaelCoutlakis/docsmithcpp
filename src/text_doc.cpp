@@ -16,6 +16,7 @@
  * limitations under the License.
  *****************************************************************************/
 #include "docsmithcpp/text_doc.h"
+#include "docsmithcpp/error.h"
 
 #include <fstream>
 #include <optional>
@@ -61,8 +62,8 @@ bool has_bookmark(const std::vector<inline_node> &kids, const bookmark &b)
         if(std::visit(
                overloaded{
                    [&](const bookmark &x) { return x == b; },
-                   [&](const span &s) { return has_bookmark(s.children(), b); },
-                   [&](const hyperlink &h) { return has_bookmark(h.children(), b); },
+                   [&](const span &s) { return has_bookmark(s.items(), b); },
+                   [&](const hyperlink &h) { return has_bookmark(h.items(), b); },
                    [](const auto &) { return false; },
                },
                k.v))
@@ -105,25 +106,23 @@ found_block find_placeholder(std::vector<block_node> &blocks, const placeholder 
             overloaded{
                 [&](paragraph &n)
                 {
-                    return matches(p, n.children(), n.style) ? found_block{&blocks, i}
-                                                             : found_block{};
+                    return matches(p, n.items(), n.style) ? found_block{&blocks, i} : found_block{};
                 },
                 [&](heading &n)
                 {
-                    return matches(p, n.children(), n.style) ? found_block{&blocks, i}
-                                                             : found_block{};
+                    return matches(p, n.items(), n.style) ? found_block{&blocks, i} : found_block{};
                 },
                 [&](list &l)
                 {
                     for(auto &it : l.items())
-                        if(auto f = find_placeholder(it.children(), p); f.blocks)
+                        if(auto f = find_placeholder(it.items(), p); f.blocks)
                             return f;
                     return found_block{};
                 },
                 [&](table &t)
                 {
                     for(auto &c : t.cells())
-                        if(auto f = find_placeholder(c.children(), p); f.blocks)
+                        if(auto f = find_placeholder(c.items(), p); f.blocks)
                             return f;
                     return found_block{};
                 },
@@ -242,13 +241,14 @@ void text_doc::write_resources(const fs::path &dir) const
         // Names come from loaded files too: keep them inside dir.
         const fs::path rel = fs::path(r->name()).lexically_normal();
         if(rel.empty() || rel.is_absolute() || rel.has_root_path() || *rel.begin() == "..")
-            throw std::runtime_error("Resource name leaves the target folder: " + r->name());
+            throw error(
+                error_code::unsafe_path, "Resource name leaves the target folder: " + r->name());
 
         const fs::path p = dir / rel;
         fs::create_directories(p.parent_path());
         std::ofstream out(p, std::ios::binary);
         if(!out.write(r->data().data(), static_cast<std::streamsize>(r->data().size())))
-            throw std::runtime_error("Could not write " + p.string());
+            throw error(error_code::io, "Could not write " + p.string());
     }
 }
 

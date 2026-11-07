@@ -24,6 +24,7 @@
 #include <variant>
 #include <vector>
 
+#include "docsmithcpp/error.h"
 #include "docsmithcpp/list.h"
 #include "docsmithcpp/metadata.h"
 #include "docsmithcpp/nodes.h"
@@ -109,9 +110,9 @@ public:
     ///
     ///     doc.replace("{{summary}}", {heading(1, "Summary"), results});
     ///     doc.insert_after(bookmark{"log"}, paragraph(log));
-    bool replace(const placeholder &p, const text_doc &content);
-    bool insert_after(const placeholder &p, const text_doc &content);
-    bool insert_before(const placeholder &p, const text_doc &content);
+    [[nodiscard]] bool replace(const placeholder &p, const text_doc &content);
+    [[nodiscard]] bool insert_after(const placeholder &p, const text_doc &content);
+    [[nodiscard]] bool insert_before(const placeholder &p, const text_doc &content);
 
     /// Compares everything, registries included. To compare content only,
     /// compare the bodies: a.body == b.body.
@@ -135,8 +136,8 @@ public:
     image add_image(std::string name, std::string data, std::string media_type);
 
     /// The first paragraph with the builtin::title style, or nullptr.
-    paragraph *find_title();
-    const paragraph *find_title() const;
+    [[nodiscard]] paragraph *find_title();
+    [[nodiscard]] const paragraph *find_title() const;
 
     /// Sets the title paragraph's text, adding one at the start of body if
     /// there is none. meta.title is separate and left as is.

@@ -16,6 +16,7 @@
  * limitations under the License.
  *****************************************************************************/
 #include "docx/writer.h"
+#include "docsmithcpp/error.h"
 
 #include "cell_text.h"
 
@@ -115,17 +116,17 @@ std::string size(int half_points)
 std::string builtin_style(const std::string &id)
 {
     constexpr const char *keep = R"~~(<w:keepNext/><w:spacing w:before="240" w:after="120"/>)~~";
-    if(id == builtin::title.str())
+    if(id == "Title")
         return paragraph_style(id,
             "Title",
             std::string(keep) + R"~~(<w:jc w:val="center"/>)~~",
             std::string(sans) + "<w:b/><w:bCs/>" + size(56));
-    if(id == builtin::preformatted.str())
+    if(id == "PreformattedText")
         return paragraph_style(id,
             "Preformatted Text",
             R"~~(<w:spacing w:before="0" w:after="0" w:line="240" w:lineRule="auto"/>)~~",
             std::string(mono) + size(20));
-    if(id == builtin::source_text.str())
+    if(id == "SourceText")
         return R"~~(<w:style w:type="character" w:styleId=")~~" + id +
             R"~~("><w:name w:val="Source Text"/><w:qFormat/><w:rPr>)~~" + mono +
             "</w:rPr></w:style>";
@@ -468,9 +469,13 @@ private:
         return fallback;
     }
 
-    /// The style id for a style name: the builtin defaults have Word's.
+    /// The style id for a style name: the builtin defaults have Word's, a
+    /// loaded style keeps its own, and another is its name without spaces and
+    /// punctuation (as Word makes them), numbered if that id is taken.
     std::string id_of(const std::string &name) const
     {
+        if(name.empty())
+            return {};
         if(name == builtin::para.str())
             return m_default_paragraph_id;
         if(name == builtin::table.str())
@@ -480,6 +485,52 @@ private:
         for(int level = 1; level <= 9; ++level)
             if(name == builtin::heading(level).str())
                 return "Heading" + std::to_string(level);
+        if(auto it = m_ids.find(name); it != m_ids.end())
+            return it->second;
+        for(auto s : m_styles.document_element().children("w:style"))
+        {
+            const std::string id = s.attribute("w:styleId").as_string();
+            if(shown_name(id, val(s, "w:name")) == name)
+                return m_ids[name] = id;
+        }
+        std::string base;
+        for(unsigned char c : name)
+            if(std::isalnum(c) || c >= 0x80)
+                base += static_cast<char>(c);
+        if(base.empty())
+            base = "Style";
+        std::string id = base;
+        for(int i = 2; id_taken(id); ++i)
+            id = base + std::to_string(i);
+        return m_ids[name] = id;
+    }
+
+    /// Whether a style id is in use: by a loaded style, one already named,
+    /// or one of Word's that the writer adds.
+    bool id_taken(const std::string &id) const
+    {
+        if(id == "Normal" || id == "TableNormal" || id == "Hyperlink" || id == "TOCHeading" ||
+            heading_level(id, {}) || (id.starts_with("TOC") && id.size() == 4))
+            return true;
+        for(auto s : m_styles.document_element().children("w:style"))
+            if(id == s.attribute("w:styleId").as_string())
+                return true;
+        for(const auto &[name, taken] : m_ids)
+            if(id == taken || id == taken + "Char")
+                return true;
+        return false;
+    }
+
+    /// The w:name for a style name: Word's own for the builtin defaults.
+    static std::string word_name(const std::string &name)
+    {
+        if(name == builtin::para.str())
+            return "Normal";
+        if(name == builtin::table.str())
+            return "Normal Table";
+        for(int level = 1; level <= 9; ++level)
+            if(name == builtin::heading(level).str())
+                return "heading " + std::to_string(level);
         return name;
     }
 
@@ -494,6 +545,9 @@ private:
             return builtin::link.str();
         if(const int level = heading_level(id, {}))
             return builtin::heading(level).str();
+        for(auto s : m_styles.document_element().children("w:style"))
+            if(id == s.attribute("w:styleId").as_string())
+                return shown_name(id, val(s, "w:name"));
         return id;
     }
 
@@ -542,7 +596,10 @@ private:
                         continue;
             pugi::xml_node n = existing ? root.insert_child_before("w:style", existing)
                                         : root.append_child("w:style");
-            write_style(n, s, id, based_on);
+            std::string shown = existing ? val(existing, "w:name") : word_name(name);
+            if(f == style_family::text && m_dual.contains(name))
+                shown += " Char";
+            write_style(n, s, style_ids{.id = id, .name = shown, .based_on = based_on});
             if(id == (f == style_family::table ? m_default_table_id : m_default_paragraph_id) &&
                 f != style_family::text)
                 n.insert_attribute_after("w:default", n.attribute("w:type")) = "1";
@@ -806,7 +863,7 @@ private:
         int n = 0;
         for(const heading *h : detail::body_headings(m_doc))
         {
-            if(const bookmark *b = detail::first_bookmark(h->children()))
+            if(const bookmark *b = detail::first_bookmark(h->items()))
             {
                 m_toc_anchor[h] = b->name;
                 continue;
@@ -877,7 +934,7 @@ private:
         auto n = parent.append_child("w:p");
         auto ppr = paragraph_props(n, p.style.empty() ? m_cell_paragraph_style : p.style);
         drop_if_empty(n, ppr);
-        write_inlines(n, p.children(), {});
+        write_inlines(n, p.items(), {});
     }
 
     void emit(pugi::xml_node parent, const heading &h)
@@ -892,7 +949,7 @@ private:
         int id = 0;
         if(own)
             id = bookmark_start(n, m_toc_anchor.at(&h));
-        write_inlines(n, h.children(), {});
+        write_inlines(n, h.items(), {});
         if(own)
             n.append_child("w:bookmarkEnd").append_attribute("w:id") = id;
     }
@@ -924,7 +981,7 @@ private:
             m_list_num = num_id;
             const bool in_list = item.numbered || numbered_before || nested;
             bool first = item.numbered;
-            for(const auto &b : item.children())
+            for(const auto &b : item.items())
             {
                 const bool para =
                     std::holds_alternative<paragraph>(b.v) || std::holds_alternative<heading>(b.v);
@@ -935,7 +992,7 @@ private:
                 if(para)
                     first = false;
             }
-            if(item.children().empty() && item.numbered)
+            if(item.items().empty() && item.numbered)
             {
                 m_list = list_context{m_list_depth - 1, num_id};
                 emit(parent, paragraph{});
@@ -1063,7 +1120,7 @@ private:
                 // Unstyled paragraphs get the cell's paragraph style.
                 m_cell_paragraph_style = props.m_paragraph_style;
                 if(o.first == r)
-                    write_blocks(tc, cell.children());
+                    write_blocks(tc, cell.items());
                 // A cell ends with a paragraph.
                 if(std::string_view(tc.last_child().name()) != "w:p")
                     tc.append_child("w:p");
@@ -1142,7 +1199,7 @@ private:
             auto link = p.append_child("w:hyperlink");
             link.append_attribute("w:anchor") = m_toc_anchor.at(h).c_str();
             link.append_attribute("w:history") = "1";
-            emit_text(link, detail::plain_text(h->children()), {});
+            emit_text(link, detail::plain_text(h->items()), {});
             if(i + 1 == entries.size())
                 field_char(p, "end");
         }
@@ -1239,7 +1296,7 @@ private:
         run_format inner = rf;
         if(!s.style.empty())
             inner.style = s.style.str(); // runs don't nest: the innermost style wins
-        write_inlines(parent, s.children(), inner);
+        write_inlines(parent, s.items(), inner);
     }
 
     void emit_inline(pugi::xml_node parent, const hyperlink &h, const run_format &rf)
@@ -1259,7 +1316,7 @@ private:
         run_format inner = rf;
         inner.in_link = true;
         inner.link_style = h.style.str();
-        write_inlines(n, h.children(), inner);
+        write_inlines(n, h.items(), inner);
     }
 
     void emit_inline(pugi::xml_node parent, const frame &f, const run_format &rf)
@@ -1333,7 +1390,8 @@ private:
             media_type = media_type_of(uri);
         }
         else
-            throw std::runtime_error("Image not found in the resources or on disk: " + uri);
+            throw error(
+                error_code::missing_image, "Image not found in the resources or on disk: " + uri);
 
         std::string name = uri;
         if(!name.starts_with("word/media/"))
@@ -1465,6 +1523,7 @@ private:
     /// For paragraphs with no style in the cells being written (header rows).
     para_style_name m_cell_paragraph_style;
     std::set<std::string> m_dual; //!< Text styles named as a paragraph style, written as <id>Char
+    mutable std::map<std::string, std::string> m_ids;         //!< Style name -> id given it
     std::string m_default_paragraph_id, m_default_table_id;   //!< Normal, TableNormal
     std::set<std::pair<std::string, std::string>> m_used_ids; //!< styleId, w:type
 

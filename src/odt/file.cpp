@@ -16,6 +16,7 @@
  * limitations under the License.
  *****************************************************************************/
 #include "docsmithcpp/odt/file.h"
+#include "docsmithcpp/error.h"
 
 #include <algorithm>
 #include <fstream>
@@ -31,6 +32,7 @@
 #include <pugixml.hpp>
 
 #include "odf/meta.h"
+#include "odf/names.h"
 #include "odf/package.h"
 #include "odt/styles.h"
 #include "odt/writer.h"
@@ -50,8 +52,9 @@ std::string serialize(const pugi::xml_node &node)
     return ss.str();
 }
 
+/// The model's name for the style a node names in attr.
 std::string style_of(const pugi::xml_node &node, const char *attr)
-{ return node.attribute(attr).as_string(); }
+{ return odf::model_name(node.attribute(attr).as_string()); }
 
 /// A node's style, unstyled if it's the default the node has without one
 /// (builtin::para, ...).
@@ -92,7 +95,7 @@ inline_node parse_inline(const pugi::xml_node &node)
     {
         span s;
         s.style = style_of(node, "text:style-name");
-        s.children() = parse_inline_children(node);
+        s.items() = parse_inline_children(node);
         return inline_node{std::move(s)};
     }
     if(tag == "text:a")
@@ -101,7 +104,7 @@ inline_node parse_inline(const pugi::xml_node &node)
         hyperlink h = href.starts_with('#') ? hyperlink(bookmark_target{href.substr(1)})
                                             : hyperlink(url_target{href});
         h.style = style_of(node, "text:style-name", builtin::link); // its visited style is dropped
-        h.children() = parse_inline_children(node);
+        h.items() = parse_inline_children(node);
         return inline_node{std::move(h)};
     }
     if(tag == "draw:frame")
@@ -211,7 +214,7 @@ std::vector<table_cell> parse_row(const pugi::xml_node &row_node)
             c.rowspan = cell_node.attribute("table:number-rows-spanned").as_int(1);
             c.colspan = cell_node.attribute("table:number-columns-spanned").as_int(1);
             c.style = style_of(cell_node, "table:style-name");
-            c.children() = parse_block_children(cell_node);
+            c.items() = parse_block_children(cell_node);
             row.insert(row.end(), n, c);
         }
         else if(ct == "table:covered-table-cell")
@@ -340,7 +343,7 @@ list parse_list(const pugi::xml_node &node)
         it.numbered = tag == "text:list-item";
         if(auto v = item_node.attribute("text:start-value"); v && it.numbered)
             it.start_value = v.as_int();
-        it.children() = parse_block_children(item_node);
+        it.items() = parse_block_children(item_node);
         l.items().push_back(std::move(it));
     }
     return l;
@@ -356,18 +359,18 @@ std::optional<block_node> parse_block(const pugi::xml_node &node)
     {
         paragraph p;
         p.style = style_of(node, "text:style-name", builtin::para);
-        p.children() = parse_inline_children(node);
+        p.items() = parse_inline_children(node);
         // The writer puts a block frame in an unstyled paragraph of its own.
-        if(!node.attribute("text:style-name") && p.children().size() == 1 &&
-            std::holds_alternative<frame>(p.children().front().v))
-            return block_node{std::get<frame>(p.children().front().v)};
+        if(!node.attribute("text:style-name") && p.items().size() == 1 &&
+            std::holds_alternative<frame>(p.items().front().v))
+            return block_node{std::get<frame>(p.items().front().v)};
         return block_node{std::move(p)};
     }
     if(tag == "text:h")
     {
         heading h(node.attribute("text:outline-level").as_int(1));
         h.style = style_of(node, "text:style-name", builtin::heading(h.level));
-        h.children() = parse_inline_children(node);
+        h.items() = parse_inline_children(node);
         return block_node{std::move(h)};
     }
     if(tag == "text:list")
@@ -413,21 +416,20 @@ void expand_page_breaks(
                 [&](list &l)
                 {
                     for(auto &it : l.items())
-                        expand_page_breaks(it.children(), styles);
+                        expand_page_breaks(it.items(), styles);
                     // The writer folds a break before a list into its
                     // first paragraph; it reads back before the list.
-                    if(auto &items = l.items(); !items.empty() &&
-                        !items.front().children().empty() &&
-                        std::holds_alternative<page_break>(items.front().children().front().v))
+                    if(auto &items = l.items(); !items.empty() && !items.front().items().empty() &&
+                        std::holds_alternative<page_break>(items.front().items().front().v))
                     {
-                        items.front().children().erase(items.front().children().begin());
+                        items.front().items().erase(items.front().items().begin());
                         out.push_back(block_node{page_break{}});
                     }
                 },
                 [&](table &t)
                 {
                     for(auto &c : t.cells())
-                        expand_page_breaks(c.children(), styles);
+                        expand_page_breaks(c.items(), styles);
                 },
                 [&](auto &n)
                 {
@@ -514,7 +516,7 @@ file file::load(const std::filesystem::path &p)
 
     // Text documents and their relatives (.ott templates) share this prefix.
     if(!f.m_impl->pkg.mimetype().starts_with(odt_mimetype))
-        throw std::runtime_error("Not an OpenDocument text file: " + p.string());
+        throw error(error_code::not_a_document, "Not an OpenDocument text file: " + p.string());
 
     const auto *content = f.m_impl->pkg.find("content.xml");
     pugi::xml_document xml;
@@ -523,7 +525,7 @@ file file::load(const std::filesystem::path &p)
         !xml.load_buffer(content->data.data(),
             content->data.size(),
             pugi::parse_default | pugi::parse_ws_pcdata))
-        throw std::runtime_error("Could not read content.xml from " + p.string());
+        throw error(error_code::malformed, "Could not read content.xml from " + p.string());
 
     auto root = xml.child("office:document-content");
     const auto widths = column_widths(root.child("office:automatic-styles"));
@@ -539,7 +541,7 @@ file file::load(const std::filesystem::path &p)
     std::map<std::string, para_style_name> page_breaks;
     for(auto s : root.child("office:automatic-styles").children("style:style"))
         if(auto base = page_break_base(s))
-            page_breaks[s.attribute("style:name").as_string()] = *base;
+            page_breaks[odf::model_name(s.attribute("style:name").as_string())] = *base;
     if(!page_breaks.empty())
         expand_page_breaks(f.doc.body, page_breaks);
     read_styles(f.m_impl->pkg, f.doc);
@@ -557,10 +559,12 @@ file file::load(const std::filesystem::path &p)
     return f;
 }
 
-void file::save(const std::filesystem::path &p) const
+namespace
 {
-    // Work on a copy so saving leaves this file unchanged and can be repeated.
-    odf::package out = m_impl->pkg;
+/// Writes doc into out (a copy, so saving leaves the file it came from
+/// unchanged and can be repeated) and out to p.
+void write_package(const text_doc &doc, odf::package out, const std::filesystem::path &p)
+{
     out.set_mimetype(odt_mimetype);
 
     write_document(doc, out);
@@ -583,6 +587,12 @@ void file::save(const std::filesystem::path &p) const
     }
 #endif
 }
+} // namespace
+
+void file::save(const std::filesystem::path &p) const { write_package(doc, m_impl->pkg, p); }
+
+void save(const text_doc &doc, const std::filesystem::path &p)
+{ write_package(doc, odf::package(odt_mimetype), p); }
 
 } // namespace odt
 } // namespace docsmith

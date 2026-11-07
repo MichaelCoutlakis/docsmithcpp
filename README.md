@@ -61,7 +61,7 @@ Test software written in C++ could use `docsmithcpp` to generate test reports.
   doesn't represent.
 - 🧮 Table formatting in every format: table styles with lines and a shaded
   header, cell borders, shading and padding, and column widths, set after the
-  content is in (`t.set_row_borders({0}, edge::bottom, border::solid(pt(1)))`)
+  content is in (`t.apply_row_borders({0}, edge::bottom, border::solid(pt(1)))`)
 - 🌐 Write HTML5 pages: styles become CSS classes, list styles pick
   `<ol>`/`<ul>`, and images are written next to the page
 - 📄 Write GitHub Flavored Markdown (CI job summaries, PR comments): bold and
@@ -233,10 +233,10 @@ int main() {
     auto &body = hello.styles()[builtin::para];
     body.text.set(font_name("Liberation Serif")).set(font_size(11));
     body.para.set(space_after{pt(6)});
-    odt::file(hello).save("hello_world.odt");
-    docx::file(hello).save("hello_world.docx");
-    html::file(hello).save("hello_world.html");
-    md::file(hello).save("hello_world.md");
+    odt::save(hello, "hello_world.odt");
+    docx::save(hello, "hello_world.docx");
+    html::save(hello, "hello_world.html");
+    md::save(hello, "hello_world.md");
 
     // Load, query and edit. Saving keeps the parts of the package the model
     // doesn't represent (styles.xml, meta.xml, embedded images, ...).
@@ -248,8 +248,11 @@ int main() {
         if (const auto* u = std::get_if<url_target>(&a->target))
             std::cout << u->url << "\n";
 
+    // Styles are named as they are shown, in every format: "Text body",
+    // "Heading 1". A paragraph in the default style (builtin::para) reads
+    // back unstyled.
     auto body_paras = find_all<paragraph>(doc,
-        [](const paragraph& p) { return p.style == "Text_body"; });
+        [](const paragraph& p) { return p.style == "Text body"; });
 
     // Visit a node directly with the overloaded idiom.
     for (const block_node& b : doc.body)
@@ -267,10 +270,12 @@ int main() {
     // Fill in a template: put content in place of its placeholders, found by
     // their text, a bookmark or a style.
     auto report = odt::file::load("report_template.odt");
-    report.doc.replace("{{summary}}", {heading(1, "Summary"), paragraph("All passed.")});
+    // replace() returns false if the template has no such placeholder.
+    if(!report.doc.replace("{{summary}}", {heading(1, "Summary"), paragraph("All passed.")}))
+        return 1;
     report.doc.page.set_footer(paragraph("Page ", field{field_type::page_number}));
     report.save("report.odt");
-    docx::file(report.doc).save("report.docx"); // the same report for Word
+    docx::save(report.doc, "report.docx"); // the same report for Word
 }
 ```
 

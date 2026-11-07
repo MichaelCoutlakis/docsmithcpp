@@ -50,7 +50,7 @@ text_doc with_styles()
     text_style child("Child");
     child.parent = "Bold";
     doc.styles().insert(child);
-    doc.styles().insert(text_style("Red", text_props(colour::rgb(255, 0, 0))));
+    doc.styles().insert(text_style("Red", text_props(font_colour(colour::rgb(255, 0, 0)))));
     return doc;
 }
 
@@ -105,7 +105,7 @@ TEST(Markdown, StylesBecomeEmphasisStrongOrNothing)
 TEST(Markdown, EmphasisNamesWithoutDefinitions)
 {
     EXPECT_EQ(md_of(text_doc{paragraph(
-                  span("a").set_style("Emphasis"), span("b").set_style("Strong_20_Emphasis"))}),
+                  span("a").set_style(builtin::emphasis), span("b").set_style(builtin::strong))}),
         "*a***b**\n");
 }
 
@@ -349,7 +349,8 @@ TEST(MarkdownInput, Blocks)
     const text_doc doc = md::parse("# Title\n\nSome *text*.\n\n---\n\n```c++\nint x;\n```\n");
     ASSERT_EQ(doc.body.size(), 4U);
     EXPECT_EQ(doc.body[0], block_node{heading(1, "Title")});
-    EXPECT_EQ(doc.body[1], block_node{paragraph("Some ", span("text").set_style("Emphasis"), ".")});
+    EXPECT_EQ(doc.body[1],
+        block_node{paragraph("Some ", span("text").set_style(builtin::emphasis), ".")});
     EXPECT_EQ(doc.body[2], block_node{page_break{}});
     EXPECT_EQ(doc.body[3], block_node{paragraph("int x;").set_style(builtin::preformatted)});
 
@@ -365,7 +366,7 @@ TEST(MarkdownInput, InlineContent)
     ASSERT_EQ(doc.body.size(), 1U);
     EXPECT_EQ(doc.body[0],
         block_node{paragraph("a ",
-            span("b").set_style("Strong_20_Emphasis"),
+            span("b").set_style(builtin::strong),
             " ",
             span("c").set_style(builtin::source_text),
             " ",
@@ -394,19 +395,18 @@ TEST(MarkdownInput, ListsGetListStyles)
     const text_doc doc = md::parse("1. a\n   - b\n     1. c\n2. d\n\n- e\n\n5. f\n");
     ASSERT_EQ(doc.body.size(), 3U);
     const auto &outer = std::get<list>(doc.body[0].v);
-    EXPECT_EQ(outer.style, list_style_name("Numbering_20_123"));
-    const auto &inner = std::get<list>(outer.items()[0].children()[1].v);
-    EXPECT_EQ(inner.style, list_style_name("List_20_1"));
-    EXPECT_EQ(std::get<list>(inner.items()[0].children()[1].v).style,
-        list_style_name("Numbering_20_123"));
-    EXPECT_EQ(std::get<list>(doc.body[1].v).style, list_style_name("List_20_1"));
-    EXPECT_EQ(std::get<list>(doc.body[2].v).style, list_style_name("Numbering_20_123_start_5"));
-    EXPECT_EQ(outer.items()[1].children(), std::vector<block_node>{block_node{paragraph("d")}});
+    EXPECT_EQ(outer.style, builtin::numbered_list);
+    const auto &inner = std::get<list>(outer.items()[0].items()[1].v);
+    EXPECT_EQ(inner.style, builtin::bullet_list);
+    EXPECT_EQ(std::get<list>(inner.items()[0].items()[1].v).style, builtin::numbered_list);
+    EXPECT_EQ(std::get<list>(doc.body[1].v).style, builtin::bullet_list);
+    EXPECT_EQ(std::get<list>(doc.body[2].v).style, list_style_name("Numbering 123 start 5"));
+    EXPECT_EQ(outer.items()[1].items(), std::vector<block_node>{block_node{paragraph("d")}});
 
     // A nested list of the same kind continues its parent's style.
     const text_doc same = md::parse("- a\n  - b\n");
     EXPECT_TRUE(
-        std::get<list>(std::get<list>(same.body[0].v).items()[0].children()[1].v).style.empty());
+        std::get<list>(std::get<list>(same.body[0].v).items()[0].items()[1].v).style.empty());
 }
 
 TEST(MarkdownInput, Tables)
@@ -517,4 +517,11 @@ TEST(Markdown, ListNumbering)
     doc.add(paragraph("between"));
     doc.add(more);
     EXPECT_EQ(md_of(doc), "header\n\n1. one\n\n   more\n\n5. five\n\nbetween\n\n6. six\n");
+}
+
+TEST(MD, SaveWithoutAFile)
+{
+    const text_doc doc{heading(1, "Saved"), paragraph("without a file")};
+    md::save(doc, "md/out/save_free.md");
+    EXPECT_EQ(read("md/out/save_free.md"), md_of(doc));
 }

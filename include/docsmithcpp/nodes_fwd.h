@@ -99,22 +99,22 @@ template <typename Self, typename Child, typename... Args>
 concept content_args = (sizeof...(Args) >= 1) &&
     ((content_for<Args, Child> && !std::is_same_v<std::remove_cvref_t<Args>, Self>) && ...);
 
-/// CRTP mixin: a node's child sequence, plus children()/add()/iteration.
+/// CRTP mixin: a node's child sequence, plus items()/add()/iteration.
 /// When Boxed is true the storage is routed through box<> to break the variant
-/// recursion (see box.h); the box is hidden behind children() so callers never
+/// recursion (see box.h); the box is hidden behind items() so callers never
 /// see it and the boxing choice stays an implementation detail.
 template <typename Child, typename Derived, bool Boxed>
 class has_children
 {
 public:
-    std::vector<Child> &children()
+    std::vector<Child> &items()
     {
         if constexpr(Boxed)
             return *m_children;
         else
             return m_children;
     }
-    const std::vector<Child> &children() const
+    const std::vector<Child> &items() const
     {
         if constexpr(Boxed)
             return *m_children;
@@ -122,18 +122,18 @@ public:
             return m_children;
     }
 
-    auto begin() { return children().begin(); }
-    auto end() { return children().end(); }
-    auto begin() const { return children().begin(); }
-    auto end() const { return children().end(); }
+    auto begin() { return items().begin(); }
+    auto end() { return items().end(); }
+    auto begin() const { return items().begin(); }
+    auto end() const { return items().end(); }
 
     template <content_for<Child> T>
     Derived &add(T &&content)
     {
         if constexpr(std::is_same_v<Child, inline_node>)
-            children().push_back(to_inline(std::forward<T>(content)));
+            items().push_back(to_inline(std::forward<T>(content)));
         else
-            children().push_back(to_block(std::forward<T>(content)));
+            items().push_back(to_block(std::forward<T>(content)));
         return static_cast<Derived &>(*this);
     }
 

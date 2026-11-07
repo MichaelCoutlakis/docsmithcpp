@@ -16,6 +16,7 @@
  * limitations under the License.
  *****************************************************************************/
 #include "odf/package.h"
+#include "docsmithcpp/error.h"
 
 #include <sstream>
 #include <stdexcept>
@@ -41,9 +42,9 @@ package package::read(const fs::path &p)
     {
         entries = zip::read(detail::read_bytes(p));
     }
-    catch(const std::runtime_error &e)
+    catch(const error &e)
     {
-        throw std::runtime_error(detail::utf8(p) + ": " + e.what());
+        throw error(e.code(), detail::utf8(p) + ": " + e.what());
     }
 
     package pkg;

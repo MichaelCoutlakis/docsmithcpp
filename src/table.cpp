@@ -234,22 +234,22 @@ void table::set_vert_line(const std::vector<size_t> &origins, size_t i, const bo
     }
 }
 
-table &table::set_borders(const border &b)
+table &table::apply_borders(const border &b)
 {
-    set_horiz_borders(lines::all, b);
-    return set_vert_borders(lines::all, b);
+    apply_horiz_borders(lines::all, b);
+    return apply_vert_borders(lines::all, b);
 }
 
-table &table::set_outer_border(const border &b)
+table &table::apply_outer_border(const border &b)
 {
-    set_horiz_borders(lines::outer, b);
-    return set_vert_borders(lines::outer, b);
+    apply_horiz_borders(lines::outer, b);
+    return apply_vert_borders(lines::outer, b);
 }
 
-table &table::set_horiz_borders(lines which, const border &b)
-{ return set_horiz_borders(line_indices(which, num_rows()), b); }
+table &table::apply_horiz_borders(lines which, const border &b)
+{ return apply_horiz_borders(line_indices(which, num_rows()), b); }
 
-table &table::set_horiz_borders(const std::vector<size_t> &which, const border &b)
+table &table::apply_horiz_borders(const std::vector<size_t> &which, const border &b)
 {
     const auto o = origins();
     for(size_t i : which)
@@ -257,10 +257,10 @@ table &table::set_horiz_borders(const std::vector<size_t> &which, const border &
     return *this;
 }
 
-table &table::set_vert_borders(lines which, const border &b)
-{ return set_vert_borders(line_indices(which, num_cols()), b); }
+table &table::apply_vert_borders(lines which, const border &b)
+{ return apply_vert_borders(line_indices(which, num_cols()), b); }
 
-table &table::set_vert_borders(const std::vector<size_t> &which, const border &b)
+table &table::apply_vert_borders(const std::vector<size_t> &which, const border &b)
 {
     const auto o = origins();
     for(size_t i : which)
@@ -268,7 +268,7 @@ table &table::set_vert_borders(const std::vector<size_t> &which, const border &b
     return *this;
 }
 
-table &table::set_row_borders(const std::vector<size_t> &rows, edge edges, const border &b)
+table &table::apply_row_borders(const std::vector<size_t> &rows, edge edges, const border &b)
 {
     std::vector<size_t> which;
     for(size_t r : rows)
@@ -278,10 +278,10 @@ table &table::set_row_borders(const std::vector<size_t> &rows, edge edges, const
         if(has(edges, edge::bottom))
             which.push_back(r + 1);
     }
-    return set_horiz_borders(which, b);
+    return apply_horiz_borders(which, b);
 }
 
-table &table::set_column_borders(const std::vector<size_t> &cols, edge edges, const border &b)
+table &table::apply_column_borders(const std::vector<size_t> &cols, edge edges, const border &b)
 {
     std::vector<size_t> which;
     for(size_t c : cols)
@@ -291,7 +291,7 @@ table &table::set_column_borders(const std::vector<size_t> &cols, edge edges, co
         if(has(edges, edge::end))
             which.push_back(c + 1);
     }
-    return set_vert_borders(which, b);
+    return apply_vert_borders(which, b);
 }
 
 std::vector<double> column_shares(const table &t)

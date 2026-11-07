@@ -51,17 +51,17 @@ public:
     void operator()(const paragraph &p)
     {
         line("Paragraph: style=", p.style.str());
-        kids(p.children());
+        kids(p.items());
     }
     void operator()(const heading &h)
     {
         line("Heading: level ", h.level);
-        kids(h.children());
+        kids(h.items());
     }
     void operator()(const span &s)
     {
         line("Span: style=", s.style.str());
-        kids(s.children());
+        kids(s.items());
     }
     void operator()(const hyperlink &h)
     {
@@ -69,7 +69,7 @@ public:
         std::visit(overloaded{[&](const url_target &u) { line("Hyperlink: ", u.url, style); },
                        [&](const bookmark_target &b) { line("Hyperlink: bookmark ", b.name, style); }},
             h.target);
-        kids(h.children());
+        kids(h.items());
     }
     void operator()(const text &t) { line("Text: ", t.content); }
     void operator()(const frame &f)
@@ -106,7 +106,7 @@ public:
         line(it.numbered ? "List Item:" : "List Item: unnumbered",
             it.start_value ? " from " + std::to_string(*it.start_value) : std::string());
         ++m_indent;
-        for(const auto &b : it.children())
+        for(const auto &b : it.items())
             (*this)(b);
         --m_indent;
     }
@@ -124,7 +124,7 @@ public:
     {
         line("Cell: rowspan=", c.rowspan, ", colspan=", c.colspan, ", style=", c.style.str());
         ++m_indent;
-        for(const auto &b : c.children())
+        for(const auto &b : c.items())
             (*this)(b);
         --m_indent;
     }

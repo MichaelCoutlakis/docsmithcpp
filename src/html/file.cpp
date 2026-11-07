@@ -16,6 +16,7 @@
  * limitations under the License.
  *****************************************************************************/
 #include "docsmithcpp/html/file.h"
+#include "docsmithcpp/error.h"
 
 #include <algorithm>
 #include <cctype>
@@ -254,7 +255,7 @@ std::string css_decls(const text_props &tp)
         decls += " font-family: \"" + tp.m_font_name->str() + "\";";
     if(tp.m_font_weight)
         decls += std::string(" font-weight: ") + css_value(*tp.m_font_weight) + ";";
-    if(const auto &c = tp.m_colour)
+    if(const auto &c = tp.m_font_colour)
         decls += " color: " + detail::to_hex(*c) + ";";
     return decls;
 }
@@ -377,14 +378,14 @@ std::string default_title(const text_doc &doc)
     if(const paragraph *p = doc.find_title())
     {
         std::string t;
-        plain_text(p->children(), t);
+        plain_text(p->items(), t);
         return t;
     }
     for(const auto &b : doc.body)
         if(const auto *h = std::get_if<heading>(&b.v))
         {
             std::string t;
-            plain_text(h->children(), t);
+            plain_text(h->items(), t);
             return t;
         }
     return "Untitled";
@@ -544,17 +545,17 @@ private:
         {
             open("pre", p.style);
             std::string t;
-            plain_text(p.children(), t);
+            plain_text(p.items(), t);
             if(t.starts_with('\n'))
                 m_os << '\n'; // a newline straight after <pre> is dropped
             m_pre = true;
-            flow(p.children());
+            flow(p.items());
             m_pre = false;
             m_os << "</pre>\n";
             return;
         }
         open("p", p.style);
-        flow(p.children());
+        flow(p.items());
         m_os << "</p>\n";
     }
     void emit_block(const heading &h)
@@ -566,7 +567,7 @@ private:
             m_os << " id=\"" << m_ids.link.at(&h) << '"';
         class_attr(h.style);
         m_os << '>';
-        flow(h.children());
+        flow(h.items());
         m_os << "</" << tag << ">\n";
     }
     void emit_block(const list &l)
@@ -605,7 +606,7 @@ private:
             else if(numbers[i] && *numbers[i] != next)
                 attrs = " value=\"" + std::to_string(*numbers[i]) + '"';
             next = numbers[i].value_or(next) + 1;
-            container("li", {}, it.children(), attrs);
+            container("li", {}, it.items(), attrs);
         }
         --m_depth;
         m_lists.pop_back();
@@ -694,7 +695,7 @@ private:
                     attrs += " style=\"" + css.substr(1) + "\"";
                 container(r < header_rows ? "th" : "td",
                     cell.style.str(),
-                    cell.children(),
+                    cell.items(),
                     attrs,
                     cell_paragraph[r * t.num_cols() + c].str());
             }
@@ -776,7 +777,7 @@ private:
             m_os << "<li><a href=\"#";
             escape(m_os, m_ids.link.at(h), true);
             m_os << "\">";
-            escape(m_os, plain_text(h->children()));
+            escape(m_os, plain_text(h->items()));
             m_os << "</a>\n";
             ++m_depth;
             item_open.back() = true;
@@ -813,10 +814,10 @@ private:
     void emit_inline(const span &s)
     {
         if(s.style.empty())
-            return flow(s.children()); // an unstyled span adds nothing
+            return flow(s.items()); // an unstyled span adds nothing
         const char *tag = based_on(s.style, builtin::source_text, m_doc.styles()) ? "code" : "span";
         open(tag, s.style);
-        flow(s.children());
+        flow(s.items());
         m_os << "</" << tag << '>';
     }
     void emit_inline(const hyperlink &h)
@@ -830,7 +831,7 @@ private:
                 h.target),
             true);
         m_os << "\">";
-        flow(h.children());
+        flow(h.items());
         m_os << "</a>";
     }
     void emit_inline(const frame &f) { img(f); }
@@ -861,7 +862,7 @@ private:
         class_attr(style, extra);
         m_os << attrs << '>';
         if(const auto *p = sole_plain_paragraph(blocks))
-            flow(p->children());
+            flow(p->items());
         else
         {
             m_os << '\n';
@@ -952,7 +953,10 @@ std::string file::to_string() const
     return ss.str();
 }
 
-void file::save(const fs::path &p) const
+namespace
+{
+void write_page(const text_doc &doc, const std::string &title, const std::string &css,
+    const fs::path &resource_dir, const fs::path &p)
 {
     const fs::path base = fs::weakly_canonical(fs::absolute(p).parent_path());
     fs::create_directories(base);
@@ -967,10 +971,15 @@ void file::save(const fs::path &p) const
 
     std::ofstream out(p, std::ios::binary);
     if(!out)
-        throw std::runtime_error("Could not write " + p.string());
+        throw error(error_code::io, "Could not write " + p.string());
     const auto with_cell_text = detail::with_cell_text(doc);
     writer(out, with_cell_text ? *with_cell_text : doc, plan)
         .page(title.empty() ? default_title(doc) : title, css);
 }
+} // namespace
+
+void file::save(const fs::path &p) const { write_page(doc, title, css, resource_dir, p); }
+
+void save(const text_doc &doc, const fs::path &p) { write_page(doc, {}, {}, {}, p); }
 
 } // namespace docsmith::html

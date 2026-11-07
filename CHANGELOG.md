@@ -11,6 +11,29 @@ The document model was rewritten from a polymorphic class hierarchy into value t
 held in `std::variant`. This is a breaking change to almost every public API.
 
 ### Changed
+- **Style names are format-agnostic**: a style is named as it is shown ("Text body",
+  "Heading 1"), and readers and writers translate to the format's own spelling (ODF's
+  `Text_20_body`, a DOCX `w:styleId` made from the name). The builtins are renamed to
+  match: `builtin::para` is "Default Paragraph Style", `heading(n)` "Heading n",
+  `link` "Hyperlink", `table` "Default Table", `list` "Default List",
+  `preformatted` "Preformatted Text" and `source_text` "Source Text". The styles
+  Markdown reads into are builtins too: `builtin::emphasis`, `strong`, `quotations`,
+  `numbered_list` and `bullet_list`.
+- **`docsmith::error`** (`error.h`) is what reading and writing throw, in place of
+  `std::runtime_error`: a `std::exception` with an `error_code` (`io`,
+  `not_a_document`, `malformed`, `missing_image`, `unsafe_path`) and a message.
+- **Child sequences are `items()`**, as on `list`: `paragraph::children()` and the
+  others are renamed.
+- **Table border setters are `apply_*`** (`apply_borders`, `apply_row_borders`, ...),
+  as they apply to the cells there are now, not to rows added later.
+- **Properties name what they are**: a text colour is `font_colour(c)`
+  (`text_props::m_font_colour`), a cell's background `background(c)`, and a table's
+  width `table_width(percent(100))` or `table_width(cm(15))`, in place of a bare
+  `colour`, `percent` or `length`. The props constructors and `paragraph_style` /
+  `cell_style` are constrained, so a property they don't take fails at the call.
+- **`[[nodiscard]]`** on `text_doc::replace()` / `insert_after()` / `insert_before()`
+  (false when the placeholder isn't found), `load()`, `to_string()`, the `find()`
+  functions, `collect()` and `find_all()`.
 - **Value types take parentheses as well as braces**: the property tags
   (`space_after(pt(6))`, `keep_with_next()`, `outer_border(...)`, `percent(50)`,
   `cell_padding(...)`, `header_cells(...)`) have constructors, as an aggregate takes
@@ -83,6 +106,8 @@ held in `std::variant`. This is a breaking change to almost every public API.
   directory. Generated test files go to `tests/odt/out/`.
 
 ### Added
+- **`odt::save(doc, path)`**, and `docx::`, `html::` and `md::save()`: save a document
+  without copying it into a `file`.
 - **Content concepts**: `inline_content`, `block_content` and `content_for` constrain
   `add()`, the variadic content constructors, `cell_view::assign()` and
   `page_style::set_header()` / `set_footer()`. Content of the wrong level, such as
@@ -134,8 +159,8 @@ held in `std::variant`. This is a breaking change to almost every public API.
   style (`set_column_style`, applied to rows added later too, read from and written
   to ODT's `table:default-cell-style-name`), the header's, or a cell's direct
   formatting (`table_cell::props`), the later winning.
-  `set_borders`, `set_outer_border`, `set_horiz_borders`, `set_vert_borders`,
-  `set_row_borders` and `set_column_borders` set lines after the content is in;
+  `apply_borders`, `apply_outer_border`, `apply_horiz_borders`, `apply_vert_borders`,
+  `apply_row_borders` and `apply_column_borders` set lines after the content is in;
   `set_column_widths` sets relative column widths. `effective_cell_props()` says
   how a cell will look. ODT, DOCX and HTML write all of it; ODT and DOCX read it
   back.
@@ -277,7 +302,7 @@ held in `std::variant`. This is a breaking change to almost every public API.
   well as the MSVC STL and libstdc++. It holds a typed `T *`, so debuggers can follow
   it to the held value.
 - `styled<Derived>` and `has_children<Child, Derived, Boxed>`: thin non-polymorphic
-  CRTP mixins for the style name and the child sequence. `children()` hides the boxing.
+  CRTP mixins for the style name and the child sequence. `items()` hides the boxing.
 - The ODT writer emits `text:outline-level` on headings and `xlink:type` on hyperlinks.
   Empty style names are no longer written.
 - Tests: `ValueSemantics`, `ChainedAdd`, `UnknownPassThrough`, `ResaveLoadedFile`,

@@ -16,6 +16,7 @@
  * limitations under the License.
  *****************************************************************************/
 #include "opc/package.h"
+#include "docsmithcpp/error.h"
 
 #include <algorithm>
 #include <cctype>
@@ -159,9 +160,9 @@ package package::read(const std::filesystem::path &p)
     {
         return read_bytes(detail::read_bytes(p));
     }
-    catch(const std::runtime_error &e)
+    catch(const error &e)
     {
-        throw std::runtime_error(detail::utf8(p) + ": " + e.what());
+        throw error(e.code(), detail::utf8(p) + ": " + e.what());
     }
 }
 
@@ -182,7 +183,7 @@ package package::read_bytes(std::string bytes)
             pkg.m_parts[e.name] = part{std::move(e.data)};
     }
     if(content_types.empty())
-        throw std::runtime_error("Not an OPC package: no [Content_Types].xml");
+        throw error(error_code::not_a_document, "Not an OPC package: no [Content_Types].xml");
 
     std::map<std::string, std::string> defaults, overrides;
     pugi::xml_document xml;

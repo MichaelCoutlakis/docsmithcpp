@@ -46,7 +46,7 @@ public:
 
     /// Images the document shows are moved from the package into
     /// doc.resources(), named by their part ("word/media/image1.png").
-    static file load(const std::filesystem::path &p);
+    [[nodiscard]] static file load(const std::filesystem::path &p);
 
     /// Images whose uri names one of doc.resources() are embedded from it;
     /// other image uris are read from disk. Both go under word/media/.
@@ -58,5 +58,10 @@ private:
     struct impl;
     box<impl> m_impl; // pimpl: copyable, and hides the archive / XML libraries
 };
+
+/// Saves doc as a new .docx, as docx::file(doc).save(p) does, without copying
+/// doc. To keep what a loaded file holds beyond the model, save the
+/// docx::file it was loaded into instead.
+void save(const text_doc &doc, const std::filesystem::path &p);
 
 } // namespace docsmith::docx

@@ -63,7 +63,9 @@ text_doc every_node()
     auto note = doc.styles()
                     .insert(paragraph_style("Note", text_props(font_style::italic, font_size(10))))
                     .first;
-    auto red = doc.styles().insert(text_style("Red", text_props(colour::rgb(200, 0, 0)))).first;
+    auto red = doc.styles()
+                   .insert(text_style("Red", text_props(font_colour(colour::rgb(200, 0, 0)))))
+                   .first;
     auto bold = doc.styles().insert(text_style("Bold", text_props(font_weight::bold))).first;
     doc.styles().text.find("Bold")->parent = red;
     auto steps =
@@ -160,23 +162,23 @@ TEST(DOCX_Read, RoundTripThroughTheModel)
     // A span in a span is written with the inner style: runs don't nest.
     text_doc expected = doc;
     auto &lead = std::get<paragraph>(expected.body[3].v);
-    lead.children()[1] = inline_node{span("red").set_style("Red")};
-    lead.children().insert(lead.children().begin() + 2, inline_node{span("x").set_style("Red")});
+    lead.items()[1] = inline_node{span("red").set_style("Red")};
+    lead.items().insert(lead.items().begin() + 2, inline_node{span("x").set_style("Red")});
     // Adjacent runs of one style read back as one span.
-    lead.children()[1] = inline_node{span("redx").set_style("Red")};
-    lead.children().erase(lead.children().begin() + 2);
+    lead.items()[1] = inline_node{span("redx").set_style("Red")};
+    lead.items().erase(lead.items().begin() + 2);
     // A link's text all in one style is the link's style: DOCX can't tell a
     // styled link from a link holding a styled span.
     walk(expected,
         [](auto &n)
         {
             if constexpr(std::is_same_v<std::decay_t<decltype(n)>, hyperlink>)
-                if(n.children().size() == 1)
-                    if(auto *s = std::get_if<span>(&n.children().front().v); s && !s->style.empty())
+                if(n.items().size() == 1)
+                    if(auto *s = std::get_if<span>(&n.items().front().v); s && !s->style.empty())
                     {
                         n.style = s->style;
-                        auto inner = s->children();
-                        n.children() = std::move(inner);
+                        auto inner = s->items();
+                        n.items() = std::move(inner);
                     }
         });
 
@@ -263,15 +265,14 @@ TEST(DOCX_Read, KeepsWhatTheModelDoesntHold)
     ASSERT_FALSE(p.style.empty()) << "the paragraph's alignment is its own";
     ASSERT_NE(f.doc.styles().find(p.style), nullptr);
 
-    ASSERT_EQ(p.children().size(), 3U);
-    const auto &bold = std::get<span>(p.children()[0].v);
+    ASSERT_EQ(p.items().size(), 3U);
+    const auto &bold = std::get<span>(p.items()[0].v);
     const text_style *bs = f.doc.styles().find(bold.style);
     ASSERT_NE(bs, nullptr);
     EXPECT_EQ(bs->text.m_font_weight, font_weight::bold)
         << "direct formatting is a style the model reads";
-    EXPECT_EQ(std::get<text>(p.children()[1].v).content, " plain");
-    EXPECT_NE(
-        std::get<unknown>(p.children()[2].v).xml.find("w:footnoteReference"), std::string::npos);
+    EXPECT_EQ(std::get<text>(p.items()[1].v).content, " plain");
+    EXPECT_NE(std::get<unknown>(p.items()[2].v).xml.find("w:footnoteReference"), std::string::npos);
 
     f.doc.add(paragraph("added"));
     f.save("docx/out/foreign_resaved.docx");
@@ -306,7 +307,7 @@ TEST(DOCX_Read, LibreOfficeListsLinksAndStyles)
     const auto &h1 = std::get<heading>(body[0].v);
     EXPECT_EQ(h1.level, 1);
     EXPECT_TRUE(h1.style.empty()) << "Heading1 is a level 1 heading's default";
-    EXPECT_EQ(std::get<paragraph>(body[1].v).style.str(), "TextBody")
+    EXPECT_EQ(std::get<paragraph>(body[1].v).style.str(), "Body Text")
         << "LibreOffice's direct formatting that only repeats the style is not the paragraph's own";
 
     const auto lists = collect<list>(f.doc);
@@ -398,7 +399,30 @@ TEST(DOCX_Read, LibreOfficeImage)
 }
 
 TEST(DOCX_Read, NotAWordDocument)
-{ EXPECT_THROW(docx::file::load("odt/basic.odt"), std::runtime_error); }
+{
+    try
+    {
+        (void)docx::file::load("odt/basic.odt");
+        FAIL() << "expected docsmith::error";
+    }
+    catch(const docsmith::error &e)
+    {
+        EXPECT_EQ(e.code(), error_code::not_a_document);
+    }
+}
+
+TEST(DOCX_Read, MissingFileIsAnIoError)
+{
+    try
+    {
+        (void)docx::file::load("docx/no such file.docx");
+        FAIL() << "expected docsmith::error";
+    }
+    catch(const docsmith::error &e)
+    {
+        EXPECT_EQ(e.code(), error_code::io);
+    }
+}
 
 TEST(DOCX_Read, TableFormattingRoundTrip)
 {
@@ -409,8 +433,8 @@ TEST(DOCX_Read, TableFormattingRoundTrip)
         table_props(outer_border{thick}, inside_h{thin}, inside_v{thin}, cell_padding{pt(3)})));
     table t = table::from_cells({{"Test", "Result"}, {"open", "pass"}, {"save", "fail"}});
     t.set_style("Grid").set_column_widths({3, 1});
-    t.cell(1, 1).props.set(colour::rgb(0xff, 0xcc, 0xcc)).set(cell_valign::middle);
-    t.set_row_borders({0}, edge::bottom, border::none());
+    t.cell(1, 1).props.set(background(colour::rgb(0xff, 0xcc, 0xcc))).set(cell_valign::middle);
+    t.apply_row_borders({0}, edge::bottom, border::none());
     doc.add(t);
     docx::file(doc).save("docx/out/table_formatting_read.docx");
 

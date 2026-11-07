@@ -21,6 +21,7 @@
 // instead if compile time matters.
 
 #include "docsmithcpp/docx/file.h"       // DOCX read / write
+#include "docsmithcpp/error.h"           // docsmith::error, thrown on read / write failures
 #include "docsmithcpp/html/file.h"       // HTML output
 #include "docsmithcpp/iostream_writer.h" // io_writer: debug tree printer
 #include "docsmithcpp/md/file.h"         // Markdown output (and input)

@@ -197,9 +197,9 @@ void write_rpr(pugi::xml_node rpr, const text_props &props)
         if(*props.m_font_style == font_style::normal)
             set_val(i, "0");
     }
-    if(props.m_colour)
+    if(props.m_font_colour)
     {
-        std::string hex = detail::to_hex(*props.m_colour).substr(1);
+        std::string hex = detail::to_hex(*props.m_font_colour).substr(1);
         for(auto &c : hex)
             c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
         set_val(ordered_child(rpr, "w:color", rpr_order), hex);
@@ -293,7 +293,7 @@ std::optional<text_props> read_rpr(const pugi::xml_node &rpr)
     if(auto b = rpr.child("w:b"))
         tp.set(on(b) ? font_weight::bold : font_weight::normal);
     if(auto c = colour_from(val(rpr, "w:color")))
-        tp.set(*c);
+        tp.set(font_colour(*c));
     return tp == text_props{} ? std::nullopt : std::optional(std::move(tp));
 }
 
@@ -388,7 +388,7 @@ cell_props read_tcpr(const pugi::xml_node &tc_pr)
         p.m_borders.m_end = side("w:right", "w:end");
     }
     if(auto c = colour_from(tc_pr.child("w:shd").attribute("w:fill").as_string()))
-        p.set(*c);
+        p.set(background(*c));
     if(auto m = read_margins(tc_pr.child("w:tcMar")))
         p.set(cell_padding{*m});
     if(const std::string v = val(tc_pr, "w:vAlign"); !v.empty())
@@ -439,12 +439,13 @@ std::optional<table_props> read_style_tblpr(const pugi::xml_node &tbl_pr)
 namespace
 {
 /// The w:style's own elements, before its properties.
-void style_head(pugi::xml_node n, const char *type, const std::string &id,
-    const std::string &based_on, const std::string &link)
+void style_head(pugi::xml_node n, const char *type, const style_ids &ids)
 {
     n.append_attribute("w:type") = type;
-    n.append_attribute("w:styleId") = id.c_str();
-    set_val(n.append_child("w:name"), word_style_name(id));
+    n.append_attribute("w:styleId") = ids.id.c_str();
+    set_val(n.append_child("w:name"), ids.name);
+    const std::string &based_on = ids.based_on;
+    const std::string &link = ids.link;
     if(!based_on.empty())
         set_val(n.append_child("w:basedOn"), based_on);
     if(!link.empty())
@@ -466,10 +467,9 @@ void drop_empty(pugi::xml_node n)
 }
 } // namespace
 
-void write_style(pugi::xml_node n, const paragraph_style &s, const std::string &id,
-    const std::string &based_on, const std::string &link)
+void write_style(pugi::xml_node n, const paragraph_style &s, const style_ids &ids)
 {
-    style_head(n, "paragraph", id, based_on, link);
+    style_head(n, "paragraph", ids);
     if(!s.para.empty())
         write_ppr(n.append_child("w:pPr"), s.para);
     if(!s.text.empty())
@@ -477,19 +477,17 @@ void write_style(pugi::xml_node n, const paragraph_style &s, const std::string &
     drop_empty(n);
 }
 
-void write_style(pugi::xml_node n, const text_style &s, const std::string &id,
-    const std::string &based_on, const std::string &link)
+void write_style(pugi::xml_node n, const text_style &s, const style_ids &ids)
 {
-    style_head(n, "character", id, based_on, link);
+    style_head(n, "character", ids);
     if(!s.text.empty())
         write_rpr(n.append_child("w:rPr"), s.text);
     drop_empty(n);
 }
 
-void write_style(pugi::xml_node n, const table_style &s, const std::string &id,
-    const std::string &based_on, const std::string &link)
+void write_style(pugi::xml_node n, const table_style &s, const style_ids &ids)
 {
-    style_head(n, "table", id, based_on, link);
+    style_head(n, "table", ids);
     if(!s.table.empty())
         write_style_tblpr(n.append_child("w:tblPr"), s.table);
     drop_empty(n);

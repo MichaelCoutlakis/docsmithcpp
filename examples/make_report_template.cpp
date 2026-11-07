@@ -46,34 +46,41 @@ int main(int argc, char **argv)
     // Headings stay with the paragraph after them.
     auto heading_1 =
         doc.styles()
-            .insert(paragraph_style("Heading_20_1",
-                text_props(font_name("Liberation Sans"), font_size(18), font_weight::bold, accent),
+            .insert(paragraph_style(builtin::heading(1),
+                text_props(font_name("Liberation Sans"),
+                    font_size(18),
+                    font_weight::bold,
+                    font_colour(accent)),
                 paragraph_props(space_before{pt(18)}, space_after{pt(6)}, keep_with_next{})))
             .first;
     // For the filled-in report's test case headings.
-    doc.styles().insert(paragraph_style("Heading_20_2",
-        text_props(font_name("Liberation Sans"), font_size(14), font_weight::bold, accent),
+    doc.styles().insert(paragraph_style(builtin::heading(2),
+        text_props(
+            font_name("Liberation Sans"), font_size(14), font_weight::bold, font_colour(accent)),
         paragraph_props(space_before{pt(12)}, space_after{pt(4)}, keep_with_next{})));
     auto body = doc.styles()
-                    .insert(paragraph_style("Text_20_body",
+                    .insert(paragraph_style("Text body",
                         text_props(font_name("Liberation Serif"), font_size(11)),
                         paragraph_props(space_after{pt(6)})))
                     .first;
-    auto header =
-        doc.styles()
-            .insert(paragraph_style("Header",
-                text_props(font_name("Liberation Sans"), font_size(9), colour::rgb(89, 89, 89))))
-            .first;
+    auto header = doc.styles()
+                      .insert(paragraph_style("Header",
+                          text_props(font_name("Liberation Sans"),
+                              font_size(9),
+                              font_colour(colour::rgb(89, 89, 89)))))
+                      .first;
     auto footer = doc.styles()
                       .insert(paragraph_style("Footer",
                           text_props(font_name("Liberation Sans"),
                               font_size(9),
                               font_style::italic,
-                              colour::rgb(89, 89, 89))))
+                              font_colour(colour::rgb(89, 89, 89)))))
                       .first;
     // Used by the filled-in report for test results.
-    doc.styles().insert(text_style("Pass", text_props(font_weight::bold, colour::rgb(0, 128, 0))));
-    doc.styles().insert(text_style("Fail", text_props(font_weight::bold, colour::rgb(192, 0, 0))));
+    doc.styles().insert(
+        text_style("Pass", text_props(font_weight::bold, font_colour(colour::rgb(0, 128, 0)))));
+    doc.styles().insert(
+        text_style("Fail", text_props(font_weight::bold, font_colour(colour::rgb(192, 0, 0)))));
 
     doc.page.set_header(paragraph(field{field_type::title}).set_style(header));
     doc.page.set_footer(paragraph("Generated test report \xE2\x80\x93 page ",

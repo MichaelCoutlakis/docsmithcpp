@@ -29,6 +29,7 @@
 #include <md4c.h>
 
 #include "bytes.h"
+#include "docsmithcpp/error.h"
 #include "docsmithcpp/md/file.h"
 #include "list_numbers.h"
 #include "md/names.h"
@@ -243,14 +244,14 @@ public:
         }
         case MD_BLOCK_LI:
             m_lists.back()->add(list_item{});
-            m_blocks.push_back(&m_lists.back()->items().back().children());
+            m_blocks.push_back(&m_lists.back()->items().back().items());
             break;
         case MD_BLOCK_HR: blocks().push_back(block_node{page_break{}}); break;
         case MD_BLOCK_H:
         {
             blocks().push_back(block_node{
                 heading(static_cast<int>(static_cast<MD_BLOCK_H_DETAIL *>(detail)->level))});
-            m_inlines.push_back(&std::get<heading>(blocks().back().v).children());
+            m_inlines.push_back(&std::get<heading>(blocks().back().v).items());
             break;
         }
         case MD_BLOCK_CODE:
@@ -269,7 +270,7 @@ public:
         case MD_BLOCK_TH:
         case MD_BLOCK_TD:
             m_rows.back().emplace_back();
-            m_blocks.push_back(&m_rows.back().back().children());
+            m_blocks.push_back(&m_rows.back().back().items());
             break;
         default: break; // DOC, THEAD, TBODY; extensions that aren't enabled
         }
@@ -335,12 +336,12 @@ public:
         }
         switch(type)
         {
-        case MD_SPAN_EM: open_span(names::emphasis, text_props(font_style::italic)); break;
-        case MD_SPAN_STRONG: open_span(names::strong, text_props(font_weight::bold)); break;
+        case MD_SPAN_EM: open_span(builtin::emphasis, text_props(font_style::italic)); break;
+        case MD_SPAN_STRONG: open_span(builtin::strong, text_props(font_weight::bold)); break;
         case MD_SPAN_CODE:
         {
             inlines().push_back(inline_node{span().set_style(builtin::source_text)});
-            m_inlines.push_back(&std::get<span>(inlines().back().v).children());
+            m_inlines.push_back(&std::get<span>(inlines().back().v).items());
             break;
         }
         case MD_SPAN_A:
@@ -350,7 +351,7 @@ public:
                 ? hyperlink(link_target(bookmark_target{href.substr(1)}))
                 : hyperlink(link_target(url_target{href}));
             inlines().push_back(inline_node{std::move(h)});
-            m_inlines.push_back(&std::get<hyperlink>(inlines().back().v).children());
+            m_inlines.push_back(&std::get<hyperlink>(inlines().back().v).items());
             break;
         }
         case MD_SPAN_IMG:
@@ -422,11 +423,11 @@ private:
         paragraph p;
         if(m_quote)
         {
-            doc.styles().insert(paragraph_style(names::quotations));
-            p.set_style(names::quotations);
+            doc.styles().insert(paragraph_style(builtin::quotations));
+            p.set_style(builtin::quotations);
         }
         blocks().push_back(block_node{std::move(p)});
-        m_inlines.push_back(&std::get<paragraph>(blocks().back().v).children());
+        m_inlines.push_back(&std::get<paragraph>(blocks().back().v).items());
     }
 
     /// A paragraph that holds only an image is the image as a block.
@@ -434,8 +435,8 @@ private:
     {
         m_inlines.pop_back();
         auto &p = std::get<paragraph>(blocks().back().v);
-        if(p.children().size() == 1 && p.style.empty())
-            if(const auto *f = std::get_if<frame>(&p.children().front().v))
+        if(p.items().size() == 1 && p.style.empty())
+            if(const auto *f = std::get_if<frame>(&p.items().front().v))
                 blocks().back() = block_node{frame(*f)};
     }
 
@@ -451,7 +452,7 @@ private:
     {
         doc.styles().insert(text_style(name, props));
         inlines().push_back(inline_node{span().set_style(name)});
-        m_inlines.push_back(&std::get<span>(inlines().back().v).children());
+        m_inlines.push_back(&std::get<span>(inlines().back().v).items());
     }
 
     void add_text(std::string_view s)
@@ -494,9 +495,9 @@ private:
             if(outer && (ordered ? num && num->start_from == start : !num))
                 return {};
         }
-        std::string name = ordered ? names::numbered_list : names::bullet_list;
+        std::string name = (ordered ? builtin::numbered_list : builtin::bullet_list).str();
         if(ordered && start != 1)
-            name += "_start_" + std::to_string(start);
+            name += " start " + std::to_string(start);
         if(!doc.styles().list.contains(name))
         {
             list_style ls(name);
@@ -522,12 +523,12 @@ private:
             header.end(),
             [](const table_cell &c)
             {
-                return std::all_of(c.children().begin(),
-                    c.children().end(),
+                return std::all_of(c.items().begin(),
+                    c.items().end(),
                     [](const block_node &b)
                     {
                         const auto *p = std::get_if<paragraph>(&b.v);
-                        return p && p->children().empty();
+                        return p && p->items().empty();
                     });
             });
         if(empty_header)
@@ -591,7 +592,7 @@ text_doc parse(std::string_view markdown)
     { return static_cast<builder *>(u)->on_text(t, std::string_view(s, n)); };
 
     if(md_parse(markdown.data(), static_cast<MD_SIZE>(markdown.size()), &parser, &b) != 0)
-        throw std::runtime_error("Markdown could not be parsed");
+        throw error(error_code::malformed, "Markdown could not be parsed");
     return std::move(b.doc);
 }
 

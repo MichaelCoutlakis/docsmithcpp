@@ -87,6 +87,12 @@ using list_style_name = style_name<style_family::list>;
 /// Style names writers know without a definition in the document's styles().
 /// Each writer maps them to its format's own style of that name.
 ///
+/// A style's name in the model is the name it is shown by ("Text body",
+/// "Heading 1"), in every format: readers and writers translate it to the
+/// format's own spelling (ODF's "Text_20_body", Word's style id "Heading1").
+/// So code can name a template's styles the same way whichever format the
+/// template is in.
+///
 /// para, heading(n), link, table and list are the defaults: the styles of
 /// nodes with none of their own. An unstyled paragraph has builtin::para, and
 /// so on. Each is a definable style like any other. Undefined, the format's
@@ -98,28 +104,42 @@ namespace builtin
 /// Paragraphs: LibreOffice's Default Paragraph Style, Word's Normal, and a
 /// plain <p> in HTML. Other paragraph styles, headings' included, usually
 /// derive from it, so a font set here applies to them too.
-inline const para_style_name para{"Standard"};
+inline const para_style_name para{"Default Paragraph Style"};
 /// Headings of a level (1-10): LibreOffice's and Word's Heading 1, ..., and
 /// <h1>, ... in HTML.
 inline para_style_name heading(int level)
-{ return para_style_name("Heading_20_" + std::to_string(std::clamp(level, 1, 10))); }
+{ return para_style_name("Heading " + std::to_string(std::clamp(level, 1, 10))); }
 /// Links: LibreOffice's Internet Link, Word's Hyperlink, and a plain <a> in
 /// HTML.
-inline const text_style_name link{"Internet_20_link"};
+inline const text_style_name link{"Hyperlink"};
 /// Tables: Word's Normal Table. ODF has none of its own, so an ODT file names
 /// it on its tables.
-inline const table_style_name table{"Default_20_Table"};
+inline const table_style_name table{"Default Table"};
 /// Lists: a list with no style that isn't nested in another (a nested one
 /// continues the enclosing list's style).
-inline const list_style_name list{"Default_20_List"};
+inline const list_style_name list{"Default List"};
 
 /// A title paragraph (text_doc::set_title()).
 inline const para_style_name title{"Title"};
 /// A monospace paragraph for code and logs, with its lines separated by '\n':
 /// LibreOffice's Preformatted Text, and <pre> in HTML.
-inline const para_style_name preformatted{"Preformatted_20_Text"};
+inline const para_style_name preformatted{"Preformatted Text"};
 /// Monospace text within a line: LibreOffice's Source Text, and <code> in HTML.
-inline const text_style_name source_text{"Source_20_Text"};
+inline const text_style_name source_text{"Source Text"};
+
+// The styles Markdown reads into and writes from, LibreOffice's own, so a
+// parsed document looks right in an .odt too (see md::parse()).
+
+/// Emphasis, *text* in Markdown.
+inline const text_style_name emphasis{"Emphasis"};
+/// Strong emphasis, **text** in Markdown.
+inline const text_style_name strong{"Strong Emphasis"};
+/// A paragraph in a block quote.
+inline const para_style_name quotations{"Quotations"};
+/// A numbered list (1. 2. 3.).
+inline const list_style_name numbered_list{"Numbering 123"};
+/// A bulleted list.
+inline const list_style_name bullet_list{"List 1"};
 } // namespace builtin
 
 /// A length, held in points. Writers convert it to their format's unit.
@@ -176,7 +196,8 @@ struct font_size
     float m_points;
 };
 
-/// An sRGB text colour.
+/// An sRGB colour. Properties take it through a tag saying what it colours:
+/// font_colour for text, background for a cell.
 struct colour
 {
     static constexpr colour rgb(std::uint8_t r, std::uint8_t g, std::uint8_t b)
@@ -186,6 +207,28 @@ struct colour
     std::uint8_t m_r{};
     std::uint8_t m_g{};
     std::uint8_t m_b{};
+};
+
+/// The colour of text.
+struct font_colour
+{
+    constexpr explicit font_colour(colour c) :
+        m_colour(c)
+    {
+    }
+    colour m_colour;
+    bool operator==(const font_colour &rhs) const = default;
+};
+
+/// The colour behind a cell's content.
+struct background
+{
+    constexpr explicit background(colour c) :
+        m_colour(c)
+    {
+    }
+    colour m_colour;
+    bool operator==(const background &rhs) const = default;
 };
 
 /// A share of the text width, e.g. a table's width.
@@ -200,11 +243,16 @@ struct percent
     bool operator==(const percent &rhs) const = default;
 };
 
+/// Each of Args is a property P's set() takes, for P's constructor.
+template <typename P, typename... Args>
+concept settable = requires(P &p, const Args &...a) { (p.set(a), ...); };
+
 struct text_props
 {
     text_props() = default;
     template <typename... Args>
-        requires(sizeof...(Args) >= 1) && (!std::is_same_v<std::decay_t<Args>, text_props> && ...)
+        requires(sizeof...(Args) >= 1) &&
+        (!std::is_same_v<std::decay_t<Args>, text_props> && ...) && settable<text_props, Args...>
     explicit text_props(Args &&...args)
     {
         (set(args), ...);
@@ -230,9 +278,9 @@ struct text_props
         m_font_weight = fw;
         return *this;
     }
-    text_props &set(const colour &c)
+    text_props &set(const font_colour &c)
     {
-        m_colour = c;
+        m_font_colour = c.m_colour;
         return *this;
     }
     /// Sets each property over holds, keeping the others.
@@ -247,7 +295,7 @@ struct text_props
         take(m_font_style, over.m_font_style);
         take(m_font_name, over.m_font_name);
         take(m_font_weight, over.m_font_weight);
-        take(m_colour, over.m_colour);
+        take(m_font_colour, over.m_font_colour);
         return *this;
     }
     bool empty() const { return *this == text_props{}; }
@@ -257,7 +305,7 @@ struct text_props
     std::optional<font_style> m_font_style;
     std::optional<font_name> m_font_name;
     std::optional<font_weight> m_font_weight;
-    std::optional<colour> m_colour;
+    std::optional<colour> m_font_colour;
 };
 
 /// How a paragraph's lines line up. start and end are left and right in
@@ -304,7 +352,8 @@ public:
     paragraph_props() = default;
     template <typename... Args>
         requires(sizeof...(Args) >= 1) &&
-        (!std::is_same_v<std::decay_t<Args>, paragraph_props> && ...)
+        (!std::is_same_v<std::decay_t<Args>, paragraph_props> && ...) &&
+        settable<paragraph_props, Args...>
     explicit paragraph_props(Args &&...args)
     {
         (set(std::forward<Args>(args)), ...);
@@ -456,7 +505,8 @@ class cell_props
 public:
     cell_props() = default;
     template <typename... Args>
-        requires(sizeof...(Args) >= 1) && (!std::is_same_v<std::decay_t<Args>, cell_props> && ...)
+        requires(sizeof...(Args) >= 1) &&
+        (!std::is_same_v<std::decay_t<Args>, cell_props> && ...) && settable<cell_props, Args...>
     explicit cell_props(Args &&...args)
     { (set(args), ...); }
 
@@ -465,10 +515,9 @@ public:
         m_borders = b;
         return *this;
     }
-    /// The background.
-    cell_props &set(const colour &c)
+    cell_props &set(const background &b)
     {
-        m_background = c;
+        m_background = b.m_colour;
         return *this;
     }
     cell_props &set(cell_valign v)
@@ -550,24 +599,35 @@ struct header_cells
     bool operator==(const header_cells &rhs) const = default;
 };
 
+/// A table's width: a length, or a share of the text width.
+struct table_width
+{
+    constexpr explicit table_width(length l) :
+        m_width(l)
+    {
+    }
+    constexpr explicit table_width(percent p) :
+        m_width(p)
+    {
+    }
+    std::variant<length, percent> m_width;
+    bool operator==(const table_width &rhs) const = default;
+};
+
 /// How a table looks, in a table_style.
 class table_props
 {
 public:
     table_props() = default;
     template <typename... Args>
-        requires(sizeof...(Args) >= 1) && (!std::is_same_v<std::decay_t<Args>, table_props> && ...)
+        requires(sizeof...(Args) >= 1) &&
+        (!std::is_same_v<std::decay_t<Args>, table_props> && ...) && settable<table_props, Args...>
     explicit table_props(Args &&...args)
     { (set(args), ...); }
 
-    table_props &set(const length &width)
+    table_props &set(const table_width &w)
     {
-        m_width = width;
-        return *this;
-    }
-    table_props &set(const percent &width)
-    {
-        m_width = width;
+        m_width = w.m_width;
         return *this;
     }
     table_props &set(table_align a)
@@ -618,6 +678,10 @@ public:
     bool empty() const { return *this == table_props{}; }
 };
 
+/// T is one of the property sets Ts.
+template <typename T, typename... Ts>
+concept one_of_props = (std::is_same_v<std::remove_cvref_t<T>, Ts> || ...);
+
 /// What every style has: its name, which is fixed, as it is the key the style
 /// is found by in its family's registry.
 template <style_family F>
@@ -641,6 +705,12 @@ private:
     name_type m_name;
 };
 
+/// Props are each one of Ts (paragraph_style's and cell_style's properties).
+template <typename... Props>
+concept props_of_paragraph_style = (one_of_props<Props, paragraph_props, text_props> && ...);
+template <typename... Props>
+concept props_of_cell_style = (one_of_props<Props, cell_props, paragraph_props, text_props> && ...);
+
 /// A paragraph style, for paragraphs and headings. Its properties are given in
 /// any order:
 ///
@@ -649,6 +719,7 @@ class paragraph_style : public style_base<style_family::para>
 {
 public:
     template <typename... Props>
+        requires props_of_paragraph_style<Props...>
     explicit paragraph_style(name_type name, const Props &...props) :
         style_base(std::move(name))
     { (assign(props), ...); }
@@ -704,6 +775,7 @@ class cell_style : public style_base<style_family::cell>
 {
 public:
     template <typename... Props>
+        requires props_of_cell_style<Props...>
     explicit cell_style(name_type name, const Props &...props) :
         style_base(std::move(name))
     { (assign(props), ...); }
@@ -856,10 +928,10 @@ public:
 
     /// The definition of that name in its family, or nullptr.
     template <style_family F>
-    auto *find(const style_name<F> &name)
+    [[nodiscard]] auto *find(const style_name<F> &name)
     { return of<F>().find(name); }
     template <style_family F>
-    const auto *find(const style_name<F> &name) const
+    [[nodiscard]] const auto *find(const style_name<F> &name) const
     { return of<F>().find(name); }
 
     /// Adds s to its family unless a style of its name is there, which is

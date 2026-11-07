@@ -21,14 +21,22 @@ int main()
     auto f = odt::file::load(DOCSMITHCPP_EXAMPLES_DIR "/report_template.odt");
     f.doc.meta.title = "Filled-in Template";
 
+    // Each returns false if the template has no such placeholder.
+    bool filled = true;
     // By the placeholder's text: the paragraph "{{summary}}" is replaced.
-    f.doc.replace(text{"{{summary}}"},
+    filled &= f.doc.replace(text{"{{summary}}"},
         {paragraph("All tests passed."), list(list_item("build"), list_item("unit tests"))});
     // By a bookmark: content goes before and after the paragraph holding it.
-    f.doc.insert_before(bookmark{"details"}, paragraph("Inserted before the details."));
-    f.doc.insert_after(bookmark{"details"}, paragraph("Inserted after the details."));
+    filled &= f.doc.insert_before(bookmark{"details"}, paragraph("Inserted before the details."));
+    filled &= f.doc.insert_after(bookmark{"details"}, paragraph("Inserted after the details."));
     // By a style, here the template's footer paragraph (in the page footer).
-    f.doc.insert_after(para_style_name("Footer"), paragraph("Confidential").set_style("Footer"));
+    filled &= f.doc.insert_after(
+        para_style_name("Footer"), paragraph("Confidential").set_style("Footer"));
+    if(!filled)
+    {
+        std::cerr << "The template is missing a placeholder\n";
+        return 1;
+    }
 
     f.save("Example Filled-in Template.odt");
     html::file(f.doc).save("Example Filled-in Template.html");

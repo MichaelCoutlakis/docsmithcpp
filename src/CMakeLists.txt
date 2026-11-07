@@ -1,6 +1,7 @@
 add_library(docsmithcpp
     "../include/docsmithcpp/docsmith.h"
     "../include/docsmithcpp/box.h"
+    "../include/docsmithcpp/error.h"
     "../include/docsmithcpp/nodes_fwd.h"
     "../include/docsmithcpp/inline_nodes.h"
     "../include/docsmithcpp/nodes.h"
@@ -33,6 +34,7 @@ add_library(docsmithcpp
     "odf/package.cpp"
     "odf/meta.h"
     "odf/meta.cpp"
+    "odf/names.h"
     "odt/styles.h"
     "odt/styles.cpp"
     "odt/writer.h"

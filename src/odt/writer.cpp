@@ -16,6 +16,7 @@
  * limitations under the License.
  *****************************************************************************/
 #include "odt/writer.h"
+#include "docsmithcpp/error.h"
 
 #include "cell_text.h"
 
@@ -33,6 +34,7 @@
 #include <variant>
 
 #include "format.h"
+#include "odf/names.h"
 #include "odf/package.h"
 #include "odt/styles.h"
 #include "outline.h"
@@ -65,7 +67,7 @@ std::string read_file(const fs::path &p)
 {
     std::ifstream in(p, std::ios::binary);
     if(!in)
-        throw std::runtime_error("Could not read file: " + p.string());
+        throw error(error_code::io, "Could not read file: " + p.string());
     return {std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()};
 }
 
@@ -227,8 +229,9 @@ void add_namespaces(pugi::xml_node dst, const pugi::xml_node &src)
 pugi::xml_node find_style(
     const pugi::xml_node &container, const std::string &name, std::string_view family)
 {
+    const std::string odf = odf::odf_name(name);
     for(auto c : container.children("style:style"))
-        if(name == c.attribute("style:name").as_string() &&
+        if(odf == c.attribute("style:name").as_string() &&
             family == c.attribute("style:family").as_string())
             return c;
     return {};
@@ -237,7 +240,10 @@ pugi::xml_node find_style(const pugi::xml_node &container, const std::string &na
 { return find_style(container, name, family_name(f)); }
 
 pugi::xml_node find_list_style(const pugi::xml_node &container, const std::string &name)
-{ return container.find_child_by_attribute("text:list-style", "style:name", name.c_str()); }
+{
+    return container.find_child_by_attribute(
+        "text:list-style", "style:name", odf::odf_name(name).c_str());
+}
 
 /// Writes def in place of existing, or appends it to fallback if there's no
 /// existing definition. An unchanged definition is left as it was, so the
@@ -436,7 +442,7 @@ std::string writer::resolve_image(const std::string &uri)
     if(m_pkg.contains(uri))
         return uri;
     if(!fs::is_regular_file(uri))
-        throw std::runtime_error("Image not found in the package or on disk: " + uri);
+        throw error(error_code::missing_image, "Image not found in the package or on disk: " + uri);
 
     std::string data = read_file(uri);
     const fs::path name = fs::path(uri).filename();
@@ -604,13 +610,15 @@ void writer::flush_page_break(pugi::xml_node parent)
 /// break; null for none.
 const char *writer::block_style(const para_style_name &sn)
 {
+    // From here on, names as the file has them.
+    const para_style_name odf(odf::odf_name(sn.str()));
     if(m_page_break_pending)
     {
         m_page_break_pending = false;
-        m_block_style = page_break_style(page_break_style_name(sn), sn);
+        m_block_style = page_break_style(page_break_style_name(odf), odf);
     }
     else
-        m_block_style = sn.str();
+        m_block_style = odf.str();
     return m_block_style.empty() ? nullptr : m_block_style.c_str();
 }
 
@@ -630,12 +638,11 @@ void writer::emit(pugi::xml_node parent, const paragraph &p)
     para_style_name sn = p.style.empty() ? m_cell_paragraph_style : p.style;
     // An unstyled paragraph holding only a frame names the default style, as
     // without a style it would read back as a block frame.
-    if(sn.empty() && p.children().size() == 1 &&
-        std::holds_alternative<frame>(p.children().front().v))
+    if(sn.empty() && p.items().size() == 1 && std::holds_alternative<frame>(p.items().front().v))
         sn = builtin::para;
     if(const char *style = block_style(sn))
         n.append_attribute("text:style-name").set_value(style);
-    for(const auto &c : p.children())
+    for(const auto &c : p.items())
         write_inline(n, c);
 }
 
@@ -646,7 +653,7 @@ void writer::emit(pugi::xml_node parent, const heading &h)
     // LibreOffice gives an unstyled heading no heading style.
     if(const char *style = block_style(h.style.empty() ? builtin::heading(h.level) : h.style))
         n.append_attribute("text:style-name").set_value(style);
-    for(const auto &c : h.children())
+    for(const auto &c : h.items())
         write_inline(n, c);
 }
 
@@ -654,8 +661,8 @@ void writer::emit(pugi::xml_node parent, const span &s)
 {
     auto n = parent.append_child("text:span");
     if(!s.style.empty())
-        n.append_attribute("text:style-name").set_value(s.style.str().c_str());
-    for(const auto &c : s.children())
+        n.append_attribute("text:style-name").set_value(odf::odf_name(s.style.str()).c_str());
+    for(const auto &c : s.items())
         write_inline(n, c);
 }
 
@@ -665,12 +672,12 @@ void writer::emit(pugi::xml_node parent, const hyperlink &h)
     n.append_attribute("xlink:type").set_value("simple");
     // Named on every link, as LibreOffice writes it.
     n.append_attribute("text:style-name")
-        .set_value((h.style.empty() ? builtin::link : h.style).str().c_str());
+        .set_value(odf::odf_name((h.style.empty() ? builtin::link : h.style).str()).c_str());
     const std::string href = std::visit(overloaded{[](const url_target &u) { return u.url; },
                                             [](const bookmark_target &b) { return "#" + b.name; }},
         h.target);
     n.append_attribute("xlink:href").set_value(href.c_str());
-    for(const auto &c : h.children())
+    for(const auto &c : h.items())
         write_inline(n, c);
 }
 
@@ -742,7 +749,7 @@ void writer::emit(pugi::xml_node parent, const frame &f)
     auto n = parent.append_child("draw:frame");
     n.append_attribute("text:anchor-type") = "as-char";
     if(!f.style.empty())
-        n.append_attribute("draw:style-name").set_value(f.style.str().c_str());
+        n.append_attribute("draw:style-name").set_value(odf::odf_name(f.style.str()).c_str());
     if(f.width)
         n.append_attribute("svg:width") = (detail::to_string(f.width->m_points) + "pt").c_str();
     if(f.height)
@@ -856,8 +863,8 @@ void writer::emit(pugi::xml_node parent, const table_of_contents &toc)
     {
         if(h->level > levels)
             continue;
-        const std::string text = detail::plain_text(h->children());
-        const bookmark *b = detail::first_bookmark(h->children());
+        const std::string text = detail::plain_text(h->items());
+        const bookmark *b = detail::first_bookmark(h->items());
         const std::string href = "#" + (b ? b->name : text + "|outline");
 
         auto p = body.append_child("text:p");
@@ -900,9 +907,9 @@ void writer::emit(pugi::xml_node parent, const list &l)
 {
     auto n = parent.append_child("text:list");
     if(!l.style.empty())
-        n.append_attribute("text:style-name").set_value(l.style.str().c_str());
+        n.append_attribute("text:style-name").set_value(odf::odf_name(l.style.str()).c_str());
     else if(m_list_depth == 0 && m_doc->styles().list.contains(builtin::list))
-        n.append_attribute("text:style-name").set_value(builtin::list.str().c_str());
+        n.append_attribute("text:style-name").set_value(odf::odf_name(builtin::list.str()).c_str());
     if(l.continue_numbering)
         n.append_attribute("text:continue-numbering") = "true";
     // Only the first item can be unnumbered (text:list-header); a later one is
@@ -910,7 +917,7 @@ void writer::emit(pugi::xml_node parent, const list &l)
     ++m_list_depth;
     for(const auto &it : l.items())
         if(!it.numbered && n.last_child())
-            write_blocks(n.last_child(), it.children());
+            write_blocks(n.last_child(), it.items());
         else
             emit(n, it);
     --m_list_depth;
@@ -921,7 +928,7 @@ void writer::emit(pugi::xml_node parent, const list_item &it)
     auto n = parent.append_child(it.numbered ? "text:list-item" : "text:list-header");
     if(it.numbered && it.start_value)
         n.append_attribute("text:start-value") = *it.start_value;
-    write_blocks(n, it.children());
+    write_blocks(n, it.items());
 }
 
 std::string writer::automatic_name(const std::string &prefix, const char *family)
@@ -977,9 +984,9 @@ void writer::emit(pugi::xml_node parent, const table &t)
     if(!t.name.empty()) // LibreOffice names the others when it loads them
         n.append_attribute("table:name") = t.name.c_str();
     if(!t.style.empty())
-        n.append_attribute("table:style-name") = t.style.str().c_str();
+        n.append_attribute("table:style-name") = odf::odf_name(t.style.str()).c_str();
     else if(m_doc->styles().table.contains(builtin::table))
-        n.append_attribute("table:style-name") = builtin::table.str().c_str();
+        n.append_attribute("table:style-name") = odf::odf_name(builtin::table.str()).c_str();
     if(!t.accessibility_title.empty())
         n.append_child("table:title").text() = t.accessibility_title.c_str();
     if(!t.accessibility_description.empty())
@@ -1030,7 +1037,8 @@ void writer::emit(pugi::xml_node parent, const table &t)
             col.append_attribute("table:style-name") = name.c_str();
         }
         if(!t.column_style(c).empty())
-            col.append_attribute("table:default-cell-style-name") = t.column_style(c).str().c_str();
+            col.append_attribute("table:default-cell-style-name") =
+                odf::odf_name(t.column_style(c).str()).c_str();
         if(same != 1)
             col.append_attribute("table:number-columns-repeated")
                 .set_value(static_cast<unsigned>(same));
@@ -1044,7 +1052,8 @@ void writer::emit(pugi::xml_node parent, const table &t)
     {
         auto xml_row = (r < t.header_rows() ? header : n).append_child("table:table-row");
         if(!t.row_style(r).empty())
-            xml_row.append_attribute("table:style-name") = t.row_style(r).str().c_str();
+            xml_row.append_attribute("table:style-name") =
+                odf::odf_name(t.row_style(r).str()).c_str();
         for(size_t c = 0; c != t.num_cols(); ++c)
         {
             if(t.is_cell_covered(r, c))
@@ -1064,14 +1073,14 @@ void writer::emit(pugi::xml_node parent, const table_cell &c, const std::string 
 {
     auto n = parent.append_child("table:table-cell");
     if(!style.empty())
-        n.append_attribute("table:style-name").set_value(style.c_str());
+        n.append_attribute("table:style-name").set_value(odf::odf_name(style).c_str());
 
     if(c.rowspan != 1)
         n.append_attribute("table:number-rows-spanned").set_value(c.rowspan);
     if(c.colspan != 1)
         n.append_attribute("table:number-columns-spanned").set_value(c.colspan);
 
-    write_blocks(n, c.children());
+    write_blocks(n, c.items());
 }
 
 } // namespace docsmith::odt

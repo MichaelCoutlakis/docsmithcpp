@@ -107,8 +107,8 @@ TEST(HTML, BoldAndColourBecomeCss)
 {
     text_doc doc;
     const auto pass = doc.styles()
-                          .insert(paragraph_style(
-                              "Pass", text_props(font_weight::bold, colour::rgb(0, 128, 255))))
+                          .insert(paragraph_style("Pass",
+                              text_props(font_weight::bold, font_colour(colour::rgb(0, 128, 255)))))
                           .first;
     doc.add(paragraph("ok").set_style(pass));
 
@@ -249,7 +249,7 @@ TEST(HTML, ResourceNamesCannotLeaveTheFolder)
 {
     text_doc doc;
     doc.add(paragraph(frame(doc.add_image("../escape.png", "x", "image/png"))));
-    EXPECT_THROW(html::file(doc).save("html/out/escape/page.html"), std::runtime_error);
+    EXPECT_THROW(html::file(doc).save("html/out/escape/page.html"), docsmith::error);
     EXPECT_FALSE(fs::exists("html/out/escape.png"));
 }
 
@@ -269,7 +269,7 @@ TEST(HTML, ConvertsParsedOdt)
     EXPECT_TRUE(
         has(html, R"(<a href="https://github.com/MichaelCoutlakis/docsmithcpp">docsmith</a>)"))
         << "LibreOffice's link style is the default one";
-    EXPECT_TRUE(has(html, ".Internet_20_link, a:not([class]) { color: #000080; }"));
+    EXPECT_TRUE(has(html, ".Hyperlink, a:not([class]) { color: #000080; }"));
     EXPECT_EQ(count(html, "<li"), 8U); // 2 + 2 + 1 + (1 with a nested 1) + 1
 }
 
@@ -371,8 +371,8 @@ TEST(HTML, CellStyleText)
     t.cell(0, 0).set_style("Key").add("a");
     doc.add(t);
     const auto html = html::file(doc).to_string();
-    EXPECT_TRUE(has(html, ".Key_20_Text { font-weight: bold; }")) << html;
-    EXPECT_TRUE(has(html, R"(<p class="Key_20_Text">a</p>)")) << html;
+    EXPECT_TRUE(has(html, ".Key_Text { font-weight: bold; }")) << html;
+    EXPECT_TRUE(has(html, R"(<p class="Key_Text">a</p>)")) << html;
 }
 
 TEST(HTML, HeaderRows)
@@ -419,8 +419,8 @@ TEST(HTML, Preformatted)
     const auto html = html::file(doc).to_string();
 
     // As is inside <pre>; the extra newline keeps the leading one.
-    EXPECT_TRUE(has(html, "<pre class=\"Preformatted_20_Text\">\n\n&lt;a&gt;\n  b\tc</pre>"));
-    EXPECT_TRUE(has(html, "<p>Run <code class=\"Source_20_Text\">make</code>.</p>"));
+    EXPECT_TRUE(has(html, "<pre class=\"Preformatted_Text\">\n\n&lt;a&gt;\n  b\tc</pre>"));
+    EXPECT_TRUE(has(html, "<p>Run <code class=\"Source_Text\">make</code>.</p>"));
     EXPECT_TRUE(has(html, "<pre class=\"Log\">x  y</pre>")) << "a style based on it";
 }
 
@@ -490,17 +490,17 @@ text_doc formatted_table()
     const border thick = border::solid(pt(1.5), colour::rgb(0x20, 0x40, 0x60));
     const border thin = border::solid(pt(0.5));
     doc.styles().insert(table_style("Grid",
-        table_props(percent{80},
+        table_props(table_width(percent{80}),
             table_align::centre,
             outer_border{thick},
             inside_h{thin},
-            header_cells{cell_props(colour::rgb(0xdd, 0xdd, 0xdd),
+            header_cells{cell_props(background(colour::rgb(0xdd, 0xdd, 0xdd)),
                 cell_borders{.m_bottom = thick},
                 para_style_name("Table Heading"))})));
     doc.styles().insert(paragraph_style("Table Heading", text_props(font_weight::bold)));
     table t = table::from_cells({{"Test", "Result"}, {"open", "pass"}, {"save", "fail"}});
     t.set_header_rows(1).set_style("Grid").set_column_widths({3, 1});
-    t.cell(2, 1).props.set(colour::rgb(0xff, 0xcc, 0xcc));
+    t.cell(2, 1).props.set(background(colour::rgb(0xff, 0xcc, 0xcc)));
     doc.add(t);
     return doc;
 }
@@ -527,7 +527,7 @@ TEST(HTML, TableFormatting)
 
     // Direct borders on a table with no style still collapse.
     table plain(1, 1);
-    plain.set_borders(border::solid());
+    plain.apply_borders(border::solid());
     EXPECT_TRUE(has(
         html::file(text_doc{plain}).to_string(), "<table style=\"border-collapse: collapse;\">"));
 }
@@ -592,7 +592,7 @@ text_doc defaults_doc()
         text_props(font_name("Liberation Serif"), font_size(11)),
         paragraph_props(space_after{pt(6)})));
     doc.styles().insert(paragraph_style(builtin::heading(1), text_props(font_weight::bold)));
-    doc.styles().insert(text_style(builtin::link, text_props(colour::rgb(0, 0, 200))));
+    doc.styles().insert(text_style(builtin::link, text_props(font_colour(colour::rgb(0, 0, 200)))));
     doc.styles().insert(table_style(builtin::table, table_props(cell_padding{pt(2)})));
     doc.styles().insert(list_style(builtin::list,
         {number_level{.level = 1, .format = list_enum::arabic, .suffix = ".", .start_from = 1}}));
@@ -610,11 +610,19 @@ text_doc defaults_doc()
 TEST(HTML, DefaultStyles)
 {
     const auto html = html::file(defaults_doc()).to_string();
-    EXPECT_TRUE(has(html, ".Standard, p:not([class]) {"));
-    EXPECT_TRUE(has(html, ".Heading_20_1, h1:not([class]) { font-weight: bold; }"));
-    EXPECT_TRUE(has(html, ".Internet_20_link, a:not([class]) {"));
-    EXPECT_TRUE(has(html, ".Default_20_Table, table:not([class]) {"));
+    EXPECT_TRUE(has(html, ".Default_Paragraph_Style, p:not([class]) {"));
+    EXPECT_TRUE(has(html, ".Heading_1, h1:not([class]) { font-weight: bold; }"));
+    EXPECT_TRUE(has(html, ".Hyperlink, a:not([class]) {"));
+    EXPECT_TRUE(has(html, ".Default_Table, table:not([class]) {"));
     EXPECT_TRUE(has(html, "<h1>Introduction</h1>"));
     EXPECT_TRUE(has(html, "<ol>")) << "the default list is numbered";
     EXPECT_TRUE(has(html, "padding: 2pt")) << "the default table's cells";
+}
+
+TEST(HTML, SaveWithoutAFile)
+{
+    const text_doc doc{heading(1, "Saved"), paragraph("without a file")};
+    html::save(doc, "html/out/save_free.html");
+    html::file(doc).save("html/out/save_member.html");
+    EXPECT_EQ(read("html/out/save_free.html"), read("html/out/save_member.html"));
 }

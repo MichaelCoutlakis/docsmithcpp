@@ -82,8 +82,8 @@ span_format format_of(const text_style_name &sn, const style_sheet &styles)
             slant = def->text.m_font_style;
     }
     // The names alone are enough, as for builtin styles.
-    f.strong = weight ? *weight == font_weight::bold : based_on(sn, names::strong, styles);
-    f.emphasis = slant ? *slant != font_style::normal : based_on(sn, names::emphasis, styles);
+    f.strong = weight ? *weight == font_weight::bold : based_on(sn, builtin::strong, styles);
+    f.emphasis = slant ? *slant != font_style::normal : based_on(sn, builtin::emphasis, styles);
     return f;
 }
 
@@ -93,8 +93,8 @@ void plain_text(const std::vector<inline_node> &kids, std::string &out)
         std::visit(
             overloaded{
                 [&](const text &t) { out += t.content; },
-                [&](const span &s) { plain_text(s.children(), out); },
-                [&](const hyperlink &h) { plain_text(h.children(), out); },
+                [&](const span &s) { plain_text(s.items(), out); },
+                [&](const hyperlink &h) { plain_text(h.items(), out); },
                 [](const auto &) { },
             },
             k.v);
@@ -217,7 +217,7 @@ private:
     bool is_quote(const block_node &b) const
     {
         const auto *p = std::get_if<paragraph>(&b.v);
-        return p && based_on(p->style, names::quotations, styles()) &&
+        return p && based_on(p->style, builtin::quotations, styles()) &&
             !based_on(p->style, builtin::preformatted, styles());
     }
 
@@ -226,7 +226,7 @@ private:
         std::string body;
         for(size_t i = from; i != to; ++i)
         {
-            const std::string s = inline_block(std::get<paragraph>(bs[i].v).children());
+            const std::string s = inline_block(std::get<paragraph>(bs[i].v).items());
             if(s.empty())
                 continue;
             if(!body.empty())
@@ -250,19 +250,19 @@ private:
         if(based_on(p.style, builtin::preformatted, styles()))
         {
             std::string t;
-            plain_text(p.children(), t);
+            plain_text(p.items(), t);
             const std::string fence(std::max<size_t>(3, longest_run(t, '`') + 1), '`');
             return fence + '\n' + t + '\n' + fence;
         }
         if(based_on(p.style, builtin::title, styles()))
-            return heading_line(1, p.children());
-        return inline_block(p.children());
+            return heading_line(1, p.items());
+        return inline_block(p.items());
     }
 
     std::string emit(const heading &h)
     {
         const int level = std::clamp(h.level, 1, 6);
-        std::string s = heading_line(level, h.children());
+        std::string s = heading_line(level, h.items());
         // A heading a table of contents links to by a slug gets an anchor,
         // written the way a bookmark at its start would be.
         if(m_ids.own.contains(&h))
@@ -299,7 +299,7 @@ private:
 
         std::string out;
         for(size_t i = 0; i != first; ++i)
-            if(std::string s = blocks(items[i].children(), false); !s.empty())
+            if(std::string s = blocks(items[i].items(), false); !s.empty())
                 out += (out.empty() ? "" : "\n\n") + s;
         if(first != items.size() && !out.empty())
             out += "\n\n";
@@ -307,7 +307,7 @@ private:
         size_t indent = 0; // of the last item's content
         for(size_t i = first; i != items.size(); ++i)
         {
-            const std::string body = blocks(items[i].children(), tight);
+            const std::string body = blocks(items[i].items(), tight);
             if(!items[i].numbered)
             {
                 if(!body.empty())
@@ -333,12 +333,12 @@ private:
     /// optionally followed by a list that can interrupt it.
     bool is_tight(const list_item &it, const list_style *ls) const
     {
-        const auto &bs = it.children();
+        const auto &bs = it.items();
         auto plain = [this](const block_node &b)
         {
             const auto *p = std::get_if<paragraph>(&b.v);
             return p && !based_on(p->style, builtin::preformatted, styles()) &&
-                !based_on(p->style, names::quotations, styles());
+                !based_on(p->style, builtin::quotations, styles());
         };
         auto starts_at_1 = [&](const block_node &b)
         {
@@ -406,7 +406,7 @@ private:
                 out += "<br>";
             out += s;
         };
-        for(const auto &b : c.children())
+        for(const auto &b : c.items())
             cell_block(b, part);
         return out;
     }
@@ -416,19 +416,19 @@ private:
     {
         std::visit(
             overloaded{
-                [&](const paragraph &p) { part(inlines(p.children(), context::cell)); },
-                [&](const heading &h) { part(inlines(h.children(), context::cell)); },
+                [&](const paragraph &p) { part(inlines(p.items(), context::cell)); },
+                [&](const heading &h) { part(inlines(h.items(), context::cell)); },
                 [&](const frame &f) { part(image(f)); },
                 [&](const list &l)
                 {
                     for(const auto &it : l.items())
-                        for(const auto &ib : it.children())
+                        for(const auto &ib : it.items())
                             cell_block(ib, part);
                 },
                 [&](const table &t)
                 {
                     for(const auto &tc : t.cells())
-                        for(const auto &cb : tc.children())
+                        for(const auto &cb : tc.items())
                             cell_block(cb, part);
                 },
                 [](const auto &) { },
@@ -457,7 +457,7 @@ private:
             depth = std::clamp<size_t>(h->level, 1, depth + 1);
             std::string entry;
             m_bol = false;
-            put_text(detail::plain_text(h->children()), context::heading, entry);
+            put_text(detail::plain_text(h->items()), context::heading, entry);
             out += std::string((depth - 1) * 2, ' ') + "- [" + entry + "](#" + m_ids.link.at(h) +
                 ")\n";
         }
@@ -505,14 +505,14 @@ private:
         if(f.code)
         {
             std::string t;
-            plain_text(s.children(), t);
+            plain_text(s.items(), t);
             out += code_span(t, ctx);
             m_bol = false;
             return;
         }
         if(!f.strong && !f.emphasis)
         {
-            for(const auto &k : s.children())
+            for(const auto &k : s.items())
                 std::visit([&](const auto &n) { emit(n, ctx, out); }, k.v);
             return;
         }
@@ -520,7 +520,7 @@ private:
         const bool bol = m_bol;
         m_bol = false;
         std::string inner;
-        for(const auto &k : s.children())
+        for(const auto &k : s.items())
             std::visit([&](const auto &n) { emit(n, ctx, inner); }, k.v);
 
         // A delimiter run next to white space doesn't open or close emphasis,
@@ -553,9 +553,9 @@ private:
     void emit(const hyperlink &h, context ctx, std::string &out)
     {
         const auto *u = std::get_if<url_target>(&h.target);
-        if(u && h.children().size() == 1)
-            if(const auto *t = std::get_if<text>(&h.children().front().v); t &&
-                t->content == u->url && u->url.find("://") != std::string::npos &&
+        if(u && h.items().size() == 1)
+            if(const auto *t = std::get_if<text>(&h.items().front().v); t && t->content == u->url &&
+                u->url.find("://") != std::string::npos &&
                 u->url.find_first_of(" <>\n") == std::string::npos)
             {
                 out += '<' + (ctx == context::cell ? escape_pipes(u->url) : u->url) + '>';
@@ -565,7 +565,7 @@ private:
 
         out += '[';
         m_bol = false;
-        for(const auto &k : h.children())
+        for(const auto &k : h.items())
             std::visit([&](const auto &n) { emit(n, ctx, out); }, k.v);
         const std::string dest =
             u ? u->url : "#" + names::anchor_id(std::get<bookmark_target>(h.target).name);
@@ -770,7 +770,9 @@ std::string file::to_string() const
     return writer(doc, plan).document();
 }
 
-void file::save(const fs::path &p) const
+namespace
+{
+void write_file(const text_doc &doc, const fs::path &resource_dir, const fs::path &p)
 {
     const fs::path base = fs::weakly_canonical(fs::absolute(p).parent_path());
     fs::create_directories(base);
@@ -779,5 +781,10 @@ void file::save(const fs::path &p) const
     plan.write(doc, base, resource_dir);
     detail::write_bytes(p, writer(doc, plan).document());
 }
+} // namespace
+
+void file::save(const fs::path &p) const { write_file(doc, resource_dir, p); }
+
+void save(const text_doc &doc, const fs::path &p) { write_file(doc, {}, p); }
 
 } // namespace docsmith::md

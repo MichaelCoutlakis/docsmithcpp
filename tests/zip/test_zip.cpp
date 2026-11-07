@@ -20,6 +20,7 @@
 
 #include <gtest/gtest.h>
 
+#include "docsmithcpp/error.h"
 #include "zip/archive.h"
 
 using namespace docsmith;
@@ -55,4 +56,4 @@ TEST(ZIP, EmptyArchive)
     EXPECT_TRUE(zip::read(w.finish()).empty());
 }
 
-TEST(ZIP, NotAnArchiveThrows) { EXPECT_THROW(zip::read("not a zip file"), std::runtime_error); }
+TEST(ZIP, NotAnArchiveThrows) { EXPECT_THROW(zip::read("not a zip file"), docsmith::error); }

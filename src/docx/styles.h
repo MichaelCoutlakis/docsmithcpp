@@ -53,14 +53,20 @@ std::optional<table_props> read_style_tblpr(const pugi::xml_node &tbl_pr);
 inline int twips(const length &l) { return static_cast<int>(l.m_points * 20 + 0.5); }
 std::optional<paragraph_props> read_ppr(const pugi::xml_node &ppr);
 
-/// Fills an empty w:style with s, in its family's type (style_type()), as id.
-/// link: the id of the linked style of the other family, if any.
-void write_style(pugi::xml_node n, const paragraph_style &s, const std::string &id,
-    const std::string &based_on, const std::string &link = {});
-void write_style(pugi::xml_node n, const text_style &s, const std::string &id,
-    const std::string &based_on, const std::string &link = {});
-void write_style(pugi::xml_node n, const table_style &s, const std::string &id,
-    const std::string &based_on, const std::string &link = {});
+/// What a w:style is called: its w:styleId and w:name, and the ids of its
+/// w:basedOn and w:link (empty for none).
+struct style_ids
+{
+    std::string id;
+    std::string name;
+    std::string based_on;
+    std::string link;
+};
+
+/// Fills an empty w:style with s's properties, as ids say.
+void write_style(pugi::xml_node n, const paragraph_style &s, const style_ids &ids);
+void write_style(pugi::xml_node n, const text_style &s, const style_ids &ids);
+void write_style(pugi::xml_node n, const table_style &s, const style_ids &ids);
 
 /// A w:style DOCX has a family of the model's for.
 using docx_style = std::variant<paragraph_style, text_style, table_style>;

@@ -16,6 +16,7 @@
  * limitations under the License.
  *****************************************************************************/
 #include "docsmithcpp/docx/file.h"
+#include "docsmithcpp/error.h"
 
 #include <stdexcept>
 
@@ -51,7 +52,7 @@ file file::load(const std::filesystem::path &p)
     const auto *part = main ? st.pkg.find(opc::package::resolve("", main->target)) : nullptr;
     // Documents and their relatives (.dotx templates, .docm) are all WordprocessingML.
     if(!part || part->content_type.find("wordprocessingml") == std::string::npos)
-        throw std::runtime_error("Not a Word document: " + p.string());
+        throw error(error_code::not_a_document, "Not a Word document: " + p.string());
     st.main_part = opc::package::resolve("", main->target);
     read_document(st, f.doc);
     return f;
@@ -61,6 +62,13 @@ void file::save(const std::filesystem::path &p) const
 {
     // Work on a copy so saving leaves this file unchanged and can be repeated.
     state st = m_impl->st;
+    write_document(doc, st);
+    st.pkg.write(p);
+}
+
+void save(const text_doc &doc, const std::filesystem::path &p)
+{
+    state st;
     write_document(doc, st);
     st.pkg.write(p);
 }

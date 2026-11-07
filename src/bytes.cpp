@@ -16,6 +16,7 @@
  * limitations under the License.
  *****************************************************************************/
 #include "bytes.h"
+#include "docsmithcpp/error.h"
 
 #include <fstream>
 #include <iterator>
@@ -29,7 +30,7 @@ std::string read_bytes(const fs::path &p)
 {
     std::ifstream in(p, std::ios::binary);
     if(!in)
-        throw std::runtime_error("Could not read file: " + utf8(p));
+        throw error(error_code::io, "Could not read file: " + utf8(p));
     return {std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()};
 }
 
@@ -41,7 +42,7 @@ void write_bytes(const fs::path &p, std::string_view bytes)
     std::ofstream out(p, std::ios::binary);
     out.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
     if(!out.flush())
-        throw std::runtime_error("Could not write file: " + utf8(p));
+        throw error(error_code::io, "Could not write file: " + utf8(p));
 }
 
 std::string utf8(const fs::path &p)

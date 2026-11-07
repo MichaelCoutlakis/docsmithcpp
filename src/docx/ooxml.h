@@ -162,34 +162,16 @@ inline int heading_level(std::string_view id, std::string_view name)
     return 0;
 }
 
-/// A style's display name: its name with ODF's escapes (_20_ for a space)
-/// decoded.
-inline std::string display_name(const std::string &name)
+/// The model's name for a style shown as display (its w:name), with style id
+/// id: display, capitalised as Word shows its own ("footer" is Footer), or id
+/// if it has no name. Builtins are mapped by the reader and writer.
+inline std::string shown_name(const std::string &id, const std::string &display)
 {
-    auto hex = [](char c) { return std::isxdigit(static_cast<unsigned char>(c)) != 0; };
-    std::string out;
-    for(std::size_t i = 0; i < name.size(); ++i)
-    {
-        if(name[i] == '_' && i + 3 < name.size() && hex(name[i + 1]) && hex(name[i + 2]) &&
-            name[i + 3] == '_')
-        {
-            out += static_cast<char>(std::stoi(name.substr(i + 1, 2), nullptr, 16));
-            i += 3;
-        }
-        else
-            out += name[i];
-    }
+    if(display.empty())
+        return id;
+    std::string out = display;
+    out[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(out[0])));
     return out;
-}
-
-/// The w:name Word gives its own styles, by id, else the id's display name.
-inline std::string word_style_name(const std::string &id)
-{
-    if(heading_level(id, {}))
-        return "heading " + id.substr(7);
-    if(id == "TableNormal")
-        return "Normal Table";
-    return display_name(id);
 }
 
 /// The w:val attribute of parent's child of that name ("" if there's none).

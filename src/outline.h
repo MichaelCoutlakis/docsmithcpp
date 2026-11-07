@@ -39,8 +39,8 @@ inline void plain_text(const std::vector<inline_node> &kids, std::string &out)
         std::visit(
             overloaded{
                 [&](const text &t) { out += t.content; },
-                [&](const span &s) { plain_text(s.children(), out); },
-                [&](const hyperlink &h) { plain_text(h.children(), out); },
+                [&](const span &s) { plain_text(s.items(), out); },
+                [&](const hyperlink &h) { plain_text(h.items(), out); },
                 [](const auto &) { },
             },
             k.v);
@@ -61,8 +61,8 @@ inline const bookmark *first_bookmark(const std::vector<inline_node> &kids)
         const bookmark *b = std::visit(
             overloaded{
                 [](const bookmark &b) { return &b; },
-                [](const span &s) { return first_bookmark(s.children()); },
-                [](const hyperlink &h) { return first_bookmark(h.children()); },
+                [](const span &s) { return first_bookmark(s.items()); },
+                [](const hyperlink &h) { return first_bookmark(h.items()); },
                 [](const auto &) -> const bookmark * { return nullptr; },
             },
             k.v);
@@ -114,13 +114,13 @@ struct heading_ids
             taken.insert(to_id(b->name));
         for(const heading *h : body_headings(doc))
         {
-            if(const bookmark *b = first_bookmark(h->children()))
+            if(const bookmark *b = first_bookmark(h->items()))
             {
                 link[h] = to_id(b->name);
                 continue;
             }
             std::string slug;
-            for(unsigned char c : plain_text(h->children()))
+            for(unsigned char c : plain_text(h->items()))
             {
                 if(std::isalnum(c) || c >= 0x80)
                     slug += static_cast<char>(std::tolower(c));

@@ -27,6 +27,7 @@
 
 #include "bytes.h"
 #include "docsmithcpp/docx/file.h"
+#include "docsmithcpp/odt/file.h"
 #include "docx/ooxml.h"
 #include "opc/package.h"
 
@@ -92,20 +93,20 @@ TEST(DOCX_Write, ParagraphsAndHeadings)
 {
     text_doc doc;
     auto note =
-        doc.styles().insert(paragraph_style("Note_20_Text", text_props(font_style::italic))).first;
+        doc.styles().insert(paragraph_style("Note Text", text_props(font_style::italic))).first;
     doc.add(heading(2, "Results")).add(paragraph("text").set_style(note));
     saved s(doc, "headings");
     auto body = s.body();
     auto h = body.child("w:p");
     EXPECT_EQ(docx::val(h.child("w:pPr"), "w:pStyle"), "Heading2");
     EXPECT_EQ(docx::val(h.child("w:pPr"), "w:outlineLvl"), "1");
-    EXPECT_EQ(docx::val(h.next_sibling().child("w:pPr"), "w:pStyle"), "Note_20_Text");
+    EXPECT_EQ(docx::val(h.next_sibling().child("w:pPr"), "w:pStyle"), "NoteText");
 
     const auto styles = s.xml("word/styles.xml");
     auto h2 = style_def(styles, "Heading2");
     EXPECT_EQ(docx::val(h2.child("w:pPr"), "w:outlineLvl"), "1")
         << "the default heading style is defined";
-    auto def = style_def(styles, "Note_20_Text");
+    auto def = style_def(styles, "NoteText");
     EXPECT_EQ(docx::val(def, "w:name"), "Note Text");
     EXPECT_TRUE(def.child("w:rPr").child("w:i"));
 }
@@ -121,7 +122,8 @@ TEST(DOCX_Write, SpansAndStyles)
 {
     text_doc doc;
     auto red = doc.styles()
-                   .insert(text_style("Red", text_props(colour::rgb(255, 0, 0), font_size(11))))
+                   .insert(text_style(
+                       "Red", text_props(font_colour(colour::rgb(255, 0, 0)), font_size(11))))
                    .first;
     auto both = doc.styles().insert(text_style("Both", text_props(font_weight::bold))).first;
     auto both_para =
@@ -188,12 +190,12 @@ TEST(DOCX_Write, ParagraphProps)
 TEST(DOCX_Write, StyledLink)
 {
     text_doc doc;
-    doc.styles().insert(text_style("Quiet link", text_props(colour::rgb(80, 80, 80))));
+    doc.styles().insert(text_style("Quiet link", text_props(font_colour(colour::rgb(80, 80, 80)))));
     doc.add(paragraph(hyperlink("https://example.com", "site").set_style("Quiet link")));
     saved s(doc, "styled_link");
     auto run = s.body().child("w:p").child("w:hyperlink").child("w:r");
-    EXPECT_EQ(docx::val(run.child("w:rPr"), "w:rStyle"), "Quiet link");
-    EXPECT_TRUE(style_def(s.xml("word/styles.xml"), "Quiet link"));
+    EXPECT_EQ(docx::val(run.child("w:rPr"), "w:rStyle"), "Quietlink");
+    EXPECT_TRUE(style_def(s.xml("word/styles.xml"), "Quietlink"));
 
     const auto back = docx::file::load(s.path).doc;
     EXPECT_EQ(back.body.front(), doc.body.front());
@@ -339,11 +341,11 @@ TEST(DOCX_Write, CodeBlocks)
                 paragraph("call ", span("f()").set_style(builtin::source_text))},
         "code");
     const auto styles = s.xml("word/styles.xml");
-    auto pre = style_def(styles, builtin::preformatted.str());
+    auto pre = style_def(styles, "PreformattedText");
     EXPECT_EQ(docx::val(pre, "w:name"), "Preformatted Text");
     EXPECT_STREQ(
         pre.child("w:rPr").child("w:rFonts").attribute("w:ascii").as_string(), "Courier New");
-    auto src = style_def(styles, builtin::source_text.str());
+    auto src = style_def(styles, "SourceText");
     EXPECT_STREQ(src.attribute("w:type").as_string(), "character");
 }
 
@@ -457,8 +459,8 @@ TEST(DOCX_Write, ColumnStyle)
 {
     text_doc doc;
     doc.styles().insert(paragraph_style("Key text", text_props(font_weight::bold)));
-    doc.styles().insert(
-        cell_style("Key", cell_props(colour::rgb(0xee, 0xee, 0xee), para_style_name("Key text"))));
+    doc.styles().insert(cell_style(
+        "Key", cell_props(background(colour::rgb(0xee, 0xee, 0xee)), para_style_name("Key text"))));
     table t = table::from_cells({{"a", "1"}, {"b", "2"}});
     t.set_column_style(0, "Key");
     doc.add(t);
@@ -471,7 +473,7 @@ TEST(DOCX_Write, ColumnStyle)
         EXPECT_STREQ(first.child("w:tcPr").child("w:shd").attribute("w:fill").as_string(), "eeeeee");
         EXPECT_STREQ(
             first.child("w:p").child("w:pPr").child("w:pStyle").attribute("w:val").as_string(),
-            "Key text");
+            "Keytext");
         EXPECT_FALSE(first.next_sibling("w:tc").child("w:p").child("w:pPr").child("w:pStyle"));
     }
 }
@@ -482,16 +484,16 @@ TEST(DOCX_Write, TableFormatting)
     const border thick = border::solid(pt(1.5), colour::rgb(0x20, 0x40, 0x60));
     const border thin = border::solid(pt(0.5));
     doc.styles().insert(table_style("Grid",
-        table_props(percent{80},
+        table_props(table_width(percent{80}),
             table_align::centre,
             outer_border{thick},
             inside_h{thin},
             cell_padding{pt(3)},
-            header_cells{
-                cell_props(colour::rgb(0xdd, 0xdd, 0xdd), cell_borders{.m_bottom = thick})})));
+            header_cells{cell_props(
+                background(colour::rgb(0xdd, 0xdd, 0xdd)), cell_borders{.m_bottom = thick})})));
     table t = table::from_cells({{"Test", "Result"}, {"open", "pass"}});
     t.set_header_rows(1).set_style("Grid").set_column_widths({3, 1});
-    t.cell(1, 1).props.set(colour::rgb(0xff, 0xcc, 0xcc));
+    t.cell(1, 1).props.set(background(colour::rgb(0xff, 0xcc, 0xcc)));
     doc.add(t);
     saved s(doc, "table_formatting");
 
@@ -541,7 +543,7 @@ text_doc defaults_doc()
         text_props(font_name("Liberation Serif"), font_size(11)),
         paragraph_props(space_after{pt(6)})));
     doc.styles().insert(paragraph_style(builtin::heading(1), text_props(font_weight::bold)));
-    doc.styles().insert(text_style(builtin::link, text_props(colour::rgb(0, 0, 200))));
+    doc.styles().insert(text_style(builtin::link, text_props(font_colour(colour::rgb(0, 0, 200)))));
     doc.styles().insert(table_style(builtin::table, table_props(cell_padding{pt(2)})));
     doc.styles().insert(list_style(builtin::list,
         {number_level{.level = 1, .format = list_enum::arabic, .suffix = ".", .start_from = 1}}));
@@ -581,7 +583,7 @@ TEST(DOCX_Write, DefaultStyles)
     EXPECT_FALSE(body.child("w:p").next_sibling("w:p").child("w:pPr").child("w:pStyle"));
     EXPECT_FALSE(body.child("w:tbl").child("w:tblPr").child("w:tblStyle"));
     const auto numbering = s.xml("word/numbering.xml");
-    EXPECT_TRUE(numbering.select_node("//w:abstractNum/w:name[@w:val='Default_20_List']"));
+    EXPECT_TRUE(numbering.select_node("//w:abstractNum/w:name[@w:val='Default List']"));
 
     const auto back = docx::file::load(s.path).doc;
     EXPECT_EQ(back.body, doc.body) << "the defaults read back as no style";
@@ -591,4 +593,48 @@ TEST(DOCX_Write, DefaultStyles)
     ASSERT_NE(back.styles().find(builtin::table), nullptr);
     EXPECT_EQ(back.styles().find(builtin::para)->text, doc.styles().find(builtin::para)->text);
     EXPECT_NE(back.styles().find(builtin::list), nullptr);
+}
+
+TEST(DOCX_Write, SaveWithoutAFile)
+{
+    const text_doc doc{heading(1, "Saved"), paragraph("without a file")};
+    docx::save(doc, "docx/out/save_free.docx");
+    EXPECT_EQ(docx::file::load("docx/out/save_free.docx").doc.body, doc.body);
+}
+
+TEST(DOCX_Write, StyleIdsComeFromNames)
+{
+    text_doc doc;
+    const auto a = doc.styles().insert(paragraph_style("Key text", text_props(font_size(9)))).first;
+    const auto b = doc.styles().insert(paragraph_style("Keytext", text_props(font_size(10)))).first;
+    doc.add(paragraph("a").set_style(a)).add(paragraph("b").set_style(b));
+    saved s(doc, "style_ids");
+
+    const auto styles = s.xml("word/styles.xml");
+    EXPECT_EQ(docx::val(style_def(styles, "Keytext"), "w:name"), "Key text");
+    EXPECT_EQ(docx::val(style_def(styles, "Keytext2"), "w:name"), "Keytext")
+        << "a name whose id is taken gets another";
+
+    // And back to the model's names.
+    const auto again = docx::file::load(s.path).doc;
+    EXPECT_TRUE(again.styles().para.contains(a));
+    EXPECT_TRUE(again.styles().para.contains(b));
+    EXPECT_EQ(again.body, doc.body);
+}
+
+TEST(DOCX_Write, SameStyleNamesAsOdt)
+{
+    text_doc doc{heading(1, "H"), paragraph("p").set_style("Note")};
+    doc.styles().insert(paragraph_style("Note", text_props(font_style::italic)));
+    doc.styles()[builtin::heading(1)].text.set(font_size(20));
+    docx::save(doc, "docx/out/same_names.docx");
+    odt::save(doc, "docx/out/same_names.odt");
+
+    const auto from_docx = docx::file::load("docx/out/same_names.docx").doc;
+    const auto from_odt = odt::file::load("docx/out/same_names.odt").doc;
+    EXPECT_EQ(from_docx.body, from_odt.body);
+    EXPECT_TRUE(from_docx.styles().para.contains(builtin::heading(1)));
+    EXPECT_TRUE(from_odt.styles().para.contains(builtin::heading(1)));
+    EXPECT_TRUE(from_docx.styles().para.contains("Note"));
+    EXPECT_TRUE(from_odt.styles().para.contains("Note"));
 }

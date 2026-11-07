@@ -77,7 +77,9 @@ std::map<std::pair<std::string, std::string>, int> definitions(const pugi::xml_n
 TEST(ODT_XML, StylesGoInStylesXml)
 {
     text_doc doc;
-    auto red = doc.styles().insert(text_style("Red", text_props(colour::rgb(255, 0, 0)))).first;
+    auto red = doc.styles()
+                   .insert(text_style("Red", text_props(font_colour(colour::rgb(255, 0, 0)))))
+                   .first;
     auto both = doc.styles().insert(text_style("Both", text_props(font_weight::bold))).first;
     auto both_para =
         doc.styles().insert(paragraph_style("Both", text_props(font_weight::bold))).first;
@@ -336,7 +338,7 @@ TEST(ODT_XML, DisplayNamesForEncodedStyleNames)
 {
     text_doc doc;
     doc.add(paragraph("x").set_style(
-        doc.styles().insert(paragraph_style("Text_20_body", text_props(font_size(11)))).first));
+        doc.styles().insert(paragraph_style("Text body", text_props(font_size(11)))).first));
     doc.add(paragraph("y").set_style(
         doc.styles().insert(paragraph_style("Plain", text_props(font_size(11)))).first));
     odt::file(doc).save("odt/out/display_names.odt");
@@ -467,7 +469,7 @@ text_doc defaults_doc()
         text_props(font_name("Liberation Serif"), font_size(11)),
         paragraph_props(space_after{pt(6)})));
     doc.styles().insert(paragraph_style(builtin::heading(1), text_props(font_weight::bold)));
-    doc.styles().insert(text_style(builtin::link, text_props(colour::rgb(0, 0, 200))));
+    doc.styles().insert(text_style(builtin::link, text_props(font_colour(colour::rgb(0, 0, 200)))));
     doc.styles().insert(table_style(builtin::table, table_props(cell_padding{pt(2)})));
     doc.styles().insert(list_style(builtin::list,
         {number_level{.level = 1, .format = list_enum::arabic, .suffix = ".", .start_from = 1}}));
@@ -585,4 +587,26 @@ TEST(ODT_XML, TemplateDefaultStylesCanBeReplacedOrEdited)
     ASSERT_NE(standard, nullptr);
     EXPECT_EQ(standard->text, text_props(font_name("Liberation Sans"), font_size(11)));
     EXPECT_TRUE(std::get<paragraph>(back.body.back().v).style.empty());
+}
+
+TEST(ODT_XML, StyleNamesAreSpelledAsOdfNames)
+{
+    text_doc doc;
+    const auto note =
+        doc.styles().insert(paragraph_style("Note (draft) 2", text_props(font_size(9)))).first;
+    doc.add(paragraph("x").set_style(note)).add(paragraph("y"));
+    doc.styles()[builtin::para].text.set(font_size(11));
+    odt::file(doc).save("odt/out/odf_names.odt");
+
+    part styles("odt/out/odf_names.odt", "styles.xml");
+    EXPECT_TRUE(styles_of(styles).find_child_by_attribute(
+        "style:style", "style:name", "Note_20__28_draft_29__20_2"));
+    EXPECT_TRUE(styles_of(styles).find_child_by_attribute("style:style", "style:name", "Standard"))
+        << "the default paragraph style is LibreOffice's Standard";
+
+    // And back to the model's names.
+    const auto again = odt::file::load("odt/out/odf_names.odt").doc;
+    EXPECT_TRUE(again.styles().para.contains(note));
+    EXPECT_TRUE(again.styles().para.contains(builtin::para));
+    EXPECT_EQ(again.body, doc.body);
 }
