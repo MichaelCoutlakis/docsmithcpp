@@ -201,6 +201,15 @@ TEST(BASIC_USAGE, ReplacePlaceholders)
     EXPECT_EQ(doc.body, expected.body);
 }
 
+TEST(BASIC_USAGE, StringPlaceholderIsText)
+{
+    text_doc doc{paragraph("{{a}}"), paragraph("{{b}}")};
+    EXPECT_TRUE(doc.replace("{{a}}", paragraph("A")));
+    EXPECT_TRUE(doc.replace(std::string("{{b}}"), paragraph("B")));
+    const text_doc expected{paragraph("A"), paragraph("B")};
+    EXPECT_EQ(doc.body, expected.body);
+}
+
 TEST(BASIC_USAGE, InsertAroundPlaceholder)
 {
     text_doc doc{paragraph("a"), paragraph("{{x}}"), paragraph("b")};

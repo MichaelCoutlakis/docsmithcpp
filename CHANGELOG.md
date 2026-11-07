@@ -327,6 +327,9 @@ held in `std::variant`. This is a breaking change to almost every public API.
 - The empty placeholder tests in `test_main.cpp`, and the `architecture/` sketches.
 
 ### Fixed
+- A string placeholder (`doc.replace("{{summary}}", ...)`) is the paragraph's text.
+  It converted to a `style_name`, so it looked for a style of that name and
+  matched nothing. `placeholder` is now a struct holding the variant (`v`).
 - A style whose name spells characters as `_xx_` (`Text_20_body`) gets a
   `style:display-name` ("Text body"). Without it, LibreOffice took a code-built
   `Heading_20_1` for a new style rather than its own Heading 1.

@@ -38,8 +38,35 @@ namespace docsmith
 
 /// A template's placeholder, for text_doc::replace() and insert_*(): the first
 /// paragraph or heading that holds this bookmark, has this style, or whose text
-/// is this (ignoring white space around it).
-using placeholder = std::variant<bookmark, style_name, text>;
+/// is this (ignoring white space around it). A string is text:
+///
+///     doc.replace("{{summary}}", ...);        // the paragraph that reads {{summary}}
+///     doc.replace(style_name("Summary"), ...); // the first one with that style
+struct placeholder
+{
+    placeholder(bookmark b) :
+        v(std::move(b))
+    {
+    }
+    placeholder(style_name sn) :
+        v(std::move(sn))
+    {
+    }
+    placeholder(text t) :
+        v(std::move(t))
+    {
+    }
+    placeholder(const char *s) :
+        v(text{s})
+    {
+    }
+    placeholder(std::string s) :
+        v(text{std::move(s)})
+    {
+    }
+
+    std::variant<bookmark, style_name, text> v;
+};
 
 class text_doc
 {

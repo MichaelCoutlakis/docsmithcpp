@@ -85,7 +85,7 @@ bool matches(const placeholder &p, const std::vector<inline_node> &kids, const s
                 return s.substr(first, s.find_last_not_of(" \t\n") - first + 1) == t.content;
             },
         },
-        p);
+        p.v);
 }
 
 struct found_block

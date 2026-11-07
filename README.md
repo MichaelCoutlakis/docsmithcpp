@@ -267,7 +267,7 @@ int main() {
     // Fill in a template: put content in place of its placeholders, found by
     // their text, a bookmark or a style.
     auto report = odt::file::load("report_template.odt");
-    report.doc.replace(text{"{{summary}}"}, {heading(1, "Summary"), paragraph("All passed.")});
+    report.doc.replace("{{summary}}", {heading(1, "Summary"), paragraph("All passed.")});
     report.doc.page.set_footer(paragraph("Page ", field{field_type::page_number}));
     report.save("report.odt");
     docx::file(report.doc).save("report.docx"); // the same report for Word
