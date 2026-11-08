@@ -99,7 +99,7 @@ to [ATP-0042](https://example.com/atp-0042).
 )"));
 
     // Styles defined outside main for brevity. They could also be loaded from a template.
-    doc.styles().insert(grid), doc.styles().insert(pass), doc.styles().insert(fail), 
+    doc.styles().insert(grid), doc.styles().insert(pass), doc.styles().insert(fail),
     doc.styles().insert(hdr), doc.styles().insert(hdr_p);
 
     // The measurements come from the test program:
@@ -117,9 +117,9 @@ to [ATP-0042](https://example.com/atp-0042).
         results.add_row({{r.id}, {r.param}, {num(r.min)}, {num(val)}, {num(r.max)}, {r.unit}, para{verdict(ok)}});
     }
 
-    std::ignore = doc.replace("{{results}}", 
+    std::ignore = doc.replace("{{results}}",
         {para("Serial Num: ", jig.serial()), results, para("Overall: ", verdict(all_passed))});
-        
+
     for(table *t : collect<table>(doc))
         t->set_style(grid);
 

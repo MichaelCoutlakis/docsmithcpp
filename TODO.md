@@ -57,11 +57,30 @@ place of the placeholder's text, across spans), and a way to fill every match
 ### PDF output
 
 A customer or QA usually wants a test report as a PDF to sign, and today that
-means converting the `.odt` with LibreOffice headless. The README has promised
-PDF since the start. A writer needs page layout (line breaking, tables across
-pages, page numbers), so decide first between writing it here, a library such
-as PoDoFo or libHaru (as a private, optional dependency), or a documented
-LibreOffice conversion step.
+means converting the `.odt` with LibreOffice headless. A native writer is
+deferred: it needs a layout engine (line breaking, tables across pages, page
+numbers) and font handling (metrics, embedding, subsetting), which is a lot to
+maintain while external conversion is good enough. For now:
+
+- Document the conversion, `soffice --convert-to pdf`, in the README, as an
+  example or a small helper. Check whether the table of contents gets its page
+  numbers (see _Page numbers in the table of contents_).
+- Have the HTML writer add print CSS (page size, margins, and `@page` margin
+  boxes for running headers and page numbers), so that
+  `chrome --headless --print-to-pdf` gives a usable report. Today the header and
+  footer are written once, before and after the body. Chrome has no
+  `target-counter`, so a table of contents can't get page numbers this way.
+- Soften the README's "future support for PDF" until the writer is planned.
+
+Reconsider if users need PDF on machines where LibreOffice or Chrome can't be
+installed, such as locked-down test stations, or need page numbers in the table
+of contents without them. Then write the layout and the PDF serialisation here,
+as separate steps with a tree of positioned boxes between them so that layout
+can be tested as data. PoDoFo and libHaru mostly cover the serialisation, the
+easy part, and PoDoFo's licence (LGPL) needs checking against the rules in
+CONTRIBUTING.md. Embed TrueType fonts rather than relying on the standard 14,
+which lack `Ω` and `≤`, and have callers register font files, since a document
+only names its fonts.
 
 ### Numbered headings and captions
 

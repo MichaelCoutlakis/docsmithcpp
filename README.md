@@ -4,8 +4,7 @@
 
 **DocSmith++** is a modern C++20 library for reading, modifying, and generating
 structured document formats like `.odt`, `.docx`, `.html` and Markdown. It aims
-to provide a clean, idiomatic C++ API for working with rich-text documents, with
-future support for PDF.
+to provide a clean, idiomatic C++ API for working with rich-text documents.
 
 ## 💻 Typical use case scenarios
 
@@ -75,7 +74,7 @@ to [ATP-0042](https://example.com/atp-0042).
 )"));
 
     // Styles defined outside main for brevity. They could also be loaded from a template.
-    doc.styles().insert(grid), doc.styles().insert(pass), doc.styles().insert(fail), 
+    doc.styles().insert(grid), doc.styles().insert(pass), doc.styles().insert(fail),
     doc.styles().insert(hdr), doc.styles().insert(hdr_p);
 
     // The measurements come from the test program:
@@ -93,9 +92,9 @@ to [ATP-0042](https://example.com/atp-0042).
         results.add_row({{r.id}, {r.param}, {num(r.min)}, {num(val)}, {num(r.max)}, {r.unit}, para{verdict(ok)}});
     }
 
-    std::ignore = doc.replace("{{results}}", 
+    std::ignore = doc.replace("{{results}}",
         {para("Serial Num: ", jig.serial()), results, para("Overall: ", verdict(all_passed))});
-        
+
     for(table *t : collect<table>(doc))
         t->set_style(grid);
 
@@ -172,7 +171,9 @@ planned (see [TODO.md](TODO.md), _Untrusted documents_).
 - 🔍 Query support: search paragraphs, headings, styles, etc.
 - ⚙️ Built with modern C++ idioms (the document tree is plain value types in
   `std::variant`, with `std::visit`-based traversal)
-- 🔌 Format-agnostic document model: more formats (e.g. PDF) planned
+- 🔌 Format-agnostic document model: more formats (e.g. AsciiDoc, PDF output)
+  may be added. Start a discussion or submit an issue if you would find a
+  particular format useful.
 
 ---
 
@@ -211,12 +212,12 @@ cmake --build build
 ctest --test-dir build
 ```
 
-| Option                       | Default           | Effect                                                                         |
-| ---------------------------- | ----------------- | ------------------------------------------------------------------------------ |
-| `DOCSMITHCPP_BUILD_TESTS`    | ON when top-level | Build the GoogleTest suite                                                     |
-| `DOCSMITHCPP_BUILD_EXAMPLES` | ON when top-level | Build `examples/`                                                              |
-| `DOCSMITHCPP_DEBUG_FILES`    | OFF (ON in `dev`) | Also write `<name>.content.xml` next to each saved `.odt`                      |
-| `DOCSMITHCPP_MARKDOWN`       | OFF (ON in `dev`) | Markdown input (`md::parse`, `md::file::load`), with md4c                      |
+| Option                       | Default           | Effect                                                                        |
+| ---------------------------- | ----------------- | ----------------------------------------------------------------------------- |
+| `DOCSMITHCPP_BUILD_TESTS`    | ON when top-level | Build the GoogleTest suite                                                    |
+| `DOCSMITHCPP_BUILD_EXAMPLES` | ON when top-level | Build `examples/`                                                             |
+| `DOCSMITHCPP_DEBUG_FILES`    | OFF (ON in `dev`) | Also write `<name>.content.xml` next to each saved `.odt`                     |
+| `DOCSMITHCPP_MARKDOWN`       | OFF (ON in `dev`) | Markdown input (`md::parse`, `md::file::load`), with md4c                     |
 | `DOCSMITHCPP_SYNC_README`    | OFF (ON in `dev`) | Copy the snippet in `examples/showcase.cpp` into this README when it is built |
 
 ### Using it from another CMake project

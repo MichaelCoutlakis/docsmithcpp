@@ -7,6 +7,11 @@ breaking changes.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-08
+
+A title of its own, HTML that uses the builtin styles' defaults, and a showcase
+for what the library is aimed at: reports from hardware-in-the-loop test programs.
+
 ### Added
 - **Titles**: a `title` block node, `title("Report")`, for the title of a
   document, chapter or part. Every format writes it as a paragraph in its
@@ -121,5 +126,6 @@ each format maps to it.
 - `set_style()` keeps only the name: the definition goes in `text_doc::styles()`,
   and nothing checks that it is there.
 
-[Unreleased]: https://github.com/MichaelCoutlakis/docsmithcpp/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/MichaelCoutlakis/docsmithcpp/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/MichaelCoutlakis/docsmithcpp/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/MichaelCoutlakis/docsmithcpp/releases/tag/v0.1.0
