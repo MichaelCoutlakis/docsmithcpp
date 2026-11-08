@@ -114,6 +114,8 @@ to [ATP-0042](https://example.com/atp-0042).
 
 <!-- showcase:end -->
 
+![Showcase Output](docs/showcase.png)
+
 ## 📵 When not to use DocSmith++ 🚫
 
 - Document processing from a native C++ application is not required. See the
