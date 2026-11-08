@@ -1,10 +1,13 @@
-# DocSmith++ (⚠️ 🚧 Note: This is a work in progress 🚧)
+# DocSmith++
 
 [![CI](https://github.com/MichaelCoutlakis/docsmithcpp/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/MichaelCoutlakis/docsmithcpp/actions/workflows/ci.yml)
 
 **DocSmith++** is a modern C++20 library for reading, modifying, and generating
 structured document formats like `.odt`, `.docx`, `.html` and Markdown. It aims
 to provide a clean, idiomatic C++ API for working with rich-text documents.
+
+**Status:** early (0.x). It's usable and tested, but the API may change between
+minor versions until 1.0.0. See the [changelog](CHANGELOG.md).
 
 ## 💻 Typical use case scenarios
 
