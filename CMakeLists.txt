@@ -24,6 +24,7 @@ option(DOCSMITHCPP_BUILD_TESTS "Build unit tests" ${docsmithcpp_is_top_level})
 option(DOCSMITHCPP_BUILD_EXAMPLES "Build examples" ${docsmithcpp_is_top_level})
 option(DOCSMITHCPP_DEBUG_FILES "Write debug dumps (e.g. <name>.content.xml next to saved .odt files)" OFF)
 option(DOCSMITHCPP_MARKDOWN "Markdown input (md::parse, md::file::load), using md4c" OFF)
+option(DOCSMITHCPP_SYNC_README "Copy the snippet in examples/showcase.cpp into README.md when it is built" OFF)
 
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)

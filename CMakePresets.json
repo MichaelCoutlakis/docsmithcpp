@@ -18,6 +18,7 @@
                 "DOCSMITHCPP_BUILD_EXAMPLES": "ON",
                 "DOCSMITHCPP_DEBUG_FILES": "ON",
                 "DOCSMITHCPP_MARKDOWN": "ON",
+                "DOCSMITHCPP_SYNC_README": "ON",
                 "CMAKE_BUILD_TYPE": "Debug"
             }
         },

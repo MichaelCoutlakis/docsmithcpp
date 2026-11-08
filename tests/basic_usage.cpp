@@ -385,6 +385,28 @@ TEST(BASIC_USAGE, BuiltinDefinitionStartsFromDefault)
     EXPECT_EQ(doc.styles()[builtin::title], paragraph_style(builtin::title));
 }
 
+template <typename Node, typename Style>
+concept styleable_with = requires(Node n, const Style &s) { n.set_style(s); };
+
+// A style stands for its name wherever a name of its family is taken.
+TEST(BASIC_USAGE, StyleConvertsToItsName)
+{
+    const text_style bold("Bold", text_props(font_weight::bold));
+    const text_style plain("Plain");
+    const cell_style key("Key");
+    EXPECT_EQ(span("x").set_style(bold).style, bold.name());
+    EXPECT_EQ(span("x").set_style(false ? bold : plain).style, plain.name());
+
+    table t(1, 1);
+    t.set_column_style(0, key);
+    EXPECT_EQ(t.column_style(0), key.name());
+
+    static_assert(styleable_with<span, text_style>);
+    static_assert(styleable_with<paragraph, paragraph_style>);
+    static_assert(!styleable_with<span, paragraph_style>, "the wrong family");
+    static_assert(!styleable_with<paragraph, text_style>, "the wrong family");
+}
+
 // Fluent setters on a temporary return an rvalue, so the chain is moved where
 // it goes rather than copied, and can't be bound to an auto &. On a named node
 // they return an lvalue, as before.

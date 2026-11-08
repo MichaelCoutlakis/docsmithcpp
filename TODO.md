@@ -3,11 +3,12 @@
 Outstanding work, roughly in priority order. Each item says why it matters and
 where to start. Done work goes in `CHANGELOG.md` and leaves this file.
 
-## 1. For 0.2.0
+## 1. For 0.3.0
 
-Reading documents from someone else safely, then usability points from a
-review of the public API: none of those loses content, but each is a way a new
-user is likely to get surprised.
+Reading documents from someone else safely, what hardware-in-the-loop test
+reports need (README, *Hardware-in-the-loop test reports*), then usability
+points from a review of the public API: none of those loses content, but each
+is a way a new user is likely to get surprised.
 
 ### Untrusted documents
 
@@ -46,11 +47,31 @@ readers. Start in `include/docsmithcpp/style.h`.
 ### Placeholders within a paragraph, and every match
 
 `text_doc::replace()` and `insert_*()` fill a whole block, the first that
-matches. A report's usual placeholder is in a line of text ("Date: {{date}}",
-"Run {{id}} passed"), which can't be filled, and one used twice (in the header
-and the body) needs a loop. Add a fill for text within a paragraph (inline
-content in place of the placeholder's text, across spans), and a way to fill
-every match (`replace_all()`, or a count). Start in `src/text_doc.cpp`.
+matches. A report's usual placeholder is in a line of text ("Serial:
+{{serial}}", "Date: {{date}}"), as every test report's header block is, which
+can't be filled, and one used twice (a serial number in the header and the
+body) needs a loop. Add a fill for text within a paragraph (inline content in
+place of the placeholder's text, across spans), and a way to fill every match
+(`replace_all()`, or a count). Start in `src/text_doc.cpp`.
+
+### PDF output
+
+A customer or QA usually wants a test report as a PDF to sign, and today that
+means converting the `.odt` with LibreOffice headless. The README has promised
+PDF since the start. A writer needs page layout (line breaking, tables across
+pages, page numbers), so decide first between writing it here, a library such
+as PoDoFo or libHaru (as a private, optional dependency), or a documented
+LibreOffice conversion step.
+
+### Numbered headings and captions
+
+Test procedures refer to their parts by number ("see 4.2", "Table 3"), for
+traceability, and the model has neither. Heading numbers: a numbering on the
+heading styles or the document (ODF `text:outline-style`, DOCX a multi-level
+list linked to the heading styles, HTML CSS counters or written numbers), which
+the table of contents shows too. Captions: a table or figure caption that
+numbers itself per kind (ODF sequence fields, DOCX `SEQ` fields), and a
+cross-reference to one. Start in `include/docsmithcpp/nodes.h`.
 
 ### One way to reach a node's children
 
@@ -162,6 +183,11 @@ Roughly by how much a report or a loaded file would miss it:
 - **Spans**: runs don't nest, so a span in a span is written with the inner
   style only. A style with no family used on both paragraphs and spans is
   written as `X` and a linked `XChar`, which reads back as two styles.
+- **The default table style in LibreOffice**. A table with no style names no
+  `w:tblStyle` and relies on the `w:default` table style. LibreOffice doesn't
+  apply that when it opens the file, so a `builtin::table` with lines shows no
+  lines there. Naming it on each table would fix that (the reader already
+  reads it back as no style), but also adds it to every table of a loaded file.
 - **Direct formatting** that is only paragraph-mark run properties
   (`w:pPr/w:rPr`) or a run's language is dropped when read.
 - **Images**: a frame's style has no DOCX form and is dropped. An image whose

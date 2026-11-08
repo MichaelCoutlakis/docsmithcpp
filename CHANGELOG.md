@@ -13,6 +13,12 @@ breaking changes.
   style, `builtin::title` when it has none, and a table of contents leaves it
   out. ODT and DOCX read a paragraph in the Title style, or a style based on
   it, back as a title. It is separate from `meta.title`.
+- **Showcase**: `examples/showcase.cpp`, a hardware-in-the-loop test report for
+  a DC-DC converter, which is also the README's showcase. Building it with
+  `DOCSMITHCPP_SYNC_README` (on in the `dev` preset) copies it into the README,
+  and the `readme_showcase_in_sync` test fails if the two differ.
+- **A style converts to its name**, so `span("x").set_style(bold)` takes the
+  style itself. A style of the wrong family still doesn't compile.
 
 ### Changed
 - **HTML gets the builtins' defaults**: a builtin the document uses without

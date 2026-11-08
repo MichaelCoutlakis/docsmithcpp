@@ -45,6 +45,11 @@ if(DOCSMITHCPP_SOFFICE)
     set_tests_properties(libreoffice_opens_output PROPERTIES LABELS libreoffice TIMEOUT 600 RUN_SERIAL TRUE)
 endif()
 
+# The README's showcase is examples/showcase.cpp.
+add_test(NAME readme_showcase_in_sync
+    COMMAND ${CMAKE_COMMAND} "-DSOURCE_DIR=${PROJECT_SOURCE_DIR}" -DCHECK=ON
+        -P ${PROJECT_SOURCE_DIR}/cmake/SyncReadmeShowcase.cmake)
+
 # Install the library and build a separate project against it, the way a
 # consumer would with find_package. Configures and builds from scratch, so it
 # takes a while; skip it with ctest -LE consumer.

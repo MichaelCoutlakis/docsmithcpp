@@ -204,7 +204,7 @@ visit the header and footer after the body.
     doc.page.set_header(paragraph(field{field_type::title}));
     doc.page.set_footer(paragraph("Page ", field{field_type::page_number}));
 
-There is one page style per document, which is what a test report needs.
+There is one page style per document, which is what most test reports need.
 Several (a landscape page, a different first page) would be a registry of page
 styles and a way to start one in the body, as ODF's master pages and DOCX's
 sections do; page size and margins would go in `page_style` too.

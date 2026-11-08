@@ -704,6 +704,9 @@ public:
     using name_type = style_name<F>;
 
     const name_type &name() const { return m_name; }
+    /// A style stands for its name, as in span("x").set_style(bold). It still
+    /// has to be in the document's styles() to apply.
+    operator const name_type &() const { return m_name; }
 
     bool operator==(const style_base &) const = default;
 

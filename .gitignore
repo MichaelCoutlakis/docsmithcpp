@@ -17,3 +17,6 @@ tests/cmake_test_discovery_*.json
 
 # Debug dumps written when DOCSMITHCPP_DEBUG_FILES is on
 *.content.xml
+
+# Written when example_showcase is run from the repository root
+/report.*

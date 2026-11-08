@@ -11,10 +11,16 @@ future support for PDF.
 
 These are the main use case scenarios `DocSmith++` is designed to serve:
 
-### 📋 Automatic report generation
+### 🔬 Hardware-in-the-loop test reports
 
-Test software written in C++ could use `docsmithcpp` to generate test reports.
-`docsmithcpp` provides an API to do this cleanly without:
+In **hardware-in-the-loop (HIL)** testing, a program exercises real hardware
+through a test jig: it applies stimuli, takes measurements from instruments and
+compares them with the specification. Factory acceptance tests (FAT) and
+acceptance test procedures (ATP) are typical examples. That program is often
+C++, because it talks to the hardware, and what it has to produce is a document
+for a customer or QA to read and sign.
+
+With `docsmithcpp` the test program writes that report itself, without:
 
 - cluttering the code with HTML/Markdown string processing, which can get messy
   quickly, for example once sections need to be linked or strings escaped.
@@ -26,6 +32,85 @@ Test software written in C++ could use `docsmithcpp` to generate test reports.
 
 - Document export from C++ application
 - Template based documents: Load a template, fill in data, and save
+
+## 🚀 Showcase
+
+A factory acceptance test of a DC-DC converter. The test jig, requirements and
+styles are omitted for brevity, see
+[examples/showcase.cpp](examples/showcase.cpp) for the full example.
+
+<!-- Copied from examples/showcase.cpp when that is built: edit it there. -->
+<!-- showcase:begin -->
+
+```c++
+int main()
+{
+    using namespace docsmith; using para = paragraph;
+    // A document is a tree of plain values:
+    text_doc doc{title{"DC-DC Converter Test Report"}, table_of_contents{"Contents"}};
+
+    // Markdown is best suited for some content, with {{tricky}} replaced later
+    doc.append(md::parse(R"(
+# Scope
+
+Factory acceptance test of the **DC-DC converter** at 48 V input and 5 A load,
+to [ATP-0042](https://example.com/atp-0042).
+
+# Procedure
+
+1. Connect the unit to the test jig.
+2. Soak at full load for `10 min`.
+3. Measure each parameter.
+
+# Results
+
+{{results}}
+
+# Sign-off
+
+| Role   | Name | Signature | Date |
+| ------ | ---- | --------- | ---- |
+| Tester |      |           |      |
+| QA     |      |           |      |
+)"));
+
+    // Styles defined outside main for brevity. They could also be loaded from a template.
+    doc.styles().insert(grid), doc.styles().insert(pass), doc.styles().insert(fail), 
+    doc.styles().insert(hdr), doc.styles().insert(hdr_p);
+
+    // The measurements come from the test program:
+    test_jig jig;
+    bool all_passed = true;
+    auto results = table::from_cells({{"Req", "Param", "Min", "Measured", "Max", "Unit", "Result"}});
+    results.set_header_rows(1);
+    auto verdict = [](bool ok) { return span(ok ? "PASS" : "FAIL").set_style(ok ? pass : fail); };
+
+    for(const requirement &r : requirements)
+    {
+        const double val = (jig.*r.measure)();
+        const bool ok = r.min <= val && val <= r.max;
+        all_passed = all_passed && ok;
+        results.add_row({{r.id}, {r.param}, {num(r.min)}, {num(val)}, {num(r.max)}, {r.unit}, para{verdict(ok)}});
+    }
+
+    std::ignore = doc.replace("{{results}}", 
+        {para("Serial Num: ", jig.serial()), results, para("Overall: ", verdict(all_passed))});
+        
+    for(table *t : collect<table>(doc))
+        t->set_style(grid);
+
+    doc.page.set_header(para("ACME CONVERTERS").set_style(hdr));
+    doc.page.set_footer(para("Page ", field{field_type::page_number}));
+
+    odt::file(doc).save("report.odt");
+    docx::file(doc).save("report.docx");
+    html::save(doc, "report.html");
+    md::save(doc, "report.md");
+    return EXIT_SUCCESS;
+}
+```
+
+<!-- showcase:end -->
 
 ## 📵 When not to use DocSmith++ 🚫
 
@@ -40,8 +125,8 @@ Test software written in C++ could use `docsmithcpp` to generate test reports.
 ## 🔒 Untrusted documents
 
 DocSmith++ assumes the documents it reads are trusted, as they are when you
-generate your own reports or export from your own application. Don't use it
-yet on files from someone else, e.g. in a service that converts uploads:
+generate your own reports or export from your own application. Don't use it yet
+on files from someone else, e.g. in a service that converts uploads:
 
 - An image path in a document that isn't embedded in it is read from disk when
   the document is saved (and by `md::file::load()`), so a hostile `.md` or
@@ -50,7 +135,7 @@ yet on files from someone else, e.g. in a service that converts uploads:
   or `.docx` can use up memory.
 
 Restricting file access to a trusted root folder and limiting archive sizes is
-planned (see [TODO.md](TODO.md), *Untrusted documents*).
+planned (see [TODO.md](TODO.md), _Untrusted documents_).
 
 ---
 
@@ -81,9 +166,9 @@ planned (see [TODO.md](TODO.md), *Untrusted documents*).
   content is in (`t.apply_row_borders({0}, edge::bottom, border::solid(pt(1)))`)
 - 🌐 Write HTML5 pages: styles become CSS classes, list styles pick
   `<ol>`/`<ul>`, and images are written next to the page
-- 📄 Write GitHub Flavored Markdown (CI job summaries, PR comments): bold and
-  italic styles become emphasis, code styles code spans and fenced blocks, and
-  tables GFM tables. Read Markdown into the model with md4c (optional)
+- 📄 Write GitHub Flavored Markdown: bold and italic styles become emphasis,
+  code styles code spans and fenced blocks, and tables GFM tables. Read Markdown
+  into the model with md4c (optional)
 - 🔍 Query support: search paragraphs, headings, styles, etc.
 - ⚙️ Built with modern C++ idioms (the document tree is plain value types in
   `std::variant`, with `std::visit`-based traversal)
@@ -126,12 +211,13 @@ cmake --build build
 ctest --test-dir build
 ```
 
-| Option                       | Default           | Effect                                                    |
-| ---------------------------- | ----------------- | --------------------------------------------------------- |
-| `DOCSMITHCPP_BUILD_TESTS`    | ON when top-level | Build the GoogleTest suite                                |
-| `DOCSMITHCPP_BUILD_EXAMPLES` | ON when top-level | Build `examples/`                                         |
-| `DOCSMITHCPP_DEBUG_FILES`    | OFF (ON in `dev`) | Also write `<name>.content.xml` next to each saved `.odt` |
-| `DOCSMITHCPP_MARKDOWN`       | OFF (ON in `dev`) | Markdown input (`md::parse`, `md::file::load`), with md4c |
+| Option                       | Default           | Effect                                                                         |
+| ---------------------------- | ----------------- | ------------------------------------------------------------------------------ |
+| `DOCSMITHCPP_BUILD_TESTS`    | ON when top-level | Build the GoogleTest suite                                                     |
+| `DOCSMITHCPP_BUILD_EXAMPLES` | ON when top-level | Build `examples/`                                                              |
+| `DOCSMITHCPP_DEBUG_FILES`    | OFF (ON in `dev`) | Also write `<name>.content.xml` next to each saved `.odt`                      |
+| `DOCSMITHCPP_MARKDOWN`       | OFF (ON in `dev`) | Markdown input (`md::parse`, `md::file::load`), with md4c                      |
+| `DOCSMITHCPP_SYNC_README`    | OFF (ON in `dev`) | Copy the snippet in `examples/showcase.cpp` into this README when it is built |
 
 ### Using it from another CMake project
 
@@ -211,6 +297,8 @@ skip it with `ctest -LE consumer` when iterating.
 
 ### 🤔 Examples
 
+- `example_showcase`: the [showcase](#-showcase) above: write a hardware-in-the-
+  loop test report as `report.odt`, `.docx`, `.html` and `.md`.
 - `example_create_document [name]`: build a document in code and save it as
   `<name>.odt`, `<name>.docx` and `<name>.html`. It also fills in the test
   report template, `examples/report_template.odt`, and saves the report as

@@ -73,6 +73,15 @@ Their built binaries are cached, so they are only rebuilt when that commit,
 `VCPKG_PACKAGES` or the compiler changes. Bump `VCPKG_COMMIT` to move to newer
 dependency versions.
 
+## The README's showcase
+
+The code block in the README's *Showcase* section is what lies between the
+`<snippet-start:showcase>` and `<snippet-end:showcase>` comments in
+[examples/showcase.cpp](examples/showcase.cpp), so edit it there. Building `example_showcase` with `DOCSMITHCPP_SYNC_README` (on in
+the `dev` preset) copies it into the README, after it has compiled. The
+`readme_showcase_in_sync` test fails if the two differ, which is what catches a
+change committed without it, so CI leaves the option off.
+
 ## Debugging
 
 A document is a tree of values, so the debugger can show all of it. Without
